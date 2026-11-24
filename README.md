@@ -11,12 +11,11 @@ It is a static site with no build step and no server, so it runs on GitHub Pages
   spread graveyards that turn the ground into dark blight), a death economy (souls from everything
   that dies on its graves; cheap skeletons pay back more than they cost), and a slow Lich mage who
   spends mana on summoned skeletons, chain lightning and corpse explosions, backed by Necromancer
-  caster squads; both raise Monoliths with a spell to push graves forward and heal.
+  caster squads and Monoliths (built on graves) that push graves forward and heal.
 * Small starting armies (a hero and a squad or two); the rest comes from your base.
 * A fallen hero lies where it fell; hold that spot to revive it. Squads use their skills on their
   own (switchable per squad). Build anywhere you have seen; the Undead only on their graves, which
-  spread almost at once around their buildings (like blight or creep), except the Monolith, which a
-  Lich or Necromancers raise anywhere near them. Forests are big woodland with soft edges.
+  spread almost at once around their buildings (like blight or creep). Forests are big woodland with soft edges.
 * Every attack is an aimed skillshot that hits whatever is in its shape when it lands, so faster
   tiers can dodge. Armies grow up to 30 squads (more on big maps).
 * **Two economies.** The Kingdom earns **gold** from its Keep, mines and farms worked by up to 4

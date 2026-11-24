@@ -196,13 +196,6 @@ export function aiOrders(s, p, memory = aiMemory(), opts = {}) {
     if (left >= RULES.defendCost) plan.defends = Math.min(RULES.maxDefends, Math.floor(left / RULES.defendCost));
     o.squads[q.id] = plan;
   }
-  // Raise Monolith picked by the economy: first in the caster's plan (the Lich is free to order;
-  // a Necromancer squad only if it already has orders this round)
-  if (o.cast) {
-    const c = o.cast, q = s.squads.find(x => x.id === c.id);
-    if (q && (q.role === 'hero' || o.squads[q.id])) (o.squads[q.id] ||= emptyPlan()).actions.unshift({ kind: 'monolith', x: c.x, z: c.z });
-    delete o.cast;
-  }
   return o;
 }
 
@@ -253,7 +246,7 @@ function economy(s, p, known, orders) {
   const rising = !!FACTIONS[fac].rises;
   const place = (type, prefer) => {
     const free = builders.filter(x => !busy.has(x.id));
-    if (rising && mine.filter(b => b.build > 0 && !BUILDINGS[b.type].skill).length + queued.filter(b => b.type !== 'monolith').length >= RULES.maxRising) return false;   // undead: at most 2 rising (Monoliths don't count)
+    if (rising && mine.filter(b => b.build > 0).length + queued.length >= RULES.maxRising) return false;   // undead: at most 2 rising
     // once there is a barracks, keep enough back to train a squad (except for its own site)
     // (except for the first farm: the kingdom's economy comes first)
     const reserve = count('barracks') && mine.some(b => b.type === 'barracks' && !b.build) && type !== 'barracks' && !(type === 'farm' && !count('farm')) ? 24 : 0;
@@ -286,39 +279,11 @@ function economy(s, p, known, orders) {
     }
     return false;
   };
-  // undead: the Lich (free to order) or a Necromancer squad already ordered this round casts Raise
-  // Monolith toward `target` (it needs no graves and spreads its own), else a Bone Fence on the edge of
-  // its graves closest to `target`. The cast goes first in that squad's plan, from where it stands now.
-  let cast = false;
-  const monolith = target => {
-    const md = BUILDINGS.monolith;
-    if (cast || !md || supply < md.cost || mine.some(b => b.type === 'monolith' && b.build > 0)) return false;
-    const casters = s.squads.filter(q => q.owner === p && q.hp > 0 && !q.stun && (q.role === 'hero' || q.role === 'mage')
-      && skillOf(defOf(q), 'monolith') && (q.mana || 0) >= skillOf(defOf(q), 'monolith').mana);
-    const cand = [];
-    for (const q of casters) { const sk = skillOf(defOf(q), 'monolith'); for (const r of [2, 3.5, sk.range - 0.6]) for (let k = 0; k < 12; k++) {
-      const a = k / 12 * Math.PI * 2, x = q.x + Math.cos(a) * r, z = q.z + Math.sin(a) * r;
-      cand.push({ q, x, z, score: -dist(x, z, target.x, target.z) - (q.role === 'mage' ? 1.5 : 0) });   // the Lich first (free to order)
-    } }
-    cand.sort((a, b) => b.score - a.score);
-    const now = Math.min(...graveCircles(s, p).map(g => dist(g.x, g.z, target.x, target.z) - g.r));
-    for (const c of cand.slice(0, 40)) {
-      if (placeError(s, p, 'monolith', c.x, c.z, 0, queued, true, true)) continue;
-      // only worth it when it brings the graves closer to the target than they already are
-      if (dist(c.x, c.z, target.x, target.z) - md.grave >= now - 1) return false;
-      out.cast = { id: c.q.id, x: c.x, z: c.z };
-      queued.push({ type: 'monolith', x: c.x, z: c.z, rot: 0, owner: p, ...footprint('monolith', c.x, c.z, 0) });
-      supply -= md.cost; cast = true;
-      return true;
-    }
-    return false;
-  };
+  // undead: a Bone Fence on the edge of its graves closest to `target`, so the graves reach it
   let expanded = false;
   const expandToward = target => {
     // one step at a time: wait for the last fence's graves before the next
-    if (expanded) return false;
-    if (monolith(target)) { expanded = true; return true; }   // a Monolith takes no rising slot
-    if (mine.filter(b => b.build > 0 && !BUILDINGS[b.type].skill).length + queued.filter(b => b.type !== 'monolith').length >= RULES.maxRising) return false;
+    if (expanded || mine.filter(b => b.build > 0).length + queued.length >= RULES.maxRising) return false;
     if (supply < BUILDINGS.wall.cost || mine.some(b => b.type === 'wall' && b.build > 0)) return false;
     expanded = true;
     const pts = [];
@@ -358,7 +323,8 @@ function economy(s, p, known, orders) {
       // rich with a bigger army cap: more barracks so the money turns into squads
       (count('barracks') && count('barracks') < Math.min(4, 1 + Math.floor(supply / 60)) && s.round >= 5 && place('barracks', (x, z) => -Math.abs(z - hq.z) * 0.4 - Math.abs(fwd * (x - hq.x) - 3))) ||
       (FACTIONS[fac].buildings.includes('banner') && count('banner') < RULES.maxBannerCp && s.round >= 5 && supply >= BUILDINGS.banner.cost + 20 && place('banner', (x, z) => -dist(x, z, hq.x, hq.z))) ||
-      (rising && s.round >= 5 && count('monolith') < 1 + Math.floor(s.round / 8) && supply >= BUILDINGS.monolith.cost + 25 && rangeTarget && monolith(rangeTarget)) ||
+      // undead: a Monolith (heal + graves) on its graves toward the front, one more every 8 rounds
+      (rising && s.round >= 5 && count('monolith') < 1 + Math.floor(s.round / 8) && supply >= BUILDINGS.monolith.cost + 25 && place('monolith', (x, z) => -dist(x, z, rangeTarget.x, rangeTarget.z))) ||
       (count('tower') < 2 && s.round >= 6 && supply >= BUILDINGS.tower.cost + 30 && place('tower', forward));
     if (!ok) break;
   }

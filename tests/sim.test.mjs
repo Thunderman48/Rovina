@@ -338,11 +338,11 @@ test('balance report: AI vs AI with both factions on both sides', () => {
 
 console.log('M3 skills');
 
-test('heroes have a skill of each colour, usable in the same round (the Lich also raises Monoliths)', () => {
+test('heroes have three skills, one of each colour, usable in the same round', () => {
   for (const f of ['kingdom', 'undead']) {
     const def = createGame(1, [f, f]).squads.find(q => q.role === 'hero');
     const cats = defOf(def).skills.map(k => k.cat).sort().join();
-    eq(cats, f === 'kingdom' ? 'attack,defense,move' : 'attack,attack,defense,defense', f);
+    eq(cats, f === 'kingdom' ? 'attack,defense,move' : 'attack,attack,defense', f);
   }
   const s = arena([[0, 'hero', 10, 16], [1, 'fighter', 16, 16], [0, 'fighter', 9, 18]]);
   const o = holdAll(s);
@@ -989,45 +989,23 @@ test('graveyards spread almost at once to their building\'s reach; a destroyed b
   ok(placeError(r.state, 1, 'barracks', 24, 16) === '' || placeError(r.state, 1, 'barracks', 24, 16) !== 'Only in your third of the table', 'and you can build anywhere');
 });
 
-test('Raise Monolith: a Lich / Necromancers skill (souls + mana) that raises a rising Monolith off graves; it heals', () => {
-  ok(!FACTIONS.undead.buildings.includes('monolith'), 'not in the build menu');
-  for (const r of ['hero', 'mage']) ok(skillOf(FACTIONS.undead.units[r], 'monolith'), r + ' has the skill');
-  const u = arena([[1, 'hero', 30, 9], [1, 'fighter', 40, 4]]);
-  eq(placeError(u, 1, 'monolith', 28, 11), "Your side can't build that", 'it cannot be queued');
-  eq(placeError(u, 1, 'monolith', 28, 11, 0, [], true, true), '', 'the skill may place it off graves');
+test('the Monolith: an ordinary Undead building on graves that heals and spreads graves', () => {
+  ok(FACTIONS.undead.buildings.includes('monolith'), 'in the build menu');
+  for (const r of ['hero', 'mage']) ok(!skillOf(FACTIONS.undead.units[r], 'monolith'), r + ' has no Monolith skill');
+  const u = arena([[1, 'fighter', 40, 4]]);
+  eq(placeError(u, 1, 'monolith', 28, 11), 'Undead buildings must stand on your graves', 'not off graves');
+  eq(placeError(u, 1, 'monolith', 38, 13), '', 'on the Crypt\'s graves');
   eq(BUILDINGS.monolith.cp, undefined, 'no command point');
   ok(!FACTIONS.undead.buildings.includes('banner') && FACTIONS.kingdom.buildings.includes('banner'), 'the Kingdom keeps its Banner');
-  const sk = skillOf(FACTIONS.undead.units.hero, 'monolith');
-  // a cast: pays mana at the start and 20 souls when the site appears; aim beyond 6" is clamped
-  u.supply[1] = 50; const mana0 = u.squads[0].mana;
-  const o = holdAll(u); o[1].squads.q1 = plan([{ kind: 'monolith', x: 30, z: 20 }]);
-  const r = resolveRound(u, o), ev = events(r.log);
+  // queued, it starts, takes a rising slot, and rises in 2 rounds
+  u.supply[1] = 99;
+  const r = resolveRound(u, [orders(), { squads: {}, stances: { q1: 'hold' }, builds: [{ type: 'monolith', x: 38, z: 13, rot: 0 }] }]);
   const m = r.state.buildings.find(b => b.type === 'monolith');
-  ok(m && m.owner === 1 && m.build > 0, 'a rising Monolith');
-  ok(Math.hypot(m.x - 30, m.z - 9) <= sk.range + 0.01, 'clamped to the skill range');
-  ok(ev.some(e => e.type === 'mana' && e.spent === sk.mana));
-  const inc = ev.find(e => e.type === 'income' && e.owner === 1).amount;
-  eq(r.state.supply[1], 50 - BUILDINGS.monolith.cost + inc + (ev.filter(e => e.type === 'souls' && e.owner === 1).reduce((n, e) => n + e.amount, 0)));
-  eq(m.grave, BUILDINGS.monolith.grave, 'full graves by the end of the round');
-  let t = r.state; for (let i = 0; i < 2; i++) t = resolveRound(t, holdAll(t)).state;
-  eq(t.buildings.find(b => b.type === 'monolith').build, 0, 'risen after 2 more rounds');
-  // not enough souls: fizzles, nothing paid
-  const poor = arena([[1, 'hero', 30, 9]]); poor.supply[1] = 5;
-  const po = holdAll(poor); po[1].squads.q1 = plan([{ kind: 'monolith', x: 28, z: 11 }]);
-  const pr = resolveRound(poor, po), pev = events(pr.log);
-  ok(pev.some(e => e.type === 'fizzle' && e.kind === 'monolith' && e.why === 'souls') && !pev.some(e => e.type === 'mana' && e.spent));
-  ok(!pr.state.buildings.some(b => b.type === 'monolith'));
-  // a blocked spot (a squad stands there): fizzles, no souls paid
-  const bl = arena([[1, 'hero', 30, 9], [1, 'fighter', 28, 11]]); bl.supply[1] = 50;
-  const bo = holdAll(bl); bo[1].squads.q1 = plan([{ kind: 'monolith', x: 28, z: 11 }]);
-  const br = resolveRound(bl, bo), bev = events(br.log);
-  ok(bev.some(e => e.type === 'fizzle' && e.kind === 'monolith' && e.why === 'blocked'));
-  ok(!br.state.buildings.some(b => b.type === 'monolith'));
-  // Monolith sites don't take the 2 rising slots
-  const rs = arena([[1, 'fighter', 40, 4]]); rs.supply[1] = 99;
-  addBuilding(rs, 1, 'monolith', 30, 9, 0, false); addBuilding(rs, 1, 'monolith', 30, 22, 0, false);
-  const fc = startQueues(rs, 1, { bq: [{ qid: 'w', type: 'wall', x: 38, z: 13, rot: 1 }] });
-  ok(fc.builds[0].starts, 'a fence still starts: ' + JSON.stringify(fc.builds[0]));
+  ok(m && m.build > 0 && m.grave === BUILDINGS.monolith.grave, 'a rising Monolith with its graves');
+  const fc = startQueues(r.state, 1, { bq: [{ qid: 'a', type: 'wall', x: 41, z: 22, rot: 1 }, { qid: 'b', type: 'wall', x: 41, z: 10, rot: 1 }] });
+  ok(fc.builds[0].starts && fc.builds[1].wait === 'rising', 'it takes one of the 2 rising slots: ' + JSON.stringify(fc.builds));
+  const t = resolveRound(r.state, holdAll(r.state)).state;
+  eq(t.buildings.find(b => b.type === 'monolith').build, 0, 'risen after 2 rounds');
   // healing: a hurt squad next to a finished Monolith regains HP at the end of the round
   const h = arena([[1, 'fighter', 30, 12, { hp: 20, models: 3 }]]);
   addBuilding(h, 1, 'monolith', 30, 9.5, 0, true);
