@@ -31,8 +31,13 @@ It is a static site with no build step and no server, so it runs on GitHub Pages
   see right now. The enemy HQ starts at one of three spots, so you have to scout. Destroying the enemy HQ is the only way to win.
 * **Four battlefields:** Crossing (48″×32″, small and quick), Twin Rivers (64×40), Highland Ruins
   (64×44, a ruin maze around a lake) and Great Field (80×52, for big armies). Pick one on the
-  **Battle setup** screen, along with your army and the AI's strength (Easy / Normal / Hard). Online,
+  **Battle setup** screen, along with your army, the AI's strength and its personality. Online,
   the host picks the map.
+* **An AI built like real RTS AIs:** layered managers (strategy, economy with a queue manager,
+  military attack plans, tactics), fog-fair perception, influence maps, combat prediction, a unit
+  matchup table from simulated duels, and learning from how its squads trade. Six personalities
+  (Warlord, Steward, Smith-King; Bone Tide, Necrarch, Blight Lord), random or picked. Easy / Normal /
+  Hard change only its skill; **Brutal** plays like Hard and cheats (+30 % income).
 * **Settings** (⚙ on the start screen, or in the in-game ≡ menu): graphics quality, miniature
   lens, mini animation, fog mist, sound and volume, default replay speed, nameplates, ask before
   Ready, pan and zoom speed, inverted zoom, Q / E rotation and a camera reset.
@@ -44,7 +49,9 @@ It is a static site with no build step and no server, so it runs on GitHub Pages
 ## Game reference and balancing
 * **[`docs/GAME.md`](docs/GAME.md)**: every rule, formula and number, the AI's behaviour, the maps,
   the latest balance report and a change log. Its tables are generated from the data files
-  (`npm run doc`); `npm run balance` runs the AI-vs-AI balance report (`tools/balance.mjs`).
+  (`npm run doc`); `npm run balance` runs the AI-vs-AI balance report (`tools/balance.mjs`;
+  `--vs legacy` pits the AI against the old one); `npm run matchups` regenerates the AI's unit
+  matchup table after unit changes.
 
 ## Running
 ```
@@ -57,7 +64,8 @@ node tests/sim.test.mjs          # simulation tests
 
 ## Code
 * `js/sim/`: the deterministic rules (resolve, orders, stances, base and economy, builders, vision).
-* `js/ai/`: the AI opponent.
+* `js/ai/`: the AI opponent (`ai.js` entry, perception, influence, combat, learning, strategy,
+  economy, military, tactics, personalities; `legacy.js` the old AI kept as a benchmark).
 * `js/render/`: the table, minis, buildings, fog and effects (three.js).
 * `js/ui/`: the planner, base and builder UI, online lobby, icons and fog map.
 * `js/net/`: the PeerJS transport.

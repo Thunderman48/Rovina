@@ -29,9 +29,13 @@ economy, maps, fog, stances or the AI:**
 ## Commands
 - `node tests/sim.test.mjs` — simulation tests (must pass).
 - `node tools/balance.mjs --games 8 [--maps a,b] [--level easy|normal|hard] [--rounds 100] [--json]`
+- `node tools/matchups.mjs` — regenerate the AI's unit matchup table (`js/ai/matchups.js`) after any unit
+  stat or cost change (then rerun the balance report).
+- `node tools/balance.mjs --vs legacy --games 8` — the new AI against the old one (`js/ai/legacy.js`).
 - `python3 -m http.server 8080` then open http://localhost:8080/ (`?nettest` for two-tab online tests).
 
 ## Layout
 - `js/data/units.js` (all unit / building / economy numbers, `RULES`), `js/data/maps.js` (maps).
-- `js/sim/` deterministic rules (resolve, orders, stances, base, builders, vision, nav); `js/ai/ai.js`.
+- `js/sim/` deterministic rules (resolve, orders, stances, base, builders, vision, nav); `js/ai/` (AI managers,
+  personalities and difficulty in `js/ai/personalities.js`).
 - `js/render/`, `js/ui/`, `js/net/`, `js/audio/`: presentation, UI, online, sound.
