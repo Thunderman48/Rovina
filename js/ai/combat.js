@@ -15,7 +15,7 @@ export function squadDpr(q, armor = 5) {
   const d = defOf(q), a = d.attack;
   if (!a) return 0;
   const hits = RULES.ap / Math.max(10, a.ap);
-  return hits * damageAfter(a.dmg * Math.max(1, q.models), armor) * (d.mana ? 1.5 : 1);   // casters: spells on top
+  return hits * damageAfter(a.dmg * Math.max(1, q.models) * (a.kind === 'strike' ? RULES.strikeMult : 1), armor) * (d.mana ? 1.5 : 1);   // casters: spells on top
 }
 const armorOf = q => defOf(q).armor || 0;
 // a group's strength against another group (squads; buildings with fire count as shooters)

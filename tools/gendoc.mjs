@@ -22,7 +22,7 @@ const RULE_NOTES = {
   defendCost: 'AP per bought defend', maxDefends: 'max bought defends per round', armorK: 'armour constant in damage * K / (K + armour)', defendMult: 'a defended hit deals x this',
   cp: 'command points per round (hero and builders are free)', engageGap: 'inches between squad edges that count as engaged', disengageAP: 'AP spent standing still when stepping away from an engaged enemy',
   partingMult: 'parting blow strength (x the enemy\'s full attack)', parryCost: 'AP for a prepared parry', riposteMult: 'riposte strength (x own attack)', overwatchCost: 'AP for prepared overwatch',
-  overwatchCos: 'overwatch cone: cos of the half angle (0.5 = 60 deg each side)', coverMult: 'damage x this through / into a forest (volleys, pierce, tower fire)', siegeMult: 'damage x this against buildings',
+  overwatchCos: 'overwatch cone: cos of the half angle (0.5 = 60 deg each side)', coverMult: 'damage x this through / into a forest (volleys, pierce, tower fire)', siegeMult: 'damage x this against buildings', strikeMult: 'a melee Strike (target attack) deals x this its listed damage', strikeLunge: 'AP of movement (at the squad\'s speed) a Strike may lunge at a target out of reach',
   shrineRadius: 'ring drawn around resource sites (visual + placement keep-out x 0.6)', armyCap: 'base squad cap (builders and summoned squads do not count; maps add capBonus)', maxBuilders: 'default builder cap (FACTIONS.<f>.maxBuilders overrides)',
   gatherSlots: 'builders that can gather at one building (BUILDINGS.<type>.slots overrides: farm 4)', buildZone: 'default build zone (each map: round(width / 3))', maxBannerCp: 'max Kingdom banners (and max bonus CP)', riseWork: 'undead: work a rising site gains at the end of every round (no builders)', maxRising: 'undead: sites rising at the same time', undeadMend: 'undead: finished buildings regain this share of max HP every round', summonTtl: 'rounds a summoned squad lasts', queueMax: 'squads waiting per training building', queueMaxBuild: 'buildings waiting in the base build queue',
   trainRounds: 'rounds each role takes to train', siteHp: 'share of max HP a new site starts with', workReach: 'inches between builder edge and footprint to work',
@@ -39,8 +39,8 @@ function genUnits() {
     const U = FACTIONS[f].units;
     out.push(`**${FACTIONS[f].name}** (\`FACTIONS.${f}.units\`)\n`);
     out.push(table(['Role', 'Name', 'Models', 'HP/model', 'HP', 'Armour', 'Tier', 'Move "/rnd', 'Vision', 'Defends', 'Radius', 'Attack', 'AP', 'Dmg/model', 'Full squad/hit', 'Reach / range', 'Hits per 100 AP', 'Flags', 'Train cost', 'Train rnds'],
-      rolesOf(f).map(r => { const d = U[r], a = d.attack; return [r, d.name, d.models, d.hpPer, d.models * d.hpPer, d.armor, d.tier, speed(d.tier), d.vision, d.defends, n1(squadRadius(d, d.models) * 100) / 100, a.kind, a.ap, a.dmg, a.dmg * d.models,
-        a.kind === 'swing' ? `reach ${a.reach}" (arc +-60 deg)` : `range ${a.range}", width ${a.width}"`, Math.floor(RULES.ap / a.ap),
+      rolesOf(f).map(r => { const d = U[r], a = d.attack; return [r, d.name, d.models, d.hpPer, d.models * d.hpPer, d.armor, d.tier, speed(d.tier), d.vision, d.defends, n1(squadRadius(d, d.models) * 100) / 100, a.kind, a.ap, a.dmg, n1(rawHit(d) * 100) / 100,
+        a.kind === 'strike' ? `reach ${a.reach}" + lunge ${speed(d.tier) * RULES.strikeLunge / 100}" (one target)` : `range ${a.range}", width ${a.width}"`, Math.floor(RULES.ap / a.ap),
         [d.parry ? 'parry' : '', d.ghost ? 'ghost' : '', d.mana ? `mage: mana ${d.mana.start}/${d.mana.max}, +${d.mana.regen}/rnd` : '', d.summoned ? `summoned (lasts ${RULES.summonTtl} rnds, not trainable)` : ''].filter(Boolean).join(', ') || '-', r === 'hero' || d.summoned ? '-' : FACTIONS[f].train[r], r === 'hero' || d.summoned ? '-' : RULES.trainRounds[r]]; })));
     out.push('');
   }
@@ -59,13 +59,14 @@ function genSkills() {
 }
 
 // damage per 100 AP of the full squad against an armour value (each hit rounded on its own)
-const perHit = (d, armor) => damageAfter(d.attack.dmg * d.models, armor, false);
+const rawHit = d => d.attack.dmg * d.models * (d.attack.kind === 'strike' ? RULES.strikeMult : 1);   // strikes x strikeMult
+const perHit = (d, armor) => damageAfter(rawHit(d), armor, false);
 function genDerived() {
   const out = [];
-  out.push('Damage per round = hits per 100 AP x damageAfter(dmg per model x models, armour), full squad, no defends, no cover, standing in reach. Real fights lose AP to walking.\n');
+  out.push('Damage per round = hits per 100 AP x damageAfter(dmg per model x models (x strikeMult for melee Strikes), armour), full squad, no defends, no cover, standing in reach. Real fights lose AP to walking.\n');
   for (const f of F) {
     out.push(`**${FACTIONS[f].name}: damage per 100 AP against armour**\n`);
-    out.push(table(['Unit', 'Raw/hit', 'vs 0', 'vs 3', 'vs 5', 'vs 8', 'vs 11', 'vs 12'], rolesOf(f).map(r => { const d = FACTIONS[f].units[r], h = Math.floor(RULES.ap / d.attack.ap); return [d.name, d.attack.dmg * d.models, ...[0, 3, 5, 8, 11, 12].map(a => h * perHit(d, a))]; })));
+    out.push(table(['Unit', 'Raw/hit', 'vs 0', 'vs 3', 'vs 5', 'vs 8', 'vs 11', 'vs 12'], rolesOf(f).map(r => { const d = FACTIONS[f].units[r], h = Math.floor(RULES.ap / d.attack.ap); return [d.name, n1(rawHit(d) * 100) / 100, ...[0, 3, 5, 8, 11, 12].map(a => h * perHit(d, a))]; })));
     out.push('');
   }
   // time to kill: attacks needed by a full attacking squad to destroy a full defending squad (no defends)

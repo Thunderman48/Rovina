@@ -16,8 +16,9 @@ It is a static site with no build step and no server, so it runs on GitHub Pages
 * A fallen hero lies where it fell; hold that spot to revive it. Squads use their skills on their
   own (switchable per squad). Build anywhere you have seen; the Undead only on their graves, which
   spread almost at once around their buildings (like blight or creep). Forests are big woodland with soft edges.
-* Every attack is an aimed skillshot that hits whatever is in its shape when it lands, so faster
-  tiers can dodge. Armies grow up to 30 squads (more on big maps).
+* Area attacks (volleys, lobs, most skills) are aimed skillshots that hit whatever is in their shape
+  when they land, so faster tiers can dodge. Melee squads **Strike** one target instead: if it steps
+  out of reach they lunge after it (a short, speed-based dash) and hit a little harder. Armies grow up to 30 squads (more on big maps).
 * **Two economies.** The Kingdom earns **gold** from its Keep, mines and farms worked by up to 4
   peasants each. The Undead earn **souls** mainly from every model that dies on their graveyards;
   the Crypt (1) and Soul Wells (2) only trickle.

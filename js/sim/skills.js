@@ -1,6 +1,6 @@
 // Automatic skill use: the rules the AI uses for its ordered squads, shared with stance squads that
 // have "auto skills" on (q.auto !== false). Adds skill actions to `plan` and returns
-// { left: AP left, charged: the squad charged into (its swings are already added) or null }.
+// { left: AP left, charged: the squad charged into (its strikes are already added) or null }.
 //  t: the squad's current target (a squad, or a target-like object { x, z, isHq? }); lead: aim offset
 import { RULES, isShooter, skillOf, cdOf, isMage } from '../data/units.js';
 import { defOf, radiusOf } from './state.js';
@@ -75,7 +75,7 @@ export function autoSkills(s, q, t, enemies, mine, plan, left, lead = null) {
     }).sort((a, b) => dist(q.x, q.z, a.x, a.z) - dist(q.x, q.z, b.x, b.z))[0] || null;
     if (charged) {
       cast('charge', charged.x, charged.z);
-      while (left >= def.attack.ap) { plan.actions.push({ kind: 'swing', x: charged.x, z: charged.z }); left -= def.attack.ap; }
+      while (left >= def.attack.ap) { plan.actions.push({ kind: 'strike', t: charged.id, x: charged.x, z: charged.z }); left -= def.attack.ap; }
     }
   }
   void RULES;

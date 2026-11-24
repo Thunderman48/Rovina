@@ -77,6 +77,10 @@ export class Planner {
         if (d.l > 1e-3) { fx = d.x; fz = d.z; }
         legs.push({ kind: 'move', line: w.line, t0: t, t1: t + c, disengage: !!a.disengage });
         x = w.x; z = w.z;
+      } else if (a.kind === 'strike') {
+        const d = norm(a.x - x, a.z - z);
+        if (d.l > 0.01) { fx = d.x; fz = d.z; }
+        legs.push({ kind: 'strike', ox: x, oz: z, tx: a.x, tz: a.z, R: a.tr || 1, t0: t, t1: t + c });
       } else if (a.kind === 'swing' || a.kind === 'volley') {
         const d = norm(a.x - x, a.z - z);
         if (d.l > 0.01) { fx = d.x; fz = d.z; }
@@ -165,14 +169,15 @@ export class Planner {
     return true;
   }
 
-  addAttack(id, x, z) {
+  // t: the Strike's target id (melee), tr: its radius (for the plan drawing)
+  addAttack(id, x, z, t = null, tr = 1) {
     const q = this.squad(id), def = defOf(q);
     if (this.plan(id) && this.apLeft(q) < def.attack.ap) { this.g.toast(`Not enough AP (${def.attack.ap} needed)`, true); return false; }
     const plan = this.ensure(id); if (!plan) return false;
     if (this.apLeft(q) < def.attack.ap) { this.g.toast(`Not enough AP (${def.attack.ap} needed)`, true); return false; }
-    plan.actions.push({ kind: def.attack.kind, x, z });
+    plan.actions.push(def.attack.kind === 'strike' && t ? { kind: 'strike', t, x, z, tr } : { kind: def.attack.kind, x, z });
     plan.hist.push('a');
-    this.g.confirm(q, { swing: 'Swing', volley: 'Volley', lob: 'Lob' }[def.attack.kind]);
+    this.g.confirm(q, { strike: 'Strike', volley: 'Volley', lob: 'Lob' }[def.attack.kind]);
     this.g.changed();
     return true;
   }

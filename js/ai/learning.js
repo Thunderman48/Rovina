@@ -1,5 +1,5 @@
 // Learning from combat outcomes (adaptive game AI, as in dynamic scripting: weights move with results).
-// The paper value of a unit (combat.js) misses things such as swings hitting every squad in their arc, a
+// The paper value of a unit (combat.js) misses things such as area attacks hitting every squad in their shape, a
 // slow squad never reaching its target, or a squad dying before it lands a blow. So every round the AI
 // looks at what really happened since the last one: HP its squads lost (by role), and HP the enemy
 // squads it watched lost, credited to its squads near them by their damage. Each role's trade ratio

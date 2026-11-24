@@ -96,6 +96,7 @@ export class Telegraphs {
       const col = COL[t.kind] ?? COL.swing;
       const mk = op => t.shape === 'arc' ? arcShape(t.ox, t.oz, t.dx, t.dz, t.R, t.ch, col, op)
         : t.shape === 'circle' ? (() => { const d = disc(t.R, col, op); d.position.x = t.ox; d.position.z = t.oz; return d; })()
+        : t.shape === 'target' ? (() => { const d = disc(t.R + 0.25, col, op); d.position.x = t.tx; d.position.z = t.tz; return d; })()   // a Strike: its target
         : lineShape(t.ox, t.oz, t.dx, t.dz, t.len, t.w, col, op);
       if (!e) {
         const g = new THREE.Group();
@@ -109,7 +110,7 @@ export class Telegraphs {
       const k = Math.max(0, Math.min(1, (T - t.T0) / Math.max(1, t.T1 - t.T0)));
       const after = T > t.T1 ? (T - t.T1) / 4 : 0;
       // the fill grows from the squad outward as the wind-up charges
-      if (t.shape === 'arc' || t.shape === 'circle') { e.fill.scale.setScalar(Math.max(0.01, k)); }
+      if (t.shape === 'arc' || t.shape === 'circle' || t.shape === 'target') { e.fill.scale.setScalar(Math.max(0.01, k)); }
       else { e.fill.scale.set(1, 1, Math.max(0.01, k)); e.fill.position.copy(e.outline.position); }
       const flash = after > 0 ? Math.max(0, 1 - after) : 0;
       setOpacity(e.outline, after > 0 ? 0.6 * flash : 0.2);

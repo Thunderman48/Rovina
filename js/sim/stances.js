@@ -32,7 +32,7 @@ export function nearestEnemy(s, q, enemies, maxGap = 1e9) {
   return best;
 }
 
-// Move to striking distance of target e and swing at it (aimed at where it stands now).
+// Move to striking distance of target e and Strike it (a target attack; it lunges if e steps out of reach).
 // lead: optional {x,z} offset to aim where it is expected to be.
 export function meleePlan(s, q, e, plan, left, lead = null) {
   const def = defOf(q);
@@ -61,7 +61,7 @@ export function meleePlan(s, q, e, plan, left, lead = null) {
   }
   const ax = e.x + (lead ? lead.x : 0), az = e.z + (lead ? lead.z : 0);
   while (left >= strike) {
-    plan.actions.push({ kind: 'swing', x: ax, z: az });
+    plan.actions.push({ kind: 'strike', t: e.id, x: ax, z: az });
     left -= strike;
   }
   void fromX; void fromZ;

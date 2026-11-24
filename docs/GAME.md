@@ -24,7 +24,9 @@ Contents: 1 Overview · 2 Round structure · 3 Orders and limits · 4 Stances ·
 Two armies (**Kingdom** vs **Undead Legion**; mirror matches allowed) fight on a table. Both players
 give orders at the same time, then the round resolves. Squads act in **speed tiers** (fast first); in a
 tier everything happens at once on a shared timeline where an action's AP cost is how long it takes.
-Every attack is a **non-targeted skillshot**: it hits whatever is in its shape when it lands.
+**Area attacks** (volleys, lobs, most skills) are **non-targeted skillshots**: they hit whatever is in
+their shape when they land. The melee **Strike** is a **target attack** at one enemy, with a short lunge
+if the target steps out of reach (§5.2).
 
 **Win / loss (checked at the end of every round):** a side **loses only when its HQ** (Keep / Crypt)
 **is destroyed** (since 2026-11-17; before that, a side with no squads and no finished barracks also
@@ -114,7 +116,7 @@ acts, not how fast it walks** (speed uses the unit's base tier). Terrain multipl
 |---|---|---|
 | Move | as long as the walk takes (the planner computes it from the path and terrain) | sanitising caps the total at 100 |
 | Wait | chosen | |
-| Basic attack (swing / volley / lob) | the unit's `attack.ap` | may be repeated while AP lasts |
+| Basic attack (strike / volley / lob) | the unit's `attack.ap` | may be repeated while AP lasts; a strike names its target (`t`) |
 | Skill | the skill's `ap` | each skill **at most once per round**, only when its cooldown is 0 |
 | Builder work (`work`) | chosen (normally all AP left) | builders only (§11) |
 | Defend | 20 each, max 4 bought per round | prepaid; each defend halves one hit |
@@ -165,7 +167,7 @@ free; `orders.stances[id]` is one of `guard`, `hold`, `advance`, `retreat`.
   1. **Targets, all equal:** every enemy squad the side sees **and every enemy building it knows of**
      (intel, §12; the HQ included) is a target, with no preference by kind. If the **nearest** one's
      edge is within **`RULES.advanceEngage` = 10″**, the squad attacks it: melee walks to striking
-     distance and swings (a fighter in contact with a squad prepares a parry first); shooters walk until
+     distance and strikes it (a fighter in contact with a squad prepares a parry first); shooters walk until
      within 0.8 × range (+ the target's radius) and shoot with what is left, or shoot at once if already
      within range − 0.3″. Building targets use their hit radius.
   2. Otherwise, with a **target point** (`q.goal`, set by the player): walk toward it (all AP); once
@@ -178,8 +180,8 @@ free; `orders.stances[id]` is one of `guard`, `hold`, `advance`, `retreat`.
 - **Guard:**
   - Shooters: if an enemy is within attack range → shoot at it until AP runs out; otherwise set
     **overwatch** facing the nearest visible enemy (40 AP) and defend with the rest.
-  - Melee: if a visible enemy is within **8″** (`GUARD_RANGE`) → walk to striking distance and swing
-    at it (it aims at where the enemy stands now); prepare a **parry** first if it is a fighter and
+  - Melee: if a visible enemy is within **8″** (`GUARD_RANGE`) → walk to striking distance and strike
+    it (a target attack at that enemy); prepare a **parry** first if it is a fighter and
     already in contact (gap ≤ 0.35″).
 - **Hold:** stand still; all AP into defends (max 4).
 - **Auto skills** (per squad, **on by default**; `q.auto`, set with `orders.auto[id] = true|false`, the
@@ -198,7 +200,8 @@ free; `orders.stances[id]` is one of `guard`, `hold`, `advance`, `retreat`.
   building with a free slot) (§11.4). Hold = stand still.
 
 Melee approach (`meleePlan`): the squad stops at centre distance = own radius + target radius +
-0.55 × reach; if it cannot also swing this round it walks with all its AP.
+0.55 × reach; if it cannot also strike this round it walks with all its AP. Every strike names the
+target (`t`), so it lunges if the target steps away (§5.2).
 
 ---
 
@@ -226,11 +229,32 @@ damage = max(1, round( D × cover × wall × 20 / (20 + A) × (defended ? 0.5 : 
 - **Defends** per round = the unit's base `defends` + bought defends (+1 from Rally). Each hit
   (any source, including tower fire) uses one while any remain.
 
-### 5.2 Swing (melee)
-Aimed at a point when the action starts (the squad turns to face it). At the end of the action's AP
-(the **release**) it hits **every enemy squad and building** whose footprint touches the arc:
-radius = squad radius + `reach`, half-angle 60° (cos 0.5) around the facing. The arc is drawn on the
-table during the wind-up, so a faster enemy can walk out of it before it lands.
+### 5.2 Strike (melee): a target attack
+Attacks come in two kinds:
+- **Area attacks** (volleys, lobs and most skills: Mighty Swing, Sweep, Charge, spells) are aimed shapes that hit what is inside them when they land.
+- **Target attacks** name one enemy. The **Strike** is the basic attack of every melee squad (`STRIKE(ap, dmg, reach)` in `js/data/units.js`). Order: `{ kind: 'strike', t: target id, x, z }`, where `x, z` is the aim point (a fallback).
+
+1. **Start (first AP):** the target is:
+   - **the named squad or building**, if it is alive and an enemy (a squad must have been **visible to the side at round start**, so an order can't follow a hidden squad);
+   - **else** the enemy squad or building whose edge is closest to the aim point, within 2″ of it.
+
+   The squad turns to face it; the playback marks the target during the wind-up.
+2. **Release (after `attack.ap` AP):**
+   - **Target dead:** the nearest enemy already within reach takes the blow instead; none → a miss.
+   - **In reach** (edge-to-edge gap ≤ `reach`): hit it.
+   - **Out of reach and not engaged with any enemy:** the squad **lunges** straight at it.
+     - **Distance:** up to `speed × RULES.strikeLunge` (30 AP) × the terrain factor where it stands. That is tier 3: 1.08″, tier 4: 1.44″, tier 5: 1.8″, tier 6: 2.16″.
+     - **Stops** 0.9 × reach from the target, and earlier at terrain, buildings, the board edge or a friend.
+     - **Costs:** the lunge costs no AP and gives no parting blows.
+     - **Then** it hits if the target is now in reach, else it misses.
+   - **Out of reach but engaged with another enemy:** no lunge (it is locked in melee); a miss.
+3. **The hit:** only the target, raw damage = damage per model × models × multiplier × **`RULES.strikeMult` = 1.15**.
+   - **Buildings** take it with the siege rule (§5.1).
+   - Defends, Lock Shields, cover and **parry** apply as to any melee hit.
+   - A miss still uses the strike's AP.
+
+Older orders with the area `swing` (the legacy AI, older clients) are turned into strikes at their aim
+point (`sanitizePlan`).
 
 ### 5.3 Volley (crossbows, bone archers)
 At release: a straight line from the squad toward the aim, length = `range`, width = `width`. It hits
@@ -337,12 +361,12 @@ still left at the end of that next round is dropped. A squad with no actions doe
 down by 1 at the end of every round, so a skill with `cd` 2 can be used again 2 rounds later.
 
 ### 5.8 Engagement, disengage, parting blows, parry
-- A squad is **engaged** with every enemy **melee** squad (swing attack) whose edge is within
+- A squad is **engaged** with every enemy **melee** squad (strike attack) whose edge is within
   `RULES.engageGap` = 0.35″ (Wraiths are never engaged).
 - **Disengaging:** when a move's first waypoint leads away from an engaged enemy, the squad first
   stands still for **30 AP** (`disengageAP`) and each such enemy gets one **parting blow** =
   ×0.5 of its full attack (per model × models × its multiplier). Once per enemy per round.
-- **Parry** (fighters, 15 AP prepaid): the next **melee hit** (swing, charge or parting blow) on the
+- **Parry** (fighters, 15 AP prepaid): the next **melee hit** (strike, charge or parting blow) on the
   squad deals nothing, and the squad **ripostes** for ×0.5 of its own full attack.
 
 ### 5.9 Overwatch (shooters, 40 AP prepaid)
@@ -383,31 +407,31 @@ Ossuary) and Necromancers (Mausoleum; trained at the Crypt only). Everything els
 
 | Role | Name | Models | HP/model | HP | Armour | Tier | Move "/rnd | Vision | Defends | Radius | Attack | AP | Dmg/model | Full squad/hit | Reach / range | Hits per 100 AP | Flags | Train cost | Train rnds |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| hero | The Chosen | 1 | 130 | 130 | 9 | 5 | 6 | 12 | 2 | 0.65 | swing | 25 | 18 | 18 | reach 1.6" (arc +-60 deg) | 4 | - | - | - |
-| tank | Shieldwall | 3 | 34 | 102 | 12 | 4 | 4.8 | 9 | 2 | 1.227 | swing | 30 | 4 | 12 | reach 1.3" (arc +-60 deg) | 3 | - | 30 | 3 |
-| fighter | Men-at-arms | 4 | 20 | 80 | 7 | 5 | 6 | 9 | 1 | 1.34 | swing | 25 | 5 | 20 | reach 1.5" (arc +-60 deg) | 4 | parry | 24 | 2 |
+| hero | The Chosen | 1 | 130 | 130 | 9 | 5 | 6 | 12 | 2 | 0.65 | strike | 25 | 18 | 20.7 | reach 1.6" + lunge 1.8" (one target) | 4 | - | - | - |
+| tank | Shieldwall | 3 | 34 | 102 | 12 | 4 | 4.8 | 9 | 2 | 1.227 | strike | 30 | 4 | 13.8 | reach 1.3" + lunge 1.44" (one target) | 3 | - | 30 | 3 |
+| fighter | Men-at-arms | 4 | 20 | 80 | 7 | 5 | 6 | 9 | 1 | 1.34 | strike | 25 | 5 | 23 | reach 1.5" + lunge 1.8" (one target) | 4 | parry | 24 | 2 |
 | ranged | Crossbows | 4 | 15 | 60 | 3 | 5 | 6 | 11 | 1 | 1.34 | volley | 30 | 4 | 16 | range 14", width 0.7" | 3 | - | 26 | 2 |
-| fast | Outriders | 3 | 24 | 72 | 5 | 6 | 7.2 | 11 | 1 | 1.347 | swing | 45 | 13 | 39 | reach 1.7" (arc +-60 deg) | 2 | - | 30 | 2 |
-| builder | Peasants | 2 | 14 | 28 | 2 | 5 | 6 | 8 | 0 | 1.094 | swing | 25 | 2 | 4 | reach 1.2" (arc +-60 deg) | 4 | - | 10 | 1 |
+| fast | Outriders | 3 | 24 | 72 | 5 | 6 | 7.2 | 11 | 1 | 1.347 | strike | 45 | 13 | 44.85 | reach 1.7" + lunge 2.16" (one target) | 2 | - | 30 | 2 |
+| builder | Peasants | 2 | 14 | 28 | 2 | 5 | 6 | 8 | 0 | 1.094 | strike | 25 | 2 | 4.6 | reach 1.2" + lunge 1.8" (one target) | 4 | - | 10 | 1 |
 
 **Undead Legion** (`FACTIONS.undead.units`)
 
 | Role | Name | Models | HP/model | HP | Armour | Tier | Move "/rnd | Vision | Defends | Radius | Attack | AP | Dmg/model | Full squad/hit | Reach / range | Hits per 100 AP | Flags | Train cost | Train rnds |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | hero | Lich | 1 | 90 | 90 | 5 | 3 | 3.6 | 12 | 1 | 0.65 | volley | 25 | 10 | 10 | range 10", width 0.6" | 4 | mage: mana 60/100, +25/rnd | - | - |
-| tank | Grave Guard | 3 | 21 | 63 | 9 | 4 | 4.8 | 9 | 2 | 1.227 | swing | 30 | 3.2 | 9.600000000000001 | reach 1.3" (arc +-60 deg) | 3 | - | 16 | 3 |
-| fighter | Skeleton Warriors | 5 | 9 | 45 | 3 | 5 | 6 | 9 | 1 | 1.439 | swing | 25 | 2.4 | 12 | reach 1.5" (arc +-60 deg) | 4 | parry | 9 | 2 |
-| swarm | Skeleton Warband | 6 | 4 | 24 | 0 | 3 | 3.6 | 9 | 0 | 1.5290000000000001 | swing | 25 | 2.1 | 12.600000000000001 | reach 1.4" (arc +-60 deg) | 4 | - | 14 | 1 |
+| tank | Grave Guard | 3 | 21 | 63 | 9 | 4 | 4.8 | 9 | 2 | 1.227 | strike | 30 | 3.2 | 11.04 | reach 1.3" + lunge 1.44" (one target) | 3 | - | 16 | 3 |
+| fighter | Skeleton Warriors | 5 | 9 | 45 | 3 | 5 | 6 | 9 | 1 | 1.439 | strike | 25 | 2.4 | 13.8 | reach 1.5" + lunge 1.8" (one target) | 4 | parry | 9 | 2 |
+| swarm | Skeleton Warband | 6 | 4 | 24 | 0 | 3 | 3.6 | 9 | 0 | 1.5290000000000001 | strike | 25 | 2.1 | 14.49 | reach 1.4" + lunge 1.08" (one target) | 4 | - | 14 | 1 |
 | ranged | Bone Archers | 4 | 10 | 40 | 1 | 5 | 6 | 11 | 1 | 1.34 | volley | 30 | 2.4 | 9.6 | range 14", width 0.9" | 3 | - | 13 | 2 |
-| fast | Wraiths | 3 | 14 | 42 | 3 | 6 | 7.2 | 11 | 1 | 1.347 | swing | 45 | 9 | 27 | reach 1.7" (arc +-60 deg) | 2 | ghost | 16 | 2 |
+| fast | Wraiths | 3 | 14 | 42 | 3 | 6 | 7.2 | 11 | 1 | 1.347 | strike | 45 | 9 | 31.05 | reach 1.7" + lunge 2.16" (one target) | 2 | ghost | 16 | 2 |
 | mage | Necromancers | 2 | 10 | 20 | 1 | 4 | 4.8 | 10 | 1 | 1.094 | volley | 25 | 4 | 8 | range 9", width 0.5" | 4 | mage: mana 40/60, +15/rnd | 22 | 2 |
-| summon | Skeleton Warband | 6 | 4 | 24 | 0 | 3 | 3.6 | 9 | 0 | 1.5290000000000001 | swing | 25 | 2.1 | 12.600000000000001 | reach 1.4" (arc +-60 deg) | 4 | summoned (lasts 3 rnds, not trainable) | - | - |
+| summon | Skeleton Warband | 6 | 4 | 24 | 0 | 3 | 3.6 | 9 | 0 | 1.5290000000000001 | strike | 25 | 2.1 | 14.49 | reach 1.4" + lunge 1.08" (one target) | 4 | summoned (lasts 3 rnds, not trainable) | - | - |
 
 <!-- /GEN:units -->
 
 Notes: "Move ″/rnd" is the open-ground walk per 100 AP. "Full squad/hit" is the raw damage of one
-attack at full models. "Hits per 100 AP" assumes standing in reach the whole round. Swing reach is
-measured from the squad's edge. Heroes cannot be trained.
+attack at full models. "Hits per 100 AP" assumes standing in reach the whole round. Strike reach is
+measured from the squad's edge; "Full squad/hit" includes `strikeMult` for strikes. Heroes cannot be trained.
 
 ---
 
@@ -441,55 +465,55 @@ Charge `wind` = wind-up AP before the rush, `len` = max rush distance. Leap `fli
 ## 9. Derived combat numbers *(generated)*
 
 <!-- GEN:derived -->
-Damage per round = hits per 100 AP x damageAfter(dmg per model x models, armour), full squad, no defends, no cover, standing in reach. Real fights lose AP to walking.
+Damage per round = hits per 100 AP x damageAfter(dmg per model x models (x strikeMult for melee Strikes), armour), full squad, no defends, no cover, standing in reach. Real fights lose AP to walking.
 
 **Kingdom: damage per 100 AP against armour**
 
 | Unit | Raw/hit | vs 0 | vs 3 | vs 5 | vs 8 | vs 11 | vs 12 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| The Chosen | 18 | 72 | 64 | 56 | 52 | 48 | 44 |
-| Shieldwall | 12 | 36 | 30 | 30 | 27 | 24 | 24 |
-| Men-at-arms | 20 | 80 | 68 | 64 | 56 | 52 | 52 |
+| The Chosen | 20.7 | 84 | 72 | 68 | 60 | 52 | 52 |
+| Shieldwall | 13.8 | 42 | 36 | 33 | 30 | 27 | 27 |
+| Men-at-arms | 23 | 92 | 80 | 72 | 64 | 60 | 56 |
 | Crossbows | 16 | 48 | 42 | 39 | 33 | 30 | 30 |
-| Outriders | 39 | 78 | 68 | 62 | 56 | 50 | 48 |
-| Peasants | 4 | 16 | 12 | 12 | 12 | 12 | 12 |
+| Outriders | 44.85 | 90 | 78 | 72 | 64 | 58 | 56 |
+| Peasants | 4.6 | 20 | 16 | 16 | 12 | 12 | 12 |
 
 **Undead Legion: damage per 100 AP against armour**
 
 | Unit | Raw/hit | vs 0 | vs 3 | vs 5 | vs 8 | vs 11 | vs 12 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Lich | 10 | 40 | 36 | 32 | 28 | 24 | 24 |
-| Grave Guard | 9.600000000000001 | 30 | 24 | 24 | 21 | 18 | 18 |
-| Skeleton Warriors | 12 | 48 | 40 | 40 | 36 | 32 | 32 |
-| Skeleton Warband | 12.600000000000001 | 52 | 44 | 40 | 36 | 32 | 32 |
+| Grave Guard | 11.04 | 33 | 30 | 27 | 24 | 21 | 21 |
+| Skeleton Warriors | 13.8 | 56 | 48 | 44 | 40 | 36 | 36 |
+| Skeleton Warband | 14.49 | 56 | 52 | 48 | 40 | 36 | 36 |
 | Bone Archers | 9.6 | 30 | 24 | 24 | 21 | 18 | 18 |
-| Wraiths | 27 | 54 | 46 | 44 | 38 | 34 | 34 |
+| Wraiths | 31.05 | 62 | 54 | 50 | 44 | 40 | 38 |
 | Necromancers | 8 | 32 | 28 | 24 | 24 | 20 | 20 |
-| Skeleton Warband | 12.600000000000001 | 52 | 44 | 40 | 36 | 32 | 32 |
+| Skeleton Warband | 14.49 | 56 | 52 | 48 | 40 | 36 | 36 |
 
 **Attacks needed: Kingdom (rows, full squad, no losses) vs Undead Legion (columns, full HP, no defends)** (rounds = attacks / hits per 100 AP)
 
 | Attacker \ Target | Lich | Grave Guard | Skeleton Warriors | Skeleton Warband | Bone Archers | Wraiths | Necromancers | Skeleton Warband |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| The Chosen | 7 (1.8 r) | 6 (1.5 r) | 3 (0.8 r) | 2 (0.5 r) | 3 (0.8 r) | 3 (0.8 r) | 2 (0.5 r) | 2 (0.5 r) |
-| Shieldwall | 9 (3 r) | 8 (2.7 r) | 5 (1.7 r) | 2 (0.7 r) | 4 (1.3 r) | 5 (1.7 r) | 2 (0.7 r) | 2 (0.7 r) |
-| Men-at-arms | 6 (1.5 r) | 5 (1.3 r) | 3 (0.8 r) | 2 (0.5 r) | 3 (0.8 r) | 3 (0.8 r) | 2 (0.5 r) | 2 (0.5 r) |
+| The Chosen | 6 (1.5 r) | 5 (1.3 r) | 3 (0.8 r) | 2 (0.5 r) | 2 (0.5 r) | 3 (0.8 r) | 1 (0.3 r) | 2 (0.5 r) |
+| Shieldwall | 9 (3 r) | 7 (2.3 r) | 4 (1.3 r) | 2 (0.7 r) | 4 (1.3 r) | 4 (1.3 r) | 2 (0.7 r) | 2 (0.7 r) |
+| Men-at-arms | 5 (1.3 r) | 4 (1 r) | 3 (0.8 r) | 2 (0.5 r) | 2 (0.5 r) | 3 (0.8 r) | 1 (0.3 r) | 2 (0.5 r) |
 | Crossbows | 7 (2.3 r) | 6 (2 r) | 4 (1.3 r) | 2 (0.7 r) | 3 (1 r) | 3 (1 r) | 2 (0.7 r) | 2 (0.7 r) |
-| Outriders | 3 (1.5 r) | 3 (1.5 r) | 2 (1 r) | 1 (0.5 r) | 2 (1 r) | 2 (1 r) | 1 (0.5 r) | 1 (0.5 r) |
-| Peasants | 30 (7.5 r) | 21 (5.3 r) | 15 (3.8 r) | 6 (1.5 r) | 10 (2.5 r) | 14 (3.5 r) | 5 (1.3 r) | 6 (1.5 r) |
+| Outriders | 3 (1.5 r) | 3 (1.5 r) | 2 (1 r) | 1 (0.5 r) | 1 (0.5 r) | 2 (1 r) | 1 (0.5 r) | 1 (0.5 r) |
+| Peasants | 23 (5.8 r) | 21 (5.3 r) | 12 (3 r) | 5 (1.3 r) | 10 (2.5 r) | 11 (2.8 r) | 5 (1.3 r) | 5 (1.3 r) |
 
 **Attacks needed: Undead Legion (rows, full squad, no losses) vs Kingdom (columns, full HP, no defends)** (rounds = attacks / hits per 100 AP)
 
 | Attacker \ Target | The Chosen | Shieldwall | Men-at-arms | Crossbows | Outriders | Peasants |
 | --- | --- | --- | --- | --- | --- | --- |
 | Lich | 19 (4.8 r) | 17 (4.3 r) | 12 (3 r) | 7 (1.8 r) | 9 (2.3 r) | 4 (1 r) |
-| Grave Guard | 19 (6.3 r) | 17 (5.7 r) | 12 (4 r) | 8 (2.7 r) | 9 (3 r) | 4 (1.3 r) |
-| Skeleton Warriors | 17 (4.3 r) | 13 (3.3 r) | 9 (2.3 r) | 6 (1.5 r) | 8 (2 r) | 3 (0.8 r) |
-| Skeleton Warband | 15 (3.8 r) | 13 (3.3 r) | 9 (2.3 r) | 6 (1.5 r) | 8 (2 r) | 3 (0.8 r) |
+| Grave Guard | 17 (5.7 r) | 15 (5 r) | 10 (3.3 r) | 6 (2 r) | 8 (2.7 r) | 3 (1 r) |
+| Skeleton Warriors | 13 (3.3 r) | 12 (3 r) | 8 (2 r) | 5 (1.3 r) | 7 (1.8 r) | 3 (0.8 r) |
+| Skeleton Warband | 13 (3.3 r) | 12 (3 r) | 8 (2 r) | 5 (1.3 r) | 6 (1.5 r) | 3 (0.8 r) |
 | Bone Archers | 19 (6.3 r) | 17 (5.7 r) | 12 (4 r) | 8 (2.7 r) | 9 (3 r) | 4 (1.3 r) |
-| Wraiths | 7 (3.5 r) | 6 (3 r) | 4 (2 r) | 3 (1.5 r) | 4 (2 r) | 2 (1 r) |
+| Wraiths | 7 (3.5 r) | 6 (3 r) | 4 (2 r) | 3 (1.5 r) | 3 (1.5 r) | 1 (0.5 r) |
 | Necromancers | 22 (5.5 r) | 21 (5.3 r) | 14 (3.5 r) | 9 (2.3 r) | 12 (3 r) | 4 (1 r) |
-| Skeleton Warband | 15 (3.8 r) | 13 (3.3 r) | 9 (2.3 r) | 6 (1.5 r) | 8 (2 r) | 3 (0.8 r) |
+| Skeleton Warband | 13 (3.3 r) | 12 (3 r) | 8 (2 r) | 5 (1.3 r) | 6 (1.5 r) | 3 (0.8 r) |
 
 <!-- /GEN:derived -->
 
@@ -1029,7 +1053,7 @@ Each round, in this order:
 - **Enemy tier:** 2 once an elite (gated) squad or a tier-2 HQ has been seen.
 
 ### 14.2 Combat prediction (`combat.js`, Lanchester's square law)
-- **Damage per round** of a squad against armour A: `(100 / max(10, attack AP)) × damageAfter(dmg × models, A)`,
+- **Damage per round** of a squad against armour A: `(100 / max(10, attack AP)) × damageAfter(dmg × models (× 1.15 for strikes), A)`,
   × 1.5 for casters (spells).
 - **Strength of a group** against another: its total damage per round (against the other group's average
   armour) × its total HP (× (1 + 0.15 × defends)). A building with fire adds `4 × damageAfter(fire dmg)`
@@ -1055,7 +1079,7 @@ Each round, in this order:
   - **Enemy losses:** HP each enemy squad it watched lost, credited as **dealt** to its own squads that were within reach of it. Reach = weapon range + 4″ for shooters, 7″ for melee. The credit is split by their damage per round.
 - **Trade ratio of a role:** (dealt + 150) / (taken + 150), divided by the side's overall ratio.
 - **Value multiplier:** that ratio, clamped to 0.4–1.6, raised to the skill's `adapt` (§14.10).
-- **What it is for:** the paper value misses things like swings hitting several squads in their arc, so a role that trades badly in this game gets picked less.
+- **What it is for:** the paper value misses things like area attacks hitting several squads at once, so a role that trades badly in this game gets picked less.
 
 ### 14.5 Strategy: postures (`strategy.js`)
 - **Believed enemy army:** what it sees, but never fewer than 70 % of the most enemy squads it has seen
@@ -1113,7 +1137,7 @@ Squads are given tasks in this order; each squad gets one:
     - **Kite (Hard / Brutal):** with a melee enemy within 2.6″ and not locked in, step 3″ away first (up to 35 AP).
     - **Close in:** when beyond 0.95 × range or the line is blocked, walk up to 45 AP to 0.8 × range (0.45 × when blocked).
     - **Shoot:** volley with the rest.
-  - **Melee:** `meleePlan`.
+  - **Melee:** `meleePlan`: Strikes at the focus-fire target (by id, so they lunge if it steps away, §5.2).
   - **Aim lead** (Normal and up): + 0.5 × the target's last movement.
   - **Leftover AP:** defends.
 
@@ -1217,90 +1241,84 @@ state. Income multiplier is 1 for both.
 ## 16. Balance status
 
 <!-- BALANCE -->
-_Latest run: 2026-11-24, after the **AI remake** (§14). `node tools/balance.mjs --games 8` (8 seeds × both
-army orders = 16 games per map, both sides the new AI at Normal with random personalities; a game still
-going after 100 rounds counts as unfinished), and the benchmark `node tools/balance.mjs --vs legacy
---games 8` (the new AI on each side against the old AI, 32 games per map)._
+_Latest run: 2026-11-24, after melee squads switched to the **Strike** (a target attack with a 30 AP
+lunge, ×1.15 damage, §5.2) and the AI's matchup table was regenerated. `node tools/balance.mjs --games 8`
+(8 seeds × both army orders = 16 games per map, both sides the new AI at Normal with random
+personalities; a game still going after 100 rounds counts as unfinished), and the benchmark
+`node tools/balance.mjs --vs legacy --games 8` (the new AI on each side against the old AI)._
 
 **Faction balance, new AI vs new AI:**
 
 | Map | Kingdom wins | Undead wins | Unfinished | Rounds (avg / median / min / max) | How games ended |
 |---|---|---|---|---|---|
-| Crossing | 12 (75 %) | 4 (25 %) | 0 | 54.3 / 54 / 28 / 89 | HQ destroyed 16 |
-| Twin Rivers | 16 (100 %) | 0 (0 %) | 0 | 45.6 / 46 / 33 / 59 | HQ 16 |
-| Highland Ruins | 15 (94 %) | 1 (6 %) | 0 | 47.6 / 46 / 26 / 80 | HQ 16 |
-| Great Field | 16 (100 %) | 0 (0 %) | 0 | 48.3 / 47 / 34 / 74 | HQ 16 |
-| **All** | **59 (92 %)** | **5 (8 %)** | **0 of 64** | | |
+| Crossing | 6 (40 %) | 9 (60 %) | 1 | 60.3 / 58 / 32 / 97 | HQ destroyed 15, unfinished 1 |
+| Twin Rivers | 16 (100 %) | 0 (0 %) | 0 | 49.4 / 51 / 32 / 78 | HQ 16 |
+| Highland Ruins | 15 (100 %) | 0 (0 %) | 1 | 45.3 / 45 / 25 / 71 | HQ 15, unfinished 1 |
+| Great Field | 16 (100 %) | 0 (0 %) | 0 | 45.1 / 46 / 28 / 64 | HQ 16 |
+| **All** | **53 (85 %)** | **9 (15 %)** | **2 of 64** | | |
 
-**The new AI against the old AI** (target ≥ 70 % per faction):
-
-| Map | New AI as Kingdom | New AI as Undead |
-|---|---|---|
-| Crossing | 13 / 16 | 12 / 16 |
-| Twin Rivers | 16 / 16 | 10 / 16 |
-| Highland Ruins | 16 / 16 | 10 / 16 |
-| Great Field | 16 / 16 | 8 / 16 |
-| **All** | **61 / 64 (95 %)** | **40 / 64 (63 %)** |
+**The new AI against the old AI:** as Kingdom 63 / 64 (98 %), as Undead 41 / 64 (64 %; Crossing 12/16,
+Twin Rivers 10/16, Highland 10/16, Great Field 9/16).
 
 **What the numbers say (2026-11-24):**
-- **The new AI is much stronger than the old one**, clearly with the Kingdom, less with the Undead (63 %, under the 70 % target).
-- **Games no longer stall:** 0 unfinished of 64 (was 3), and games are longer (avg 45–54 rounds, was 21–34) because armies gather, retreat and come back instead of trickling in.
-- **The Kingdom wins 92 % of mirror games** (old AI: 84 %). Now that both sides play well, the gap shows in the rules rather than the AI:
-  - **Economy:** Kingdom income per game is 930–1240 gold. The Undead get 115–185 flat souls + 400–830 souls from deaths, so they have less, and only while they are fighting on their graves.
-  - **Kingdom Crossbows** are the best squad in the game. In equal-cost duels (`js/ai/matchups.js`) they beat every Undead squad except Bone Archers (a draw). In the mirror games they deal 1440–2390 damage a game for 65–310 taken.
-  - **The Skeleton Warband** loses every equal-cost duel (e.g. 14 Warbands lose 10/10 to 4 Men-at-arms). It is still the Crypt's main squad (17–22 trained a game, dealing about a third of what they take).
-  - **Bone Archers and Skeleton Warriors** are good buys (Archers beat Men-at-arms, Warriors beat Men-at-arms at equal cost).
-- **Personalities:** Warlord, Smith-King and Steward win nearly all their mirror games. Of the Undead, Bone Tide and Blight Lord win a few; Necrarch won none.
-- **Open, for the owner to decide** (no game numbers changed in this step):
-  - Undead economy: flat souls, or souls per death.
-  - Warband stats (low tier: stats only, never costs).
-  - Crossbow strength.
-  - The Tier 2 locks.
+- **The Strike moved balance toward the Undead:** 59 / 5 → **53 / 9**.
+  - Kingdom melee no longer hits every Warband in its arc, so cheap many-model squads survive longer. In equal-cost duels the Warband now loses less badly to Men-at-arms (matchup −0.49 → −0.25).
+  - On **Crossing** (small, short paths, fights on the Undead graves) the Undead now win 9 of 15 decided games.
+- **The big maps are still all Kingdom:** Twin Rivers, Highland and Great Field 47 / 0. The findings from the AI remake still hold there:
+  - **Kingdom Crossbows** are the strongest squad (2340 damage dealt a game for 520 taken in these games).
+  - **The Undead economy** is mostly souls from deaths on their graves, which the long walks of the big maps don't give them.
+  - **The Warband** is still a poor trade (dealing about a fifth of what it takes).
+- **Games got longer** (avg 45–60 rounds), with 2 unfinished of 64 (100-round cap).
+- **Open for the owner** (no other numbers changed):
+  - Undead economy on the big maps;
+  - Crossbow strength;
+  - Warband stats (stats only);
+  - the Tier 2 locks.
 
 <details><summary>Full report, new AI vs new AI (per faction: buildings finished, squads trained, income, gathering, souls, HQ found, per unit type damage dealt / taken / models lost / squads lost)</summary>
 
 ```
 Balance report 2026-11-24 · 8 seeds x 2 orders per map · AI normal · stop at round 100
 
-## crossing: 16 games · Kingdom 12 (75% of decided) · Undead 4 (25%) · draws 0 · unfinished 0
-   personalities (new AI): warlord 5/5, blightlord 2/6, bonetide 2/5, smithking 5/6, necrarch 0/5, steward 2/5
-   rounds (decided): avg 54.3, median 54, min 28, max 89 · ends: {"hq destroyed":16}
-   kingdom: built/game {"barracks":1.5,"mine":2.4,"farm":2.1,"wall":0.9,"banner":0.6,"tower":1.3,"forge":0.3,"chapel":0.2} · trained/game {"builder":6.8,"fighter":7.7,"ranged":13.8,"fast":2.1}
-      income/game 1015.9 · gathered/game 299.4 · souls/game 0.0 · found enemy HQ in 14/16 games, avg round 24.4
-      per unit type (per game): builder dealt 0.1 taken 136.1 models lost 8.3 squads lost 4.3 trained 6.8 | fast dealt 224.3 taken 59.6 models lost 2.3 squads lost 0.8 trained 2.1 | fighter dealt 566.3 taken 552.7 models lost 26.3 squads lost 6.5 trained 7.7 | hero dealt 450.6 taken 121.4 models lost 0.9 squads lost 0.9 trained 0.0 | ranged dealt 2392.6 taken 305.8 models lost 18.8 squads lost 4.5 trained 13.8
-   undead: built/game {"wall":6.6,"well":3.5,"barracks":1.1,"monolith":1.6,"tower":1.6,"pit":0.5,"sanctum":0.3} · trained/game {"swarm":22.4,"summon":12.4,"ranged":14.4,"mage":5.2,"fast":0.4}
-      income/game 167.3 · gathered/game 0.0 · souls/game 827.3 · found enemy HQ in 5/16 games, avg round 34.4
-      per unit type (per game): fast dealt 25.3 taken 16.5 models lost 0.9 squads lost 0.3 trained 0.4 | hero dealt 226.1 taken 89.1 models lost 0.9 squads lost 0.9 trained 0.0 | mage dealt 130.4 taken 110.8 models lost 8.9 squads lost 4.4 trained 5.2 | ranged dealt 1247.5 taken 542.5 models lost 47.5 squads lost 11.0 trained 14.4 | summon dealt 79.2 taken 293.7 models lost 53.5 squads lost 8.4 trained 12.4 | swarm dealt 57.3 taken 757.7 models lost 138.9 squads lost 23.0 trained 22.4
+## crossing: 16 games · Kingdom 6 (40% of decided) · Undead 9 (60%) · draws 0 · unfinished 1
+   personalities (new AI): warlord 2/5, blightlord 3/6, bonetide 3/5, smithking 3/6, necrarch 3/5, steward 1/5
+   rounds (decided): avg 60.3, median 58, min 32, max 97 · ends: {"hq destroyed":15,"unfinished":1}
+   kingdom: built/game {"barracks":1,"mine":2.5,"farm":2.1,"wall":0.9,"banner":0.8,"tower":1.2,"forge":0.3,"chapel":0.1} · trained/game {"builder":9.5,"fighter":8.9,"ranged":13.1,"fast":1.6}
+      income/game 997.0 · gathered/game 297.3 · souls/game 0.0 · found enemy HQ in 13/16 games, avg round 21.4
+      per unit type (per game): builder dealt 0.0 taken 272.1 models lost 17.0 squads lost 8.6 trained 9.5 | fast dealt 214.0 taken 87.7 models lost 3.5 squads lost 1.2 trained 1.6 | fighter dealt 752.9 taken 739.2 models lost 35.6 squads lost 8.8 trained 8.9 | hero dealt 462.2 taken 125.0 models lost 0.9 squads lost 0.9 trained 0.0 | ranged dealt 2341.8 taken 517.3 models lost 31.9 squads lost 7.8 trained 13.1
+   undead: built/game {"wall":7.1,"well":3.6,"barracks":1.2,"monolith":2.6,"tower":2,"pit":0.8,"sanctum":0.4} · trained/game {"swarm":28.4,"summon":23.3,"ranged":18.3,"mage":4.9,"fighter":0.6}
+      income/game 213.4 · gathered/game 0.0 · souls/game 990.9 · found enemy HQ in 10/16 games, avg round 53.3
+      per unit type (per game): fighter dealt 11.1 taken 27.1 models lost 2.5 squads lost 0.5 trained 0.6 | hero dealt 228.3 taken 91.4 models lost 0.9 squads lost 0.9 trained 0.0 | mage dealt 157.7 taken 84.9 models lost 6.6 squads lost 3.2 trained 4.9 | ranged dealt 2073.3 taken 554.3 models lost 48.4 squads lost 10.7 trained 18.3 | summon dealt 145.1 taken 550.1 models lost 104.5 squads lost 16.5 trained 23.3 | swarm dealt 184.8 taken 887.1 models lost 161.3 squads lost 26.3 trained 28.4
 
 ## twinrivers: 16 games · Kingdom 16 (100% of decided) · Undead 0 (0%) · draws 0 · unfinished 0
    personalities (new AI): warlord 5/5, blightlord 0/6, bonetide 0/5, smithking 6/6, necrarch 0/5, steward 5/5
-   rounds (decided): avg 45.6, median 46, min 33, max 59 · ends: {"hq destroyed":16}
-   kingdom: built/game {"barracks":1.3,"mine":3.4,"farm":2.1,"wall":0.8,"tower":2.5,"forge":0.3,"banner":0.9,"chapel":0.2} · trained/game {"builder":7.1,"fighter":6.4,"ranged":11.5,"fast":1.6}
-      income/game 1041.1 · gathered/game 265.0 · souls/game 0.0 · found enemy HQ in 16/16 games, avg round 30.8
-      per unit type (per game): builder dealt 0.0 taken 72.1 models lost 4.0 squads lost 1.6 trained 7.1 | fast dealt 236.5 taken 29.7 models lost 1.0 squads lost 0.1 trained 1.6 | fighter dealt 521.5 taken 380.6 models lost 17.8 squads lost 3.4 trained 6.4 | hero dealt 414.3 taken 120.8 models lost 0.8 squads lost 0.8 trained 0.0 | ranged dealt 1751.7 taken 64.9 models lost 3.1 squads lost 0.4 trained 11.5
-   undead: built/game {"wall":6.7,"well":1.8,"barracks":1.2,"monolith":0.6,"tower":0.8,"pit":0.1,"sanctum":0.2} · trained/game {"swarm":21.9,"summon":5,"ranged":8.9,"mage":2.8,"fast":0.1}
-      income/game 114.8 · gathered/game 0.0 · souls/game 508.9 · found enemy HQ in 2/16 games, avg round 33.0
-      per unit type (per game): fast dealt 2.6 taken 2.7 models lost 0.2 squads lost 0.1 trained 0.1 | hero dealt 156.6 taken 95.6 models lost 1.0 squads lost 1.0 trained 0.0 | mage dealt 47.2 taken 74.4 models lost 5.4 squads lost 2.7 trained 2.8 | ranged dealt 606.3 taken 378.9 models lost 33.3 squads lost 8.0 trained 8.9 | summon dealt 10.6 taken 139.9 models lost 26.0 squads lost 4.1 trained 5.0 | swarm dealt 71.4 taken 779.3 models lost 142.8 squads lost 23.7 trained 21.9
+   rounds (decided): avg 49.4, median 51, min 32, max 78 · ends: {"hq destroyed":16}
+   kingdom: built/game {"barracks":1.3,"mine":3.6,"farm":2.1,"wall":0.6,"banner":1,"forge":0.3,"tower":1.8,"chapel":0.3} · trained/game {"builder":6.6,"fighter":6.8,"ranged":12.6,"fast":1.6}
+      income/game 1173.5 · gathered/game 313.5 · souls/game 0.0 · found enemy HQ in 16/16 games, avg round 30.1
+      per unit type (per game): builder dealt 0.1 taken 50.3 models lost 2.9 squads lost 1.3 trained 6.6 | fast dealt 217.2 taken 35.4 models lost 1.3 squads lost 0.4 trained 1.6 | fighter dealt 695.4 taken 413.1 models lost 19.1 squads lost 3.8 trained 6.8 | hero dealt 471.4 taken 111.3 models lost 0.7 squads lost 0.7 trained 0.0 | ranged dealt 1884.5 taken 175.9 models lost 10.2 squads lost 1.9 trained 12.6
+   undead: built/game {"wall":6.7,"well":1.7,"barracks":1.1,"monolith":1.5,"tower":0.8,"pit":0.3,"sanctum":0.3} · trained/game {"swarm":25.6,"summon":5.6,"ranged":10.1,"fighter":0.1,"mage":1.6}
+      income/game 123.8 · gathered/game 0.0 · souls/game 621.3 · found enemy HQ in 2/16 games, avg round 17.0
+      per unit type (per game): fighter dealt 0.4 taken 6.8 models lost 0.6 squads lost 0.1 trained 0.1 | hero dealt 154.3 taken 96.2 models lost 1.0 squads lost 1.0 trained 0.0 | mage dealt 25.4 taken 41.2 models lost 3.3 squads lost 1.6 trained 1.6 | ranged dealt 697.9 taken 446.4 models lost 38.6 squads lost 9.3 trained 10.1 | summon dealt 33.8 taken 155.4 models lost 27.3 squads lost 4.3 trained 5.6 | swarm dealt 128.3 taken 925.9 models lost 165.6 squads lost 27.4 trained 25.6
 
-## highland: 16 games · Kingdom 15 (94% of decided) · Undead 1 (6%) · draws 0 · unfinished 0
-   personalities (new AI): warlord 5/5, blightlord 0/6, bonetide 1/5, smithking 5/6, necrarch 0/5, steward 5/5
-   rounds (decided): avg 47.6, median 46, min 26, max 80 · ends: {"hq destroyed":16}
-   kingdom: built/game {"barracks":1.1,"mine":3.1,"farm":2.1,"banner":0.9,"forge":0.3,"wall":0.8,"tower":1.8,"chapel":0.1} · trained/game {"builder":7.8,"fighter":5.8,"ranged":10.3,"fast":0.8}
-      income/game 925.9 · gathered/game 164.9 · souls/game 0.0 · found enemy HQ in 15/16 games, avg round 30.5
-      per unit type (per game): builder dealt 0.2 taken 95.8 models lost 5.8 squads lost 2.7 trained 7.8 | fast dealt 56.8 taken 14.4 models lost 0.5 squads lost 0.1 trained 0.8 | fighter dealt 573.6 taken 309.8 models lost 14.2 squads lost 2.6 trained 5.8 | hero dealt 523.1 taken 94.1 models lost 0.4 squads lost 0.4 trained 0.0 | ranged dealt 1441.8 taken 131.8 models lost 7.8 squads lost 1.6 trained 10.3
-   undead: built/game {"wall":6.6,"monolith":1.3,"well":1.9,"barracks":1.1,"pit":0.2,"tower":0.8,"sanctum":0.1} · trained/game {"swarm":20.2,"summon":5.6,"ranged":6.7,"mage":1.7,"fast":0.3}
-      income/game 124.5 · gathered/game 0.0 · souls/game 468.4 · found enemy HQ in 2/16 games, avg round 37.0
-      per unit type (per game): fast dealt 6.0 taken 11.0 models lost 0.8 squads lost 0.3 trained 0.3 | hero dealt 169.1 taken 95.9 models lost 1.0 squads lost 1.0 trained 0.0 | mage dealt 41.9 taken 36.8 models lost 2.8 squads lost 1.4 trained 1.7 | ranged dealt 549.1 taken 260.6 models lost 23.3 squads lost 5.3 trained 6.7 | summon dealt 23.3 taken 131.9 models lost 23.5 squads lost 3.4 trained 5.6 | swarm dealt 77.3 taken 682.6 models lost 126.9 squads lost 21.0 trained 20.2
+## highland: 16 games · Kingdom 15 (100% of decided) · Undead 0 (0%) · draws 0 · unfinished 1
+   personalities (new AI): warlord 5/5, blightlord 0/6, bonetide 0/5, smithking 6/6, necrarch 0/5, steward 4/5
+   rounds (decided): avg 45.3, median 45, min 25, max 71 · ends: {"hq destroyed":15,"unfinished":1}
+   kingdom: built/game {"barracks":1.2,"mine":3.2,"farm":2,"chapel":0.3,"forge":0.1,"tower":2.1,"banner":1,"wall":0.9} · trained/game {"builder":6.9,"fighter":5.6,"ranged":11.8,"fast":0.8}
+      income/game 1017.8 · gathered/game 198.6 · souls/game 0.0 · found enemy HQ in 15/16 games, avg round 32.5
+      per unit type (per game): builder dealt 0.3 taken 90.3 models lost 5.6 squads lost 2.7 trained 6.9 | fast dealt 50.5 taken 9.4 models lost 0.4 squads lost 0.1 trained 0.8 | fighter dealt 697.7 taken 340.8 models lost 16.1 squads lost 3.2 trained 5.6 | hero dealt 517.6 taken 99.4 models lost 0.5 squads lost 0.5 trained 0.0 | ranged dealt 1536.4 taken 122.3 models lost 7.5 squads lost 2.0 trained 11.8
+   undead: built/game {"wall":6.7,"monolith":1.7,"well":2,"barracks":1.3,"pit":0.2,"tower":1.3,"sanctum":0.1} · trained/game {"swarm":24.1,"summon":6.7,"ranged":7.3,"mage":1.7,"fighter":0.3}
+      income/game 127.9 · gathered/game 0.0 · souls/game 563.3 · found enemy HQ in 4/16 games, avg round 37.5
+      per unit type (per game): fighter dealt 1.6 taken 15.6 models lost 1.3 squads lost 0.3 trained 0.3 | hero dealt 149.1 taken 97.8 models lost 1.0 squads lost 1.0 trained 0.0 | mage dealt 63.6 taken 33.6 models lost 2.7 squads lost 1.3 trained 1.7 | ranged dealt 520.9 taken 295.7 models lost 25.7 squads lost 6.1 trained 7.3 | summon dealt 23.5 taken 155.0 models lost 26.7 squads lost 4.1 trained 6.7 | swarm dealt 133.6 taken 845.5 models lost 150.7 squads lost 24.8 trained 24.1
 
 ## greatfield: 16 games · Kingdom 16 (100% of decided) · Undead 0 (0%) · draws 0 · unfinished 0
    personalities (new AI): warlord 5/5, blightlord 0/6, bonetide 0/5, smithking 6/6, necrarch 0/5, steward 5/5
-   rounds (decided): avg 48.3, median 47, min 34, max 74 · ends: {"hq destroyed":16}
-   kingdom: built/game {"barracks":1.5,"mine":4,"farm":1.9,"forge":0.4,"chapel":0.3,"tower":2.1,"banner":1,"wall":0.9} · trained/game {"builder":7.9,"fighter":6.9,"ranged":13.6,"fast":2.3}
-      income/game 1235.9 · gathered/game 344.1 · souls/game 0.0 · found enemy HQ in 16/16 games, avg round 36.8
-      per unit type (per game): builder dealt 0.4 taken 65.2 models lost 3.8 squads lost 1.7 trained 7.9 | fast dealt 258.9 taken 46.2 models lost 1.6 squads lost 0.3 trained 2.3 | fighter dealt 522.9 taken 334.8 models lost 15.6 squads lost 3.1 trained 6.9 | hero dealt 328.7 taken 97.1 models lost 0.5 squads lost 0.5 trained 0.0 | ranged dealt 1681.8 taken 83.8 models lost 4.7 squads lost 0.8 trained 13.6
-   undead: built/game {"wall":8.2,"well":1.9,"barracks":1,"pit":0.2,"monolith":0.4,"tower":0.4,"sanctum":0.1} · trained/game {"swarm":16.9,"summon":4.9,"ranged":8.1,"mage":1.6,"fast":0.1}
-      income/game 119.4 · gathered/game 0.0 · souls/game 399.1 · found enemy HQ in 3/16 games, avg round 19.7
-      per unit type (per game): fast dealt 0.6 taken 2.8 models lost 0.2 squads lost 0.1 trained 0.1 | hero dealt 150.7 taken 97.3 models lost 1.0 squads lost 1.0 trained 0.0 | mage dealt 14.6 taken 47.9 models lost 3.1 squads lost 1.6 trained 1.6 | ranged dealt 447.4 taken 360.3 models lost 30.7 squads lost 7.5 trained 8.1 | summon dealt 37.0 taken 108.6 models lost 19.6 squads lost 3.2 trained 4.9 | swarm dealt 100.2 taken 609.8 models lost 113.1 squads lost 18.8 trained 16.9
+   rounds (decided): avg 45.1, median 46, min 28, max 64 · ends: {"hq destroyed":16}
+   kingdom: built/game {"barracks":1.1,"mine":3.6,"farm":2,"forge":0.4,"banner":1,"chapel":0.4,"tower":1.9,"wall":0.5} · trained/game {"builder":7.1,"fighter":6.4,"ranged":10.3,"fast":1.8}
+      income/game 1048.1 · gathered/game 310.4 · souls/game 0.0 · found enemy HQ in 16/16 games, avg round 34.1
+      per unit type (per game): builder dealt 0.1 taken 30.9 models lost 1.9 squads lost 0.9 trained 7.1 | fast dealt 210.3 taken 36.9 models lost 1.2 squads lost 0.1 trained 1.8 | fighter dealt 689.4 taken 300.9 models lost 13.6 squads lost 2.3 trained 6.4 | hero dealt 404.3 taken 101.1 models lost 0.5 squads lost 0.5 trained 0.0 | ranged dealt 1490.3 taken 47.5 models lost 2.4 squads lost 0.3 trained 10.3
+   undead: built/game {"wall":7.4,"well":2.1,"barracks":0.9,"monolith":0.6,"tower":0.5,"pit":0.1} · trained/game {"swarm":20.3,"summon":4.7,"ranged":7.5,"mage":1.2,"fighter":0.3}
+      income/game 106.9 · gathered/game 0.0 · souls/game 458.6 · found enemy HQ in 4/16 games, avg round 20.8
+      per unit type (per game): fighter dealt 1.6 taken 9.2 models lost 0.9 squads lost 0.2 trained 0.3 | hero dealt 110.0 taken 96.5 models lost 1.0 squads lost 1.0 trained 0.0 | mage dealt 14.3 taken 32.4 models lost 2.4 squads lost 1.2 trained 1.2 | ranged dealt 440.1 taken 327.0 models lost 28.3 squads lost 7.0 trained 7.5 | summon dealt 21.8 taken 112.2 models lost 19.4 squads lost 3.1 trained 4.7 | swarm dealt 92.8 taken 738.9 models lost 132.8 squads lost 22.1 trained 20.3
 ```
 </details>
 
@@ -1309,49 +1327,49 @@ Balance report 2026-11-24 · 8 seeds x 2 orders per map · AI normal · stop at 
 ```
 Balance report 2026-11-24 · 8 seeds x 2 orders per map x 2 (new AI on each side vs the legacy AI) · AI normal · stop at round 100
 
-## crossing: 32 games · Kingdom 17 (55% of decided) · Undead 14 (45%) · draws 0 · unfinished 1
-   new AI vs legacy: as kingdom 13/16 (81%) · as undead 12/16 (75%)
-   personalities (new AI): warlord 3/5, blightlord 5/6, bonetide 4/5, smithking 6/6, necrarch 3/5, steward 4/5
-   rounds (decided): avg 40.9, median 41, min 10, max 70 · ends: {"hq destroyed":31,"unfinished":1}
-   kingdom: built/game {"barracks":1.3,"mine":1.8,"farm":1.9,"wall":1.9,"banner":1.4,"chapel":0.1,"tower":1,"forge":0.2} · trained/game {"builder":9.1,"fighter":6.5,"ranged":6.4,"fast":0.1}
-      income/game 612.4 · gathered/game 210.1 · souls/game 0.0 · found enemy HQ in 26/32 games, avg round 15.8
-      per unit type (per game): builder dealt 0.2 taken 252.3 models lost 15.4 squads lost 7.6 trained 9.1 | fast dealt 13.0 taken 0.3 models lost 0.0 squads lost 0.0 trained 0.1 | fighter dealt 868.3 taken 435.8 models lost 20.2 squads lost 4.6 trained 6.5 | hero dealt 630.8 taken 112.1 models lost 0.7 squads lost 0.7 trained 0.0 | ranged dealt 775.7 taken 115.2 models lost 7.0 squads lost 1.7 trained 6.4
-   undead: built/game {"wall":5.4,"well":2.8,"barracks":1.5,"monolith":2,"tower":1.6,"pit":0.5,"sanctum":0.1} · trained/game {"swarm":26.2,"summon":10.5,"fighter":2.3,"mage":3.4,"tank":0.9,"fast":0.9,"ranged":6.2}
-      income/game 142.6 · gathered/game 0.0 · souls/game 607.4 · found enemy HQ in 18/32 games, avg round 27.2
-      per unit type (per game): fast dealt 43.3 taken 40.4 models lost 2.5 squads lost 0.8 trained 0.9 | fighter dealt 62.7 taken 112.6 models lost 10.7 squads lost 2.1 trained 2.3 | hero dealt 177.4 taken 77.8 models lost 0.8 squads lost 0.8 trained 0.0 | mage dealt 126.5 taken 47.8 models lost 3.6 squads lost 1.8 trained 3.4 | ranged dealt 826.5 taken 63.8 models lost 5.5 squads lost 1.2 trained 6.2 | summon dealt 103.5 taken 155.1 models lost 29.2 squads lost 4.1 trained 10.5 | swarm dealt 225.8 taken 828.9 models lost 148.6 squads lost 24.2 trained 26.2 | tank dealt 22.1 taken 52.6 models lost 2.3 squads lost 0.8 trained 0.9
+## crossing: 32 games · Kingdom 18 (58% of decided) · Undead 13 (42%) · draws 0 · unfinished 1
+   new AI vs legacy: as kingdom 15/16 (94%) · as undead 12/16 (75%)
+   personalities (new AI): warlord 4/5, blightlord 5/6, bonetide 3/5, smithking 6/6, necrarch 4/5, steward 5/5
+   rounds (decided): avg 41.2, median 41, min 9, max 84 · ends: {"hq destroyed":31,"unfinished":1}
+   kingdom: built/game {"barracks":1.3,"mine":1.8,"farm":2,"wall":1.2,"banner":1.3,"chapel":0.1,"tower":1.5,"forge":0.1} · trained/game {"builder":9.3,"fighter":6.4,"ranged":6.3,"fast":0.4,"tank":0.1}
+      income/game 620.7 · gathered/game 245.5 · souls/game 0.0 · found enemy HQ in 29/32 games, avg round 18.0
+      per unit type (per game): builder dealt 0.2 taken 238.8 models lost 14.6 squads lost 7.4 trained 9.3 | fast dealt 67.9 taken 14.3 models lost 0.6 squads lost 0.2 trained 0.4 | fighter dealt 838.0 taken 435.9 models lost 20.6 squads lost 4.8 trained 6.4 | hero dealt 655.0 taken 112.8 models lost 0.7 squads lost 0.7 trained 0.0 | ranged dealt 748.7 taken 86.2 models lost 5.2 squads lost 1.2 trained 6.3 | tank dealt 2.3 taken 5.3 models lost 0.2 squads lost 0.1 trained 0.1
+   undead: built/game {"wall":4.6,"well":2.4,"barracks":1.7,"tower":1.6,"monolith":1.8,"pit":0.4,"sanctum":0.1} · trained/game {"swarm":27,"summon":9.5,"fighter":2,"mage":2.6,"tank":0.7,"ranged":6.2,"fast":0.9}
+      income/game 142.8 · gathered/game 0.0 · souls/game 597.0 · found enemy HQ in 21/32 games, avg round 26.3
+      per unit type (per game): fast dealt 15.8 taken 41.7 models lost 2.6 squads lost 0.8 trained 0.9 | fighter dealt 47.5 taken 99.6 models lost 9.6 squads lost 1.9 trained 2.0 | hero dealt 191.8 taken 80.3 models lost 0.8 squads lost 0.8 trained 0.0 | mage dealt 107.6 taken 42.6 models lost 3.0 squads lost 1.5 trained 2.6 | ranged dealt 797.6 taken 88.8 models lost 7.0 squads lost 1.5 trained 6.2 | summon dealt 102.9 taken 151.7 models lost 27.3 squads lost 4.3 trained 9.5 | swarm dealt 187.3 taken 881.6 models lost 153.5 squads lost 24.8 trained 27.0 | tank dealt 13.2 taken 43.4 models lost 2.0 squads lost 0.7 trained 0.7
 
 ## twinrivers: 32 games · Kingdom 22 (69% of decided) · Undead 10 (31%) · draws 0 · unfinished 0
    new AI vs legacy: as kingdom 16/16 (100%) · as undead 10/16 (63%)
    personalities (new AI): warlord 5/5, blightlord 4/6, bonetide 3/5, smithking 6/6, necrarch 3/5, steward 5/5
-   rounds (decided): avg 42.9, median 42, min 14, max 91 · ends: {"hq destroyed":32}
-   kingdom: built/game {"barracks":1.4,"mine":2.3,"farm":2.1,"banner":1.1,"tower":1.4,"wall":0.9,"forge":0.2,"chapel":0.1} · trained/game {"builder":9.3,"fighter":9.3,"ranged":6,"fast":1.2,"tank":0.2}
-      income/game 709.2 · gathered/game 267.6 · souls/game 0.0 · found enemy HQ in 31/32 games, avg round 19.8
-      per unit type (per game): builder dealt 0.2 taken 216.3 models lost 13.4 squads lost 6.7 trained 9.3 | fast dealt 111.3 taken 56.0 models lost 2.2 squads lost 0.7 trained 1.2 | fighter dealt 745.9 taken 580.6 models lost 27.3 squads lost 6.3 trained 9.3 | hero dealt 394.3 taken 74.1 models lost 0.3 squads lost 0.3 trained 0.0 | ranged dealt 626.0 taken 117.3 models lost 7.3 squads lost 1.8 trained 6.0 | tank dealt 4.5 taken 19.8 models lost 0.6 squads lost 0.2 trained 0.2
-   undead: built/game {"wall":5.4,"well":2.3,"barracks":1.1,"tower":1.3,"pit":0.3,"monolith":1.2,"sanctum":0.2} · trained/game {"swarm":19.3,"fighter":1.8,"summon":11.2,"ranged":6.7,"mage":2.4,"fast":0.4,"tank":0.1}
-      income/game 153.1 · gathered/game 0.0 · souls/game 434.2 · found enemy HQ in 12/32 games, avg round 45.2
-      per unit type (per game): fast dealt 5.6 taken 15.2 models lost 0.9 squads lost 0.3 trained 0.4 | fighter dealt 21.6 taken 93.9 models lost 8.9 squads lost 1.8 trained 1.8 | hero dealt 172.7 taken 63.9 models lost 0.6 squads lost 0.6 trained 0.0 | mage dealt 101.1 taken 25.2 models lost 1.8 squads lost 0.8 trained 2.4 | ranged dealt 1239.4 taken 99.2 models lost 8.0 squads lost 1.4 trained 6.7 | summon dealt 81.8 taken 179.4 models lost 33.1 squads lost 5.0 trained 11.2 | swarm dealt 77.4 taken 643.4 models lost 116.1 squads lost 19.2 trained 19.3 | tank dealt 1.5 taken 8.4 models lost 0.4 squads lost 0.1 trained 0.1
+   rounds (decided): avg 40.4, median 43, min 13, max 71 · ends: {"hq destroyed":32}
+   kingdom: built/game {"barracks":1.4,"mine":2.2,"farm":2,"banner":1.2,"tower":1.4,"wall":0.8,"forge":0.1,"chapel":0.1} · trained/game {"builder":9.1,"fighter":8,"ranged":6.3,"fast":0.6,"tank":0.1}
+      income/game 656.5 · gathered/game 261.1 · souls/game 0.0 · found enemy HQ in 30/32 games, avg round 20.4
+      per unit type (per game): builder dealt 0.1 taken 197.7 models lost 12.3 squads lost 6.1 trained 9.1 | fast dealt 86.6 taken 21.5 models lost 0.8 squads lost 0.3 trained 0.6 | fighter dealt 742.4 taken 517.8 models lost 24.0 squads lost 5.4 trained 8.0 | hero dealt 430.3 taken 73.7 models lost 0.4 squads lost 0.4 trained 0.0 | ranged dealt 623.5 taken 105.1 models lost 6.5 squads lost 1.6 trained 6.3 | tank dealt 2.3 taken 6.6 models lost 0.2 squads lost 0.1 trained 0.1
+   undead: built/game {"wall":5.5,"well":2.1,"barracks":1.2,"tower":1.1,"pit":0.3,"sanctum":0.2,"monolith":0.9} · trained/game {"swarm":21.9,"fighter":1.8,"summon":9.8,"ranged":6.2,"mage":1.4,"tank":0.3}
+      income/game 139.5 · gathered/game 0.0 · souls/game 443.6 · found enemy HQ in 12/32 games, avg round 41.6
+      per unit type (per game): fighter dealt 25.8 taken 85.8 models lost 8.2 squads lost 1.6 trained 1.8 | hero dealt 115.6 taken 60.3 models lost 0.6 squads lost 0.6 trained 0.0 | mage dealt 32.7 taken 17.0 models lost 1.2 squads lost 0.6 trained 1.4 | ranged dealt 1136.5 taken 67.0 models lost 5.0 squads lost 0.9 trained 6.2 | summon dealt 72.6 taken 146.3 models lost 26.9 squads lost 4.1 trained 9.8 | swarm dealt 117.2 taken 735.5 models lost 127.7 squads lost 20.5 trained 21.9 | tank dealt 2.2 taken 16.8 models lost 0.8 squads lost 0.3 trained 0.3
 
 ## highland: 32 games · Kingdom 22 (69% of decided) · Undead 10 (31%) · draws 0 · unfinished 0
    new AI vs legacy: as kingdom 16/16 (100%) · as undead 10/16 (63%)
-   personalities (new AI): warlord 5/5, blightlord 3/6, bonetide 3/5, smithking 6/6, necrarch 4/5, steward 5/5
-   rounds (decided): avg 43.7, median 46, min 12, max 76 · ends: {"hq destroyed":32}
-   kingdom: built/game {"barracks":1.3,"mine":2.1,"farm":1.8,"banner":1.1,"tower":1.3,"wall":0.9,"forge":0.2,"chapel":0.1} · trained/game {"builder":8.8,"fighter":8.4,"ranged":6.4,"fast":0.8,"tank":0.1}
-      income/game 686.3 · gathered/game 198.2 · souls/game 0.0 · found enemy HQ in 29/32 games, avg round 21.1
-      per unit type (per game): builder dealt 0.1 taken 208.9 models lost 12.9 squads lost 6.4 trained 8.8 | fast dealt 86.9 taken 29.0 models lost 1.1 squads lost 0.3 trained 0.8 | fighter dealt 898.9 taken 495.3 models lost 22.9 squads lost 5.2 trained 8.4 | hero dealt 435.8 taken 73.3 models lost 0.4 squads lost 0.4 trained 0.0 | ranged dealt 721.2 taken 103.2 models lost 6.3 squads lost 1.5 trained 6.4 | tank dealt 1.5 taken 9.8 models lost 0.3 squads lost 0.1 trained 0.1
-   undead: built/game {"wall":7.3,"well":2.2,"barracks":1.1,"tower":1.3,"monolith":1.4,"pit":0.3,"sanctum":0.2} · trained/game {"swarm":22.4,"fighter":1.1,"summon":11,"ranged":6.3,"mage":2.8,"tank":0.4,"fast":0.5}
-      income/game 141.6 · gathered/game 0.0 · souls/game 491.0 · found enemy HQ in 13/32 games, avg round 39.6
-      per unit type (per game): fast dealt 6.8 taken 22.0 models lost 1.4 squads lost 0.5 trained 0.5 | fighter dealt 18.4 taken 56.1 models lost 5.5 squads lost 1.1 trained 1.1 | hero dealt 143.8 taken 65.2 models lost 0.6 squads lost 0.6 trained 0.0 | mage dealt 131.6 taken 34.2 models lost 2.6 squads lost 1.3 trained 2.8 | ranged dealt 959.4 taken 56.7 models lost 4.6 squads lost 0.7 trained 6.3 | summon dealt 81.4 taken 155.6 models lost 30.0 squads lost 4.3 trained 11.0 | swarm dealt 156.3 taken 755.2 models lost 135.9 squads lost 22.3 trained 22.4 | tank dealt 4.3 taken 29.2 models lost 1.3 squads lost 0.4 trained 0.4
+   personalities (new AI): warlord 5/5, blightlord 4/6, bonetide 3/5, smithking 6/6, necrarch 3/5, steward 5/5
+   rounds (decided): avg 38.3, median 41, min 12, max 67 · ends: {"hq destroyed":32}
+   kingdom: built/game {"barracks":1.3,"mine":1.8,"farm":1.8,"banner":0.9,"tower":1,"wall":0.9,"forge":0.1} · trained/game {"builder":6.9,"fighter":6.9,"ranged":5.8,"fast":0.7,"tank":0}
+      income/game 562.1 · gathered/game 189.9 · souls/game 0.0 · found enemy HQ in 30/32 games, avg round 20.0
+      per unit type (per game): builder dealt 0.1 taken 151.6 models lost 9.3 squads lost 4.6 trained 6.9 | fast dealt 48.3 taken 26.8 models lost 1.0 squads lost 0.3 trained 0.7 | fighter dealt 855.4 taken 430.1 models lost 19.9 squads lost 4.4 trained 6.9 | hero dealt 537.4 taken 74.8 models lost 0.4 squads lost 0.4 trained 0.0 | ranged dealt 495.4 taken 92.2 models lost 5.7 squads lost 1.4 trained 5.8 | tank dealt 0.0 taken 3.2 models lost 0.1 squads lost 0.0 trained 0.0
+   undead: built/game {"wall":6.1,"well":2.3,"barracks":1.3,"tower":1.3,"monolith":1.7,"pit":0.2,"sanctum":0.2} · trained/game {"swarm":23.4,"summon":8.7,"fighter":0.9,"mage":1.6,"fast":0.2,"ranged":6,"tank":0.3}
+      income/game 127.6 · gathered/game 0.0 · souls/game 464.2 · found enemy HQ in 13/32 games, avg round 38.5
+      per unit type (per game): fast dealt 4.3 taken 9.9 models lost 0.6 squads lost 0.2 trained 0.2 | fighter dealt 11.8 taken 45.1 models lost 4.2 squads lost 0.8 trained 0.9 | hero dealt 136.4 taken 60.4 models lost 0.6 squads lost 0.6 trained 0.0 | mage dealt 66.7 taken 26.0 models lost 1.8 squads lost 0.9 trained 1.6 | ranged dealt 748.9 taken 64.3 models lost 5.1 squads lost 0.8 trained 6.0 | summon dealt 63.5 taken 141.2 models lost 25.2 squads lost 3.9 trained 8.7 | swarm dealt 135.2 taken 765.8 models lost 131.7 squads lost 21.2 trained 23.4 | tank dealt 0.8 taken 17.2 models lost 0.8 squads lost 0.3 trained 0.3
 
-## greatfield: 32 games · Kingdom 23 (74% of decided) · Undead 8 (26%) · draws 0 · unfinished 1
-   new AI vs legacy: as kingdom 16/16 (100%) · as undead 8/16 (50%)
-   personalities (new AI): warlord 5/5, blightlord 4/6, bonetide 2/5, smithking 6/6, necrarch 2/5, steward 5/5
-   rounds (decided): avg 43.3, median 43, min 15, max 75 · ends: {"hq destroyed":31,"unfinished":1}
-   kingdom: built/game {"barracks":1.5,"mine":2.6,"farm":1.9,"banner":1.3,"tower":1.2,"forge":0.2,"chapel":0.1,"wall":0.4} · trained/game {"builder":7.9,"fighter":7.7,"ranged":7,"fast":1.8,"tank":0.5}
-      income/game 803.5 · gathered/game 319.0 · souls/game 0.0 · found enemy HQ in 30/32 games, avg round 23.2
-      per unit type (per game): builder dealt 0.1 taken 132.8 models lost 8.3 squads lost 4.0 trained 7.9 | fast dealt 140.6 taken 76.9 models lost 3.0 squads lost 1.0 trained 1.8 | fighter dealt 624.8 taken 443.6 models lost 20.9 squads lost 4.8 trained 7.7 | hero dealt 349.1 taken 67.4 models lost 0.3 squads lost 0.3 trained 0.0 | ranged dealt 642.0 taken 112.1 models lost 7.0 squads lost 1.7 trained 7.0 | tank dealt 13.3 taken 43.5 models lost 1.3 squads lost 0.4 trained 0.5
-   undead: built/game {"wall":6.5,"well":2.6,"barracks":1,"tower":1,"monolith":1.3,"pit":0.2,"sanctum":0.2} · trained/game {"swarm":17.8,"fighter":1,"summon":8.5,"ranged":7.2,"mage":2,"fast":0.1,"tank":0.1}
-      income/game 184.7 · gathered/game 0.0 · souls/game 366.1 · found enemy HQ in 11/32 games, avg round 42.2
-      per unit type (per game): fast dealt 1.7 taken 4.3 models lost 0.3 squads lost 0.1 trained 0.1 | fighter dealt 23.9 taken 49.4 models lost 4.8 squads lost 0.9 trained 1.0 | hero dealt 139.7 taken 69.9 models lost 0.7 squads lost 0.7 trained 0.0 | mage dealt 67.1 taken 25.7 models lost 1.7 squads lost 0.8 trained 2.0 | ranged dealt 879.5 taken 124.6 models lost 9.8 squads lost 2.1 trained 7.2 | summon dealt 53.7 taken 114.2 models lost 21.0 squads lost 3.0 trained 8.5 | swarm dealt 97.6 taken 622.4 models lost 109.7 squads lost 17.9 trained 17.8 | tank dealt 2.0 taken 4.3 models lost 0.2 squads lost 0.1 trained 0.1
+## greatfield: 32 games · Kingdom 22 (71% of decided) · Undead 9 (29%) · draws 0 · unfinished 1
+   new AI vs legacy: as kingdom 16/16 (100%) · as undead 9/16 (56%)
+   personalities (new AI): warlord 5/5, blightlord 5/6, bonetide 2/5, smithking 6/6, necrarch 2/5, steward 5/5
+   rounds (decided): avg 41.5, median 37, min 14, max 85 · ends: {"hq destroyed":31,"unfinished":1}
+   kingdom: built/game {"barracks":1.5,"mine":2.2,"farm":1.8,"banner":1,"tower":1.3,"forge":0.2,"chapel":0.1,"wall":0.5} · trained/game {"builder":8.8,"fighter":8.1,"ranged":6.2,"fast":2,"tank":0.6}
+      income/game 734.8 · gathered/game 356.6 · souls/game 0.0 · found enemy HQ in 31/32 games, avg round 20.1
+      per unit type (per game): builder dealt 0.1 taken 176.2 models lost 10.8 squads lost 5.4 trained 8.8 | fast dealt 170.3 taken 119.0 models lost 4.7 squads lost 1.6 trained 2.0 | fighter dealt 687.6 taken 510.1 models lost 23.9 squads lost 5.6 trained 8.1 | hero dealt 372.9 taken 54.3 models lost 0.3 squads lost 0.3 trained 0.0 | ranged dealt 507.7 taken 108.1 models lost 6.8 squads lost 1.7 trained 6.2 | tank dealt 23.8 taken 60.4 models lost 1.7 squads lost 0.6 trained 0.6
+   undead: built/game {"wall":6.5,"well":2.9,"barracks":1.2,"tower":1.5,"monolith":1.4,"pit":0.2,"sanctum":0.2} · trained/game {"swarm":19.3,"fighter":0.9,"summon":10.4,"ranged":8.1,"mage":2.3,"tank":0.1,"fast":0.1}
+      income/game 197.7 · gathered/game 0.0 · souls/game 413.3 · found enemy HQ in 13/32 games, avg round 44.9
+      per unit type (per game): fast dealt 2.1 taken 3.6 models lost 0.2 squads lost 0.1 trained 0.1 | fighter dealt 18.5 taken 48.4 models lost 4.6 squads lost 0.9 trained 0.9 | hero dealt 93.7 taken 68.0 models lost 0.6 squads lost 0.6 trained 0.0 | mage dealt 105.0 taken 28.1 models lost 2.1 squads lost 1.0 trained 2.3 | ranged dealt 1031.1 taken 114.9 models lost 9.2 squads lost 1.8 trained 8.1 | summon dealt 72.5 taken 163.8 models lost 27.5 squads lost 4.6 trained 10.4 | swarm dealt 141.6 taken 625.0 models lost 108.5 squads lost 17.5 trained 19.3 | tank dealt 0.3 taken 4.6 models lost 0.2 squads lost 0.1 trained 0.1
 ```
 </details>
 <!-- /BALANCE -->
@@ -1384,6 +1402,7 @@ Balance report 2026-11-24 · 8 seeds x 2 orders per map x 2 (new AI on each side
 | Undead rising buildings | `RULES.riseWork` (work per round, 80), `RULES.maxRising` (2 at once), `RULES.undeadMend` (0.05 of max HP per round) | build speed and resilience of the Undead base |
 | Souls (death economy) | `soulPerModel` 3 (per model dying on graves: cheap many-model squads pay back more than they cost), `soulPerHero` 15; `FACTIONS.undead.eco.hq` (Crypt, 1), `BUILDINGS.well.income` (2) | the whole Undead economy; the flat incomes are only a floor |
 | Ground look (visual only) | `js/render/ground.js` (`TEX` 4 texels per inch, `EDGE` 1.6″ soft edge, shader colours); props in `js/render/graves.js` (`CELL` 0.95″, density cov² × 0.32) and forests in `js/render/table.js` | blight and forest floors as a ground texture |
+| Melee Strike (target attack) | `js/data/units.js`: `STRIKE(ap, dmg, reach)` per unit; `RULES.strikeMult` (1.15), `RULES.strikeLunge` (30 AP); fallback radius 2″ around the aim point in `resolve.js` (`strike`) and `main.js` (`strikePick`) | melee damage and how reliably blows land on a moving target (§5.2) |
 | Tech tree | `js/data/tech.js`: `TECH.<id>` (`cost`, `rounds`, `tier`, `needs`, `needsBuilding`, `doctrine`, effects in `units` / `buildings` / `rules`), `GATES` (squads per HQ tier), `BUILDING_GATES`; tech buildings in `BUILDINGS` (`forge`, `chapel`, `pit`, `sanctum`) | when each faction's power arrives; AI research orders per personality in `js/ai/personalities.js` (`research`) |
 | Kingdom farms | `BUILDINGS.farm` (`w`, `d` = land used, `slots` = farmers, `income`), `FACTIONS.kingdom.eco.gather.farm` (AP per gold), `FACTIONS.kingdom.train.builder` | late-game gold; land trade-off |
 | Mage / mana | `units.<role>.mana` (`max`, `start`, `regen`), each skill's `mana`; `isMage` in `js/data/units.js` | how often the Lich and Necromancers cast |
@@ -1438,6 +1457,8 @@ Balance report 2026-11-24 · 8 seeds x 2 orders per map x 2 (new AI on each side
 | `coverMult` | `0.5` | damage x this through / into a forest (volleys, pierce, tower fire) |
 | `forestSlow` | `0.75` | movement x this inside a forest |
 | `siegeMult` | `2.5` | damage x this against buildings |
+| `strikeMult` | `1.15` | a melee Strike (target attack) deals x this its listed damage |
+| `strikeLunge` | `30` | AP of movement (at the squad's speed) a Strike may lunge at a target out of reach |
 | `shrineRadius` | `3` | ring drawn around resource sites (visual + placement keep-out x 0.6) |
 | `armyCap` | `30` | base squad cap (builders and summoned squads do not count; maps add capBonus) |
 | `maxBuilders` | `3` | default builder cap (FACTIONS.<f>.maxBuilders overrides) |
@@ -1505,6 +1526,7 @@ Balance report 2026-11-24 · 8 seeds x 2 orders per map x 2 (new AI on each side
 | 2026-11-24 | **Necromancers train at the Crypt only** (was the Ossuary); **Mausoleum** 3 → 2 rounds; the AI trains Necromancers at the Crypt once unlocked | Kingdom / Undead of 64: 55 / 8 (1 unfinished) → **51 / 10** (3 unfinished): Crossing 11 / 5, Twin Rivers 12 / 3, Highland 14 / 2, Great Field 14 / 0 |
 
 | 2026-11-24 | **The AI remade** (§14): layered managers, fog-fair perception, influence maps, Lanchester combat prediction, a duel-based matchup table, learning from trades, attack plans, personalities; difficulty is skill only (income ×0.8 / ×1.25 and CP ±1 removed) plus Brutal (+30 % income). No rule or unit numbers changed | Kingdom / Undead of 64 (both sides Normal): 51 / 10 (3 unfinished, old AI) → **59 / 5** (0 unfinished, new AI): Crossing 12 / 4, Twin Rivers 16 / 0, Highland 15 / 1, Great Field 16 / 0. New AI vs the old: 61 / 64 as Kingdom, 40 / 64 as Undead |
+| 2026-11-24 | **Melee Strike** (§5.2): melee base attacks are target attacks (one named enemy, a lunge of up to 30 AP of movement when it is out of reach at release, not while locked with another enemy; ×1.15 damage) instead of area swings; area attacks unchanged; old swing orders convert; AI matchup table regenerated | Kingdom / Undead of 64: 59 / 5 (0 unfinished) → **53 / 9** (2 unfinished): Crossing 6 / 9, Twin Rivers 16 / 0, Highland 15 / 0, Great Field 16 / 0. New AI vs the old: Kingdom 61 → 63 / 64, Undead 40 → 41 / 64 |
 ---
 
 ## 19. Keeping this document up to date
@@ -1565,6 +1587,7 @@ Whenever rules, numbers, the AI or maps change:
 | Monolith: a grave-spreading, healing building | Warcraft III Undead (Ziggurat-style blight spreaders), healing structures such as Warcraft III fountains of health, Dawn of War IV-style Necron power-matrix pylons (the owner's reference for spreading ground) | a building that extends your ground and supports units around it | built on your graves like other Undead buildings; heals instead of giving command points |
 | Necromancers as a caster troop under a caster hero | Warcraft III Necromancers / Liches and other caster units with mana | cheap-ish casters with a small spellbook and their own mana | weaker copies of the hero's spells (one-squad summon, short chain) |
 | Forests as large woodland that thins at the edges | the forests of most RTS maps (Age of Empires woods, Company of Heroes hedges and woods) | woodland reads as terrain with cover and slower movement | trees thin out across a soft edge; lone trees outside are only decoration |
+| Target attacks (melee Strike) vs area attacks | single-target attacks vs splash / area attacks in StarCraft and Warcraft III; units chasing their attack target in most RTS games; "attack a unit" melee in tabletop wargames | melee commits to one enemy and follows it a little; areas hit whatever is inside | a short, speed-based lunge (30 AP) at release instead of free chasing; +15 % for giving up the area |
 | AI architecture: layered managers (strategy → economy / production → military → tactics) | UAlbertaBot (Churchill), 0 A.D.'s Petra bot (headquarters, queue, attack and defense managers), the Halo Wars 2 commander AI | each layer only tells the next what it needs | one pass per round from the side's own view (§14) |
 | Queue manager with priorities and saving | Petra's production queues and accounts; Age of Empires II AI scripting (build / train rules, strategic numbers) | every need is a request; important ones hold their cost back | one item per building a round; reserves only in the opening (§14.8) |
 | Attack-plan lifecycle (target, gather at a staging point, attack, retreat, regroup) | Petra's attackManager, AoE II attack groups and "three ways to get the AI to attack", classic attack waves | the army groups up, attacks together and falls back when it is losing | staging on safe ground; the Undead stage on their graves (§14.6) |

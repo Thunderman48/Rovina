@@ -25,6 +25,8 @@ export const RULES = {
   coverMult: 0.5,               // volleys through a forest deal half damage
   forestSlow: 0.75,             // movement x this inside a forest
   siegeMult: 2.5,               // attacks deal this much more to buildings
+  strikeMult: 1.15,             // a melee Strike (target attack) deals this x its listed damage
+  strikeLunge: 30,              // a Strike lunges up to this many AP of movement at a target out of reach
   // M3 base & economy (each faction's currency and income: FACTIONS[f].eco)
   shrineRadius: 3,              // resource sites: the ring drawn around them
   armyCap: 30,                  // squads (builders and summoned squads don't count); maps add capBonus
@@ -73,10 +75,12 @@ export const PAINT = {
   undeadAlt: { cloth: 0x2f7a5a, cloth2: 0x1f2a24, metal: 0x6e6f78, trim: 0xd9c27a, skin: 0xe6dcc3, hair: 0x1f2a24, wood: 0x4a3a2c, leather: 0x3a2e28, horse: 0x1f2a24, mane: 0x141a17, rim: 0x2fb8a0, glow: 0x7dff9a, rust: 0x8a5a3a, base: 0x23806f, bevel: 0x5fd0bf, flock: 0x5f6b44 },
 };
 
-// Attack shapes:
-//  swing  : arc in front of the squad (reach beyond the squad's edge, half-angle cos)
+// Attacks: target attacks (strike: one named enemy) and area attacks (shapes that hit what is inside):
+//  strike : melee target attack within reach beyond the squad's edge (see STRIKE)
 //  volley : straight line toward the aim point (range, width); stopped by hard cover
-const SWING = (ap, dmg, reach = 1.5) => ({ kind: 'swing', ap, dmg, reach, cosHalf: 0.5 });
+// melee base attack: a target attack (Strike) at one enemy; lunges up to RULES.strikeLunge AP of movement
+// when the target is out of reach at release, and hits for RULES.strikeMult x the listed damage
+const STRIKE = (ap, dmg, reach = 1.5) => ({ kind: 'strike', ap, dmg, reach });
 const VOLLEY = (ap, dmg, range, width = 0.7) => ({ kind: 'volley', ap, dmg, range, width });
 //  lob    : arcs over walls onto a circle at the aim point (no line of sight needed)
 const LOB = (ap, dmg, range, radius = 1.5) => ({ kind: 'lob', ap, dmg, range, radius });
@@ -124,12 +128,12 @@ export const FACTIONS = {
   kingdom: {
     name: 'Kingdom', short: 'KGD', colorCss: '#3a78d8',
     units: {
-      hero:    { name: 'The Chosen', role: 'hero', models: 1, hpPer: 130, armor: 9, tier: 5, look: 'lord', vision: 12, defends: 2, attack: SWING(25, 18, 1.6), skills: [LEAP(20, 7, 2, 12, 1.6, 'Leap Strike'), RALLY(20, 5, 2, 4, 1), MIGHTY(30, 28, 2.6, 0.2, 25)] },
-      tank:    { name: 'Shieldwall', role: 'tank', models: 3, hpPer: 34, armor: 12, tier: 4, look: 'shield', vision: 9, defends: 2, attack: SWING(30, 4, 1.3), skills: [WALL('Lock Shields')] },
-      fighter: { name: 'Men-at-arms', role: 'fighter', parry: true, models: 4, hpPer: 20, armor: 7, tier: 5, look: 'sword', vision: 9, defends: 1, attack: SWING(25, 5, 1.5) },
+      hero:    { name: 'The Chosen', role: 'hero', models: 1, hpPer: 130, armor: 9, tier: 5, look: 'lord', vision: 12, defends: 2, attack: STRIKE(25, 18, 1.6), skills: [LEAP(20, 7, 2, 12, 1.6, 'Leap Strike'), RALLY(20, 5, 2, 4, 1), MIGHTY(30, 28, 2.6, 0.2, 25)] },
+      tank:    { name: 'Shieldwall', role: 'tank', models: 3, hpPer: 34, armor: 12, tier: 4, look: 'shield', vision: 9, defends: 2, attack: STRIKE(30, 4, 1.3), skills: [WALL('Lock Shields')] },
+      fighter: { name: 'Men-at-arms', role: 'fighter', parry: true, models: 4, hpPer: 20, armor: 7, tier: 5, look: 'sword', vision: 9, defends: 1, attack: STRIKE(25, 5, 1.5) },
       ranged:  { name: 'Crossbows', role: 'ranged', models: 4, hpPer: 15, armor: 3, tier: 5, look: 'crossbow', vision: 11, defends: 1, attack: VOLLEY(30, 4, 14), skills: [PIERCE(35, 5, 16)] },
-      fast:    { name: 'Outriders', role: 'fast', models: 3, hpPer: 24, armor: 5, tier: 6, look: 'rider', vision: 11, defends: 1, attack: SWING(45, 13, 1.7), skills: [CHARGE(35, 9, 9)] },
-      builder: { name: 'Peasants', role: 'builder', models: 2, hpPer: 14, armor: 2, tier: 5, look: 'peasant', vision: 8, defends: 0, attack: SWING(25, 2, 1.2) },
+      fast:    { name: 'Outriders', role: 'fast', models: 3, hpPer: 24, armor: 5, tier: 6, look: 'rider', vision: 11, defends: 1, attack: STRIKE(45, 13, 1.7), skills: [CHARGE(35, 9, 9)] },
+      builder: { name: 'Peasants', role: 'builder', models: 2, hpPer: 14, armor: 2, tier: 5, look: 'peasant', vision: 8, defends: 0, attack: STRIKE(25, 2, 1.2) },
     },
     // Gold: a steady builder economy (keep, big farms worked by many peasants, mines on resource sites)
     eco: { res: 'gold', name: 'Gold', icon: 'gold', start: 60, hq: 6, gather: { farm: 8, mine: 10 } },
@@ -143,12 +147,12 @@ export const FACTIONS = {
     units: {
       hero:    { name: 'Lich', role: 'hero', models: 1, hpPer: 90, armor: 5, tier: 3, look: 'necro', vision: 12, defends: 1, magic: true, attack: VOLLEY(25, 10, 10, 0.6),
                  mana: { max: 100, start: 60, regen: 25 }, skills: [SUMMON(20, 40, 4, 2), THUNDER(15, 25, 14, 11, 3, 3.5, 0.7), EXPLODE(10, 20, 9, 2.5, 8, 3)] },
-      tank:    { name: 'Grave Guard', role: 'tank', models: 3, hpPer: 21, armor: 9, tier: 4, look: 'graveguard', vision: 9, defends: 2, attack: SWING(30, 3.2, 1.3), skills: [WALL('Grave Wall')] },
-      fighter: { name: 'Skeleton Warriors', role: 'fighter', parry: true, models: 5, hpPer: 9, armor: 3, tier: 5, look: 'skeleton', vision: 9, defends: 1, attack: SWING(25, 2.4, 1.5) },
+      tank:    { name: 'Grave Guard', role: 'tank', models: 3, hpPer: 21, armor: 9, tier: 4, look: 'graveguard', vision: 9, defends: 2, attack: STRIKE(30, 3.2, 1.3), skills: [WALL('Grave Wall')] },
+      fighter: { name: 'Skeleton Warriors', role: 'fighter', parry: true, models: 5, hpPer: 9, armor: 3, tier: 5, look: 'skeleton', vision: 9, defends: 1, attack: STRIKE(25, 2.4, 1.5) },
       // the swarm: fragile, quick, cheap, trained two squads at a time (`pair`; a later upgrade: three)
-      swarm:   { name: 'Skeleton Warband', role: 'swarm', pair: 2, models: 6, hpPer: 4, armor: 0, tier: 3, look: 'skeleton', vision: 9, defends: 0, attack: SWING(25, 2.1, 1.4) },
+      swarm:   { name: 'Skeleton Warband', role: 'swarm', pair: 2, models: 6, hpPer: 4, armor: 0, tier: 3, look: 'skeleton', vision: 9, defends: 0, attack: STRIKE(25, 2.1, 1.4) },
       ranged:  { name: 'Bone Archers', role: 'ranged', models: 4, hpPer: 10, armor: 1, tier: 5, look: 'archer', vision: 11, defends: 1, attack: VOLLEY(30, 2.4, 14, 0.9), skills: [STORM(35, 4, 15, 2.2)] },
-      fast:    { name: 'Wraiths', role: 'fast', models: 3, hpPer: 14, armor: 3, tier: 6, look: 'wraith', vision: 11, defends: 1, ghost: true, attack: SWING(45, 9, 1.7), skills: [CHARGE(35, 5.6, 9)] },
+      fast:    { name: 'Wraiths', role: 'fast', models: 3, hpPer: 14, armor: 3, tier: 6, look: 'wraith', vision: 11, defends: 1, ghost: true, attack: STRIKE(45, 9, 1.7), skills: [CHARGE(35, 5.6, 9)] },
       // a weaker caster troop: bolts, a weaker Dark Thunder, a one-squad summon
       mage:    { name: 'Necromancers', role: 'mage', models: 2, hpPer: 10, armor: 1, tier: 4, look: 'necro', vision: 10, defends: 1, magic: true, attack: VOLLEY(25, 4, 9, 0.5),
                  mana: { max: 60, start: 40, regen: 15 }, skills: [THUNDER(15, 20, 6, 10, 2, 3, 0.7), SUMMON(20, 35, 4, 1)] },
@@ -216,7 +220,7 @@ export function squadRadius(def, models) {
 }
 
 export function unitDef(faction, role, tk = '') { return techUnit(FACTIONS[faction].units[role], faction, role, tk); }
-export const isMelee = def => def.attack.kind === 'swing';
+export const isMelee = def => def.attack.kind === 'strike';
 export const skillsOf = def => def.skills || [];
 export const skillOf = (def, kind) => (def.skills || []).find(k => k.kind === kind) || null;
 export const SKILL_KINDS = ['charge', 'blast', 'rally', 'storm', 'sweep', 'leap', 'step', 'wall', 'pierce', 'raise', 'mighty', 'summon', 'thunder', 'explode'];

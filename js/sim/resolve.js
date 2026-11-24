@@ -23,7 +23,7 @@ import { BUILDINGS, FACTIONS, trainCost } from '../data/units.js';
 import { addSquad, freeSpot } from './state.js';
 
 const r3 = v => Math.round(v * 1000) / 1000;
-const MELEE_HITS = ['swing', 'charge', 'parting'];
+const MELEE_HITS = ['strike', 'swing', 'charge', 'parting'];
 
 export function damageAfter(dmg, armor, defended) {
   const v = dmg * RULES.armorK / (RULES.armorK + armor) * (defended ? RULES.defendMult : 1);
@@ -309,6 +309,41 @@ export function resolveRound(state0, ordersIn) {
     ev({ type: 'release', id: q.id, kind: 'explode', hit: struck, ex: r3(best.x), ez: r3(best.z), burst: best.id });
   }
 
+  // Strike (melee target attack) at release: hit the chosen target if it is within reach; else, unless
+  // locked in melee, lunge straight at it (up to RULES.strikeLunge AP of movement, stopping 0.9 x reach
+  // from it, cut short by terrain, buildings and friends), then hit if it is in reach. A dead target:
+  // the nearest enemy already in reach takes the hit instead.
+  function strike(r, st) {
+    const q = r.q, at = r.def.attack, rq = radiusOf(q);
+    const gapTo = e => dist(q.x, q.z, e.x, e.z) - rq - rad(e);
+    let tg = st.tg ? unitAt(st.tg) : null;
+    if (tg && tg.hp <= 0) {
+      tg = null;
+      let bd = at.reach;
+      for (const e of targets(q)) { const g = gapTo(e); if (g <= bd) { bd = g; tg = e; } }
+    }
+    let lunge = 0;
+    if (tg && gapTo(tg) > at.reach && !engagedWith(q, living()).length) {
+      const d = norm(tg.x - q.x, tg.z - q.z);
+      const want = Math.min(speedOf(q) * RULES.strikeLunge * terrainFactor(s.terrain, q.x, q.z), gapTo(tg) - at.reach * 0.9);
+      const x0 = q.x, z0 = q.z;
+      rec(q, T - 3);   // stands until just before the blow, then lunges (playback)
+      // walk the line in small steps; stop before terrain, buildings or a friend
+      const wedged = pointBlocked(obs(), x0, z0, rq * 0.85);   // already touching an obstacle: only stop at new ones
+      for (let k = 1, n = Math.ceil(want / 0.1); k <= n; k++) {
+        const l = Math.min(want, k * 0.1), x = x0 + d.x * l, z = z0 + d.z * l;
+        if (!wedged && pointBlocked(obs(), x, z, rq * 0.85)) break;
+        if (living().some(o => o !== q && o.owner === q.owner && dist(x, z, o.x, o.z) < rq + radiusOf(o) - 0.05)) break;
+        q.x = x; q.z = z; lunge = l;
+      }
+      if (lunge > 0) { q.fx = d.x; q.fz = d.z; rec(q, T); }
+    }
+    if (tg && gapTo(tg) <= at.reach + 1e-6) {
+      hits.push({ src: q.id, dst: tg, dmg: atkDmg(r, at.dmg) * RULES.strikeMult, kind: 'strike' });
+      ev({ type: 'release', id: q.id, kind: 'strike', hit: [tg.id], lunge: r3(lunge), ex: r3(q.x), ez: r3(q.z) });
+    } else ev({ type: 'release', id: q.id, kind: 'strike', hit: [], miss: true, lunge: r3(lunge), ex: r3(q.x), ez: r3(q.z) });
+  }
+
   // ---- one AP of an action ---------------------------------------------------------
   function step(r, moves, moved) {
     const q = r.q, a = r.actions[r.idx];
@@ -334,6 +369,20 @@ export function resolveRound(state0, ordersIn) {
       r.st.sk = sk;
       const tele = (kind, extra) => ev({ type: 'tele', id: q.id, kind, ox: r3(q.x), oz: r3(q.z), dx: r3(q.fx), dz: r3(q.fz), t1: r3(T + a.cost), ...extra });
       const face = (x, z) => { const d = norm(x - q.x, z - q.z); if (d.l > 0.01) { q.fx = d.x; q.fz = d.z; } };
+      if (a.kind === 'strike') {
+        // target attack: the named enemy (a squad must have been visible to the side at round start),
+        // else the enemy whose edge is closest to the aim point, within 2"
+        let tg = a.t ? unitAt(a.t) : null;
+        if (tg && (tg.hp <= 0 || tg.owner === q.owner || (!tg.type && !seenBy[q.owner].has(tg.id)))) tg = null;
+        if (!tg) {
+          let bd = 2;
+          for (const e of targets(q)) { const d = dist(a.x, a.z, e.x, e.z) - rad(e); if (d <= bd) { bd = d; tg = e; } }
+        }
+        r.st.tg = tg ? tg.id : null;
+        face(tg ? tg.x : a.x, tg ? tg.z : a.z);
+        rec(q, T);
+        tele('strike', tg ? { shape: 'target', tx: r3(tg.x), tz: r3(tg.z), R: r3(rad(tg)), tid: tg.id } : { shape: 'target', tx: r3(a.x), tz: r3(a.z), R: 0.5 });
+      }
       if (a.kind === 'swing' || a.kind === 'volley' || a.kind === 'charge' || a.kind === 'pierce' || a.kind === 'mighty') {
         face(a.x, a.z);
         r.st.dx = q.fx; r.st.dz = q.fz; r.st.ox = q.x; r.st.oz = q.z;
@@ -522,7 +571,8 @@ export function resolveRound(state0, ordersIn) {
     } else if (r.el >= a.cost && st.phase === 'go') {
       st.phase = 'done';
       const at = def.attack, sk = st.sk;
-      if (a.kind === 'swing') {
+      if (a.kind === 'strike') strike(r, st);
+      else if (a.kind === 'swing') {
         const R = radiusOf(q) + at.reach;
         const struck = [];
         for (const e of targets(q)) {

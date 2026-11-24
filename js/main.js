@@ -163,7 +163,7 @@ class Game {
     const mine = id => this.tl.squads.find(q => q.id === id)?.owner === this.me || (this.blist || []).find(b => b.id === id)?.owner === this.me;
     for (const e of events) {
       if (e.type === 'release' && vis(e.id)) {
-        const k = { swing: 'swing', sweep: 'swing', volley: 'volley', pierce: 'volley', lob: 'storm', storm: 'storm', blast: 'blast', charge: 'charge' }[e.kind];
+        const k = { strike: 'swing', swing: 'swing', sweep: 'swing', volley: 'volley', pierce: 'volley', lob: 'storm', storm: 'storm', blast: 'blast', charge: 'charge' }[e.kind];
         if (k) sfx(k);
       } else if (e.type === 'hit' && (vis(e.dst) || vis(e.src))) sfx(e.defended || e.walled ? 'clang' : 'hit', 0.05);
       else if (e.type === 'parry' && vis(e.id)) sfx('clang');
@@ -410,6 +410,10 @@ class Game {
     if (leg.kind === 'move') {
       L.add(ribbon(leg.line, sel ? 0.16 : 0.1, leg.disengage ? 0xffb020 : 0xffffff, sel ? 0.9 : 0.55));
       L.add(chevrons(leg.line, 0x111111, sel ? 0.8 : 0.4));
+    } else if (leg.kind === 'strike') {
+      const l = Math.hypot(leg.tx - leg.ox, leg.tz - leg.oz);
+      if (l > 0.05) L.add(lineShape(leg.ox, leg.oz, (leg.tx - leg.ox) / l, (leg.tz - leg.oz) / l, l, 0.14, COL.swing, a + 0.2));
+      const m = ring(leg.R + 0.15, 0.1, COL.swing, a + 0.35, 0.07); m.position.x = leg.tx; m.position.z = leg.tz; L.add(m);
     } else if (leg.kind === 'swing') L.add(arcShape(leg.ox, leg.oz, leg.dx, leg.dz, leg.R, leg.ch, COL.swing, a));
     else if (leg.kind === 'volley') {
       const cut = losCut(this.state.terrain, leg.ox, leg.oz, leg.ox + leg.dx * leg.len, leg.oz + leg.dz * leg.len);
@@ -483,7 +487,7 @@ class Game {
     } else if (q) {
       // enemy selected: show its strike reach
       const def = defOf(q);
-      const r = def.attack.kind === 'swing' ? radiusOf(q) + def.attack.reach + def.tier * RULES.moveFactor * (RULES.ap - def.attack.ap) : def.attack.range;
+      const r = def.attack.kind === 'strike' ? radiusOf(q) + def.attack.reach + def.tier * RULES.moveFactor * (RULES.ap - def.attack.ap + RULES.strikeLunge) : def.attack.range;
       const m = ring(r, 0.07, COL.volley, 0.5, 0.05, 72); m.position.x = q.x; m.position.z = q.z; L.add(m);
     }
   }
@@ -511,7 +515,7 @@ class Game {
     if (!show) { for (const el of Object.values(this.knobs)) el.style.display = 'none'; this.knobPos = null; return; }
     const def = defOf(q), builder = q.role === 'builder';
     const sks = builder ? [] : skillsOf(def);
-    const atkIc = def.attack.kind === 'swing' ? 'attack' : 'shoot';
+    const atkIc = def.attack.kind === 'strike' ? 'attack' : 'shoot';
     const content = { move: icon('move', 20), attack: icon(this.mode === 'overwatch' ? 'overwatch' : atkIc, 20), build: icon('build', 20), gather: icon(this.eco().icon, 20) };
     sks.forEach((sk, i) => { const cd = cdOf(q, sk.kind); content['skill' + i] = this.planner.skillReady(q, sk.kind) ? icon(SKILL_IC[sk.kind], 20) : isMage(def) ? `<b class="mn">${sk.mana}</b>` : `<b>${cd > 0 ? cd : '✓'}</b>`; });
     // place knobs in screen space around the squad's planned end point: always ~64px apart
@@ -601,10 +605,26 @@ class Game {
     this.view.frame([{ x: q.x + rx * side - fx * up, z: q.z + rz * side - fz * up }], 0.45, dist);
   }
 
+  // the enemy a Strike dropped at (x, z) goes for: a visible enemy squad or a known enemy building whose
+  // edge is within 2" of the point (the closest)
+  strikePick(q, x, z) {
+    const c = [];
+    for (const e of this.state.squads) if (e.hp > 0 && e.owner !== q.owner && this.canSeeEnemy(e.id)) c.push({ id: e.id, x: e.x, z: e.z, r: radiusOf(e), name: defOf(e).name });
+    for (const b of this.state.buildings || []) if (b.hp > 0 && b.owner !== q.owner && (this.knownB.has(b.id) || this.canSeeEnemy(b.id))) c.push({ id: b.id, x: b.x, z: b.z, r: hitRadius(b), name: this.bname(b) });
+    let best = null, bd = 2;
+    for (const e of c) { const d = Math.hypot(e.x - x, e.z - z) - e.r; if (d <= bd) { bd = d; best = e; } }
+    return best;
+  }
+
   // place an order of the current mode at a table point
   orderAt(kind, q, x, z, skKind = null) {
     if (kind === 'move') return this.planner.addMove(q.id, x, z);
-    if (kind === 'attack') return this.planner.addAttack(q.id, x, z);
+    if (kind === 'attack') {
+      if (defOf(q).attack.kind !== 'strike') return this.planner.addAttack(q.id, x, z);
+      const tg = this.strikePick(q, x, z);
+      if (!tg) { this.toast('Strike: drop it on an enemy squad or building', true); return false; }
+      return this.planner.addAttack(q.id, tg.x, tg.z, tg.id, tg.r);
+    }
     if (kind === 'skill') return this.planner.addSkill(q.id, skKind || this.modeSkill, x, z);
     if (kind === 'overwatch') { const ok = this.planner.setOverwatch(q.id, x, z); this.mode = 'move'; return ok; }
     if (kind === 'goal') { this.planner.setGoal(q.id, x, z); this.mode = 'move'; this.confirm(q, 'Advance target set'); return true; }
@@ -740,11 +760,19 @@ class Game {
     }
     // basic attack
     const at = def.attack, dmg = at.dmg * q.models;
-    if (at.kind === 'swing') {
-      const R = radiusOf(q) + at.reach; let n = 0;
-      L.add(arcShape(pr.x, pr.z, ux, uz, R, at.cosHalf, COL.swing, 0.55));
-      for (const e of enemies) if (arcHits(pr.x, pr.z, ux, uz, R, at.cosHalf, e.x, e.z, radiusOf(e))) { n++; mark(e); }
-      return { html: `Swing ${dmg}<small>${n ? `hits ${n} if they stay` : 'nobody there now'}</small>` };
+    if (at.kind === 'strike') {
+      // target attack: snaps to the enemy nearest the aim point; reach and lunge rings around the squad
+      const lunge = def.tier * RULES.moveFactor * RULES.strikeLunge;
+      const rr = ring(radiusOf(q) + at.reach, 0.06, COL.swing, 0.6, 0.05, 72); rr.position.x = pr.x; rr.position.z = pr.z; L.add(rr);
+      const lr = ring(radiusOf(q) + at.reach + lunge, 0.04, COL.swing, 0.3, 0.05, 72); lr.position.x = pr.x; lr.position.z = pr.z; L.add(lr);
+      const tg = this.strikePick(q, p.x, p.z);
+      if (!tg) return { html: `Strike ${Math.round(dmg * RULES.strikeMult)}<small>drop it on an enemy</small>`, bad: true };
+      const gap = Math.hypot(tg.x - pr.x, tg.z - pr.z) - radiusOf(q) - tg.r;
+      const l = Math.hypot(tg.x - pr.x, tg.z - pr.z) || 1;
+      L.add(lineShape(pr.x, pr.z, (tg.x - pr.x) / l, (tg.z - pr.z) / l, l, 0.14, COL.swing, 0.7));
+      const m = ring(tg.r + 0.2, 0.12, COL.bad, 1, 0.08); m.position.x = tg.x; m.position.z = tg.z; L.add(m);
+      const how = gap <= at.reach ? 'in reach' : gap <= at.reach + lunge ? `lunges ${(gap - at.reach * 0.9).toFixed(1)}″ to reach it` : `out of reach now (lunge ${lunge.toFixed(1)}″)`;
+      return { html: `Strike ${Math.round(dmg * RULES.strikeMult)}<small>${esc(tg.name)} · ${how}</small>`, warn: gap > at.reach + lunge };
     }
     if (at.kind === 'lob') {
       const c = clampAim(pr.x, pr.z, p.x, p.z, at.range);
@@ -876,11 +904,11 @@ class Game {
     if (this.phase !== 'planning' || !q) { dock.classList.add('hidden'); info.classList.add('hidden'); return; }
     if (q.role === 'builder' && q.owner === this.me) { this.renderBuilderDock(q); return; }
     const def = defOf(q), at = def.attack, sks = skillsOf(def);
-    const atkName = def.magic ? 'Bolt' : { swing: 'Swing', volley: 'Volley', lob: 'Lob' }[at.kind];
+    const atkName = def.magic ? 'Bolt' : { strike: 'Strike', volley: 'Volley', lob: 'Lob' }[at.kind];
     if (q.owner !== this.me) {
       dock.classList.add('hidden');
       info.classList.remove('hidden');
-      const atkTxt = at.kind === 'swing' ? `Swings for ${at.dmg * q.models} (${at.dmg} per model), reach ${at.reach}″` : at.kind === 'lob' ? `Lobs arrows over walls for ${at.dmg * q.models}, range ${at.range}″` : `Volleys for ${at.dmg * q.models}, range ${at.range}″ (needs a clear line)`;
+      const atkTxt = at.kind === 'strike' ? `Strikes one target for ${Math.round(at.dmg * q.models * RULES.strikeMult)} (${+(at.dmg * RULES.strikeMult).toFixed(2)} per model), reach ${at.reach}″, lunges up to ${(def.tier * RULES.moveFactor * RULES.strikeLunge).toFixed(1)}″` : at.kind === 'lob' ? `Lobs arrows over walls for ${at.dmg * q.models}, range ${at.range}″` : `Volleys for ${at.dmg * q.models}, range ${at.range}″ (needs a clear line)`;
       const skTxt = sks.map(k => ` · ${k.name}${cdOf(q, k.kind) > 0 ? ` recharging (${cdOf(q, k.kind)})` : ' ready'}`).join('');
       info.innerHTML = `<b>Enemy ${esc(def.name)}</b> · tier ${def.tier} · ${q.models}/${def.models} models · ${q.hp} HP<br>
         <span style="color:var(--muted)">${atkTxt}${skTxt} · moves ${(def.tier * RULES.moveFactor * 100).toFixed(1)}″ per round.${def.ghost ? ' Ignores engagement.' : ''} The red ring shows how far it can strike this round.</span>`;
@@ -898,7 +926,7 @@ class Game {
     const mage = isMage(def), mana = mage ? this.planner.manaLeft(q) : 0;
     const skBtn = sks.map(sk => { const cd = cdOf(q, sk.kind); const sub = mage ? `${sk.mana} mana · ${sk.ap} AP` : cd > 0 ? `recharging ${cd}` : this.planner.skillUsed(q.id, sk.kind) ? 'used' : `${sk.ap} AP`; return b('skill:' + sk.kind, SKILL_IC[sk.kind], sk.name, sub, this.mode === 'skill' && this.modeSkill === sk.kind, !this.planner.skillReady(q, sk.kind) || left < sk.ap, sk.cat); }).join('');
     const msk = this.mode === 'skill' ? skillOf(def, this.modeSkill) : null;
-    const melee = at.kind === 'swing';
+    const melee = at.kind === 'strike';
     const prepBtn = melee
       ? (def.parry ? b('parry', 'parry', 'Parry', plan?.parry ? 'ready' : `${RULES.parryCost} AP`, !!plan?.parry, !plan?.parry && left < RULES.parryCost, 'defense') : '')
       : b('mode:overwatch', 'overwatch', 'Overwatch', plan?.overwatch ? 'set · aim again' : `${RULES.overwatchCost} AP`, this.mode === 'overwatch' || !!plan?.overwatch, !plan?.overwatch && left < RULES.overwatchCost, 'defense');
@@ -1076,7 +1104,7 @@ class Game {
     const name = id => { const q = tl.squads.find(x => x.id === id); if (!q) { const b = bld(id); return b ? `<b class="t${b.owner}">${b.owner === this.me ? 'Your' : 'Enemy'} ${esc(this.bname(b))}</b>` : '?'; } if (q.owner !== this.me && !tl.everSeen(id)) return `<b class="t${q.owner}">An unseen enemy</b>`; return `<b class="t${q.owner}">${q.owner === this.me ? 'Your' : 'Enemy'} ${esc(defOf(q).name)}</b>`; };
     const lines = [];
     for (const e of tl.events) {
-      const verb = { mighty: 'smashes', thunder: 'strikes with Dark Thunder', explode: 'blows up summoned bones on', leap: 'lands on', swing: 'cuts into', volley: 'shoots', lob: 'rains arrows on', storm: 'brings an Arrow Storm down on', sweep: 'sweeps through', pierce: 'drives a piercing bolt through', charge: 'charges into', blast: 'blasts', parting: 'lands a parting blow on', riposte: 'ripostes' };
+      const verb = { mighty: 'smashes', thunder: 'strikes with Dark Thunder', explode: 'blows up summoned bones on', leap: 'lands on', strike: 'strikes', swing: 'cuts into', volley: 'shoots', lob: 'rains arrows on', storm: 'brings an Arrow Storm down on', sweep: 'sweeps through', pierce: 'drives a piercing bolt through', charge: 'charges into', blast: 'blasts', parting: 'lands a parting blow on', riposte: 'ripostes' };
       if (e.type === 'construct' && (e.owner === this.me || this.knownB.has(e.id))) lines.push({ T: e.T, html: `${name(e.id)} ${e.done ? 'goes up' : 'construction begins'}` });
       else if (e.type === 'built' && (e.owner === this.me || this.knownB.has(e.id))) lines.push({ T: e.T, html: `${name(e.id)} is finished` });
       else if (e.type === 'research' && e.owner === this.me) lines.push({ T: e.T, html: `${name(e.id)} starts researching <b>${esc(TECH[e.tech].name)}</b>` });
@@ -1109,6 +1137,8 @@ class Game {
       else if (e.type === 'fizzle') lines.push({ T: e.T, html: `${name(e.id)}: the spell fizzles${e.kind === 'explode' ? ' (no summoned skeletons there)' : ' (out of mana)'}` });
       else if (e.type === 'release' && e.kind === 'summon') lines.push({ T: e.T, html: `${name(e.id)} calls ${e.count > 1 ? e.count + ' squads' : 'a squad'} of skeletons from the ground` });
       else if (e.type === 'wallOn') lines.push({ T: e.T, html: `${name(e.id)} braces a shield wall` });
+      else if (e.type === 'release' && e.kind === 'strike' && !e.hit.length) lines.push({ T: e.T, html: `${name(e.id)}: strike misses (${e.lunge ? `lunged ${e.lunge}″, ` : ''}the target got out of reach)` });
+      else if (e.type === 'release' && e.kind === 'strike' && e.lunge > 0) lines.push({ T: e.T, html: `${name(e.id)} lunges ${e.lunge}″ at its target` });
       else if (e.type === 'release' && !e.hit.length && e.kind !== 'summon') lines.push({ T: e.T, html: `${name(e.id)}: ${e.kind} ${e.blocked ? 'blocked' : 'misses (nobody in the area)'}` });
     }
     this.logLines = lines;
@@ -1318,7 +1348,7 @@ const STANCE_TIP = {
   hold: 'Stays put; all its AP goes into defends',
   retreat: 'Falls back to your nearest Mine / Soul Well (else the HQ) and guards there',
 };
-const ACT_COL = { work: '#ffb020', swing: 'var(--swing)', volley: 'var(--volley)', lob: 'var(--volley)', charge: CAT_HEX.move, leap: CAT_HEX.move, step: CAT_HEX.move, blast: CAT_HEX.attack, storm: CAT_HEX.attack, sweep: CAT_HEX.attack, pierce: CAT_HEX.attack, mighty: CAT_HEX.attack, thunder: CAT_HEX.attack, explode: CAT_HEX.attack, rally: CAT_HEX.defense, raise: CAT_HEX.defense, wall: CAT_HEX.defense, summon: CAT_HEX.defense, wait: '#8a857c' };
+const ACT_COL = { work: '#ffb020', strike: 'var(--swing)', swing: 'var(--swing)', volley: 'var(--volley)', lob: 'var(--volley)', charge: CAT_HEX.move, leap: CAT_HEX.move, step: CAT_HEX.move, blast: CAT_HEX.attack, storm: CAT_HEX.attack, sweep: CAT_HEX.attack, pierce: CAT_HEX.attack, mighty: CAT_HEX.attack, thunder: CAT_HEX.attack, explode: CAT_HEX.attack, rally: CAT_HEX.defense, raise: CAT_HEX.defense, wall: CAT_HEX.defense, summon: CAT_HEX.defense, wait: '#8a857c' };
 const SKILL_IC = { charge: 'dash', leap: 'shove', step: 'disrupt', blast: 'frag', storm: 'shoot', sweep: 'sweep', pierce: 'range', rally: 'rally', raise: 'heal', wall: 'fortify', mighty: 'attack', summon: 'spawn', thunder: 'zone', explode: 'frag' };
 const SKILL_HELP = {
   charge: 'drag its knob to aim the lane: the squad rushes down it and slams into the first enemy squad.',
@@ -1386,8 +1416,9 @@ const HELP = {
 <p><b>Difficulty</b> is skill, not money: Easy reacts a round late, forgets quickly, doesn't focus fire and makes mistakes; Normal focus-fires and counters; Hard also kites with ranged squads and scouts constantly. <b>Brutal</b> plays like Hard and <b>cheats</b>: +30 % income.</p>`,
   combat: () => `
 <ul>
-<li>Every attack is a <b>skillshot</b>: it hits whatever is inside the shape when it lands. The shape charges up during its wind-up, so enemies can walk out of it, and yours can dodge.</li>
-<li><b>Swing</b> (melee arc) and <b>Volley</b> (a line that walls stop; forests give <b>cover</b>: half damage).</li>
+<li><b>Two kinds of attack.</b> <b>Area attacks</b> (volleys, lobs and most skills) are <b>skillshots</b>: they hit whatever is inside the shape when they land. The shape charges up during its wind-up, so enemies can walk out of it, and yours can dodge.</li>
+<li><b>Strike</b> (the melee attack) is a <b>target attack</b>: drop it on one enemy squad or building. If the target has stepped out of reach when the blow lands, the squad <b>lunges</b> at it (up to ${RULES.strikeLunge} AP of movement at its speed; not while it is locked in melee with another enemy). It hits only that target, for ${Math.round((RULES.strikeMult - 1) * 100)}% more than the listed damage.</li>
+<li><b>Volley</b>: a line that walls stop; forests give <b>cover</b> (half damage).</li>
 <li><b>Skills</b> are coloured by type (${G(GREEN)} movement, ${G(RED)} attack, ${G(BLUE)} defence and buffs) and recharge for a round or two. Heroes have three, one of each colour.</li>
 <li><b>Defend</b>: each defend halves one hit. <b>Parry</b> (fighters): blocks the next melee hit and strikes back. <b>Overwatch</b> (shooters): fires once at the first enemy that moves inside the cone, in any tier. <b>Act earlier</b> moves a squad up a tier.</li>
 <li>Squads are several miniatures: damage removes models, and a squad hits for <b>damage per model × models left</b>.</li>
