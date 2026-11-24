@@ -19,6 +19,8 @@ import { Planner } from './ui/planner.js';
 import { icon } from './ui/iconset.js';
 import { BaseUI } from './ui/baseui.js';
 import { ProductionUI } from './ui/production.js';
+import { TechTreeUI } from './ui/techtree.js';
+import { TECH } from './data/tech.js';
 import { OnlineUI } from './ui/online.js';
 import { SettingsUI } from './ui/settings.js';
 import { sfx, unlockAudio, soundOn, setSound, setVolume } from './audio/sfx.js';
@@ -116,6 +118,9 @@ class Game {
     $('help-close').onclick = () => $('help').classList.add('hidden');
     $('b-menu').onclick = () => $('opts').classList.remove('hidden');
     $('o-close').onclick = () => $('opts').classList.add('hidden');
+    $('o-tech').onclick = () => { $('opts').classList.add('hidden'); this.openTechTree(); };
+    $('b-tech').onclick = () => this.openTechTree();
+    $('b-tech').innerHTML = icon('tech', 18);
     $('o-quit').onclick = () => { try { this.net?.send({ t: 'bye' }); } catch {} setTimeout(() => location.reload(), 150); };
     this.initSettings();
     if (/statue/.test(location.search)) this.setAnim('statue', false);
@@ -817,6 +822,7 @@ class Game {
     if (e.key === 'Enter' && this.buildMode) this.confirmPlace();
     if (e.key === 'Escape') { if (this.buildMode) { this.buildMode = null; this.view.clear('ghost'); this.changed(); } else { this.select(null); this.selB = null; this.changed(); } }
     if (e.key === 'b' && this.phase === 'planning') this.openBuild();
+    if (e.key === 't' && this.state) { if (this.techOpen) this.closeTechTree(); else this.openTechTree(); }
     if (this.settings?.keysRotate && (e.key === 'q' || e.key === 'e')) this.view.rotate(e.key === 'q' ? 0.18 : -0.18);
     if (e.key === 'g' && this.phase === 'planning' && this.selectedSquad()?.role === 'builder') this.planner.gatherAuto(this.selected);
     if (e.key === 'Backspace' && this.selected) { e.preventDefault(); this.planner.undo(this.selected); }
@@ -1069,8 +1075,11 @@ class Game {
       const verb = { mighty: 'smashes', thunder: 'strikes with Dark Thunder', explode: 'blows up summoned bones on', leap: 'lands on', swing: 'cuts into', volley: 'shoots', lob: 'rains arrows on', storm: 'brings an Arrow Storm down on', sweep: 'sweeps through', pierce: 'drives a piercing bolt through', charge: 'charges into', blast: 'blasts', parting: 'lands a parting blow on', riposte: 'ripostes' };
       if (e.type === 'construct' && (e.owner === this.me || this.knownB.has(e.id))) lines.push({ T: e.T, html: `${name(e.id)} ${e.done ? 'goes up' : 'construction begins'}` });
       else if (e.type === 'built' && (e.owner === this.me || this.knownB.has(e.id))) lines.push({ T: e.T, html: `${name(e.id)} is finished` });
+      else if (e.type === 'research' && e.owner === this.me) lines.push({ T: e.T, html: `${name(e.id)} starts researching <b>${esc(TECH[e.tech].name)}</b>` });
+      else if (e.type === 'researched' && e.owner === this.me) lines.push({ T: e.T, html: `Research done: <b>${esc(TECH[e.tech].name)}</b>` });
+      else if (e.type === 'plague') lines.push({ T: e.T, html: `${name(e.id)} withers on the graves <span class="dmg">−${e.amount}</span>` });
       else if (e.type === 'train' && e.owner === this.me) lines.push({ T: e.T, html: `${name(e.id)} starts training ${esc(FACTIONS[this.faction(e.owner)].units[e.role].name)}` });
-      else if (e.type === 'trainCancel' && e.owner === this.me) lines.push({ T: e.T, html: `${name(e.id)} stops training ${esc(FACTIONS[this.faction(e.owner)].units[e.role].name)} (+${e.refund} refunded)` });
+      else if (e.type === 'trainCancel' && e.owner === this.me) lines.push({ T: e.T, html: `${name(e.id)} stops ${e.tech ? 'researching ' + esc(TECH[e.tech].name) : 'training ' + esc(FACTIONS[this.faction(e.owner)].units[e.role].name)} (+${e.refund} refunded)` });
       else if (e.type === 'queueDrop' && e.owner === this.me) lines.push({ T: e.T, html: `Build queue: ${esc(BUILDINGS[e.btype].name[this.faction(e.owner)])} dropped (${esc(e.why)})` });
       else if (e.type === 'spawn' && e.owner === this.me) lines.push({ T: e.T, html: e.summon ? `<b class="t${e.owner}">A summoned Skeleton Warband</b> rises from the ground` : `<b class="t${e.owner}">New ${esc(FACTIONS[this.faction(e.owner)].units[e.role].name)}</b> join your army` });
       else if (e.type === 'bdown') lines.push({ T: e.T, html: `${name(e.id)} is destroyed` });
@@ -1119,6 +1128,8 @@ class Game {
         else if (e.type === 'bdown') { const b = atB(e.id); if (b) { this.texts.add(b.x, b.z, 'Destroyed', 'down', 4.6, 2); this.pulse(b.x, b.z, hitRadius(b) + 0.8, 0xff3b30); } }
         else if (e.type === 'construct') { const b = atB(e.id); if (b) this.texts.add(b.x, b.z, e.done ? 'Built' : 'Building…', 'ok', 3.2); }
         else if (e.type === 'built') { const b = atB(e.id); if (b) { this.texts.add(b.x, b.z, 'Finished!', 'ok', 4.2, 1.8); this.pulse(b.x, b.z, hitRadius(b) + 0.6, 0x34c759); } }
+        else if (e.type === 'researched' && e.owner === this.me) { const b = atB(e.id); if (b) { this.texts.add(b.x, b.z, `Researched: ${TECH[e.tech].name}`, 'tag', 3.2, 2); this.pulse(b.x, b.z, 2.4, 0xffcf5a, true); } }
+        else if (e.type === 'plague') { const q = at(e.id); if (q) this.texts.add(q.x, q.z, `−${e.amount}`, 'dmg', 2); }
         else if (e.type === 'train' && e.owner === this.me) { const b = atB(e.id); if (b) this.texts.add(b.x, b.z, `Training ${FACTIONS[this.faction(e.owner)].units[e.role].name}`, 'ok', 3.6, 1.8); }
         else if (e.type === 'spawn' && (e.owner === this.me || this.tl.pointSeen(e.x, e.z, e.T))) { this.texts.add(e.x, e.z, `+ ${FACTIONS[this.faction(e.owner)].units[e.role].name}`, 'ok', 2.4, 2); this.pulse(e.x, e.z, 1.2, TEAM_HEX[e.owner]); }
         else if (e.type === 'shrine' && (e.owner === this.me || this.tl.pointSeen(e.x, e.z, e.T))) { const was = this.tl.shrinesAt(e.T - 0.01).find(sh => sh.x === e.x && sh.z === e.z)?.owner; this.texts.add(e.x, e.z, e.owner === this.me ? 'Site claimed' : was === this.me ? 'Site lost' : e.owner < 0 ? 'Site freed' : 'Enemy site', e.owner === this.me ? 'ok' : 'def', 2.6, 2); this.pulse(e.x, e.z, RULES.shrineRadius, e.owner < 0 ? 0xd8d2c0 : TEAM_HEX[e.owner]); }
@@ -1279,7 +1290,7 @@ class Game {
       if (this.state.buildings) { this.syncBuildings(this.planningBuildings()); this.syncShrines(this.state.shrines || []); }
       this.updatePlaceMark();
       if (this.phase === 'planning' || this.phase === 'waiting') {
-        if (this.dirty) { this.dirty = false; this.drawPlan(); this.renderSquadBar(); this.renderProd(); this.renderDock(); this.renderBuildBar(); this.updateTop(); }
+        if (this.dirty) { this.dirty = false; this.drawPlan(); this.renderSquadBar(); this.renderProd(); this.renderDock(); this.renderBuildBar(); this.updateTop(); if (this.techOpen) this.renderTechTree(); }
         this.updateLabels(list);
       }
       if (this.phase === 'planning' || this.knobPos) {
@@ -1294,7 +1305,7 @@ class Game {
   }
 }
 
-Object.assign(Game.prototype, BaseUI, ProductionUI, OnlineUI, SettingsUI);
+Object.assign(Game.prototype, BaseUI, ProductionUI, OnlineUI, SettingsUI, TechTreeUI);
 
 const CAT_HEX = { move: '#34c759', attack: '#ff3b30', defense: '#3fa9ff' };
 const STANCE_TIP = {
@@ -1390,6 +1401,7 @@ const HELP = {
 <li><b>Small starts:</b> the Kingdom begins with its hero, Men-at-arms and one peasant squad; the Undead with the Lich and a Skeleton Warband pair. Everything else comes from your base.</li>
 <li><b>Production queues.</b> One build queue for your base (up to ${RULES.queueMaxBuild}) and a training queue at every HQ / Barracks (up to ${RULES.queueMax}). Each item is <b>paid when it starts</b>; if you can't afford it, no builder is free or the army is at its cap, the queue <b>waits</b> (amber dot). The <b>Production</b> bar above your squad cards shows every queue: tap an icon to remove it (tap the squad in training twice to stop it for a refund), drag one sideways to reorder.</li>
 <li><b>Barracks / Ossuaries</b> train fighters, shooters and fast squads in 2 rounds, tanks in 3. <b>Towers</b> see far and shoot. <b>Banners</b> (Kingdom): +1 command point. <b>Monoliths</b> (Undead): graves and a small heal. <b>Walls</b> block paths and volleys. Army cap: ${RULES.armyCap} squads (more on the big maps).</li>
+<li><b>Tech tree</b> (🜲 button, or T): research is done at your HQ and in tech buildings, in the same queue as training (paid when it starts; the building does nothing else meanwhile). <b>Tier 2</b> (Castle / Mausoleum, at the HQ) unlocks the elite squads (Kingdom: Shieldwall, Outriders; Undead: Grave Guard, Wraiths, Necromancers) and the tech buildings (Blacksmith and Chapel / Charnel Pit and Dark Sanctum). <b>Tier 3</b> (Citadel / Necropolis) unlocks the strongest research. At each tier you pick <b>one of two doctrines</b>: the other is locked for the rest of the battle. Research stays even if the building that did it falls.</li>
 </ul>`,
   fog: () => `
 <p>The table is covered in <b>fog</b>: thick mist where you have never been, a thin haze where you have been but can't see right now. You only see enemies your squads and buildings can see: within their vision, not behind walls or rocks, and not deep in a forest (a squad inside a forest is only seen from close by). Hidden enemies show as faded <b>last seen</b> markers, and enemy buildings stay where you last saw them.</p>

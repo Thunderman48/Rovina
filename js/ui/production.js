@@ -4,7 +4,8 @@
 // icon sideways to reorder its queue, tap a group's name to select that building, ＋ to add.
 // Mixed into Game. The same queue rows are reused inside the building and builder panels.
 import { RULES, BUILDINGS, FACTIONS, trainCost } from '../data/units.js';
-import { trainers } from '../sim/base.js';
+import { trainers, isTechItem, bdef } from '../sim/base.js';
+import { TECH } from '../data/tech.js';
 import { icon } from './iconset.js';
 
 const $ = id => document.getElementById(id);
@@ -21,8 +22,16 @@ export const ProductionUI = {
       gold: `Waits: needs ${f.need} more gold`, souls: `Waits: needs ${f.need} more souls`,
       builders: 'Waits for a free builder', blocked: 'Waits: a squad is standing on the spot',
       cap: `Waits: army cap (${this.state.board.cap} squads)`, line: 'Waits its turn',
+      needs: 'Waits: ' + (f.why || 'its requirements'),
     }[f.wait] || (f.wait === eco.res ? 'Waits for ' + eco.name.toLowerCase() : 'Waits');
   },
+  // name / icon / cost / rounds of a queue item: a role or 'tech:<id>' (research)
+  qInfo(item) {
+    const fac = this.faction(this.me);
+    if (isTechItem(item)) { const t = TECH[item.slice(5)]; return { name: t.name, ic: t.icon, cost: t.cost, rounds: t.rounds, tech: true }; }
+    return { name: FACTIONS[fac].units[item].name, ic: item, cost: trainCost(fac, item), rounds: RULES.trainRounds[item] };
+  },
+  trainItem: tr => tr.tech ? 'tech:' + tr.tech : tr.role,
   // the icons of one queue. kind 'b' (base build queue) or 't' (training building b)
   queueRowHTML(kind, b = null) {
     const P = this.planner, fc = P.forecast(), fac = this.faction(this.me), units = FACTIONS[fac].units;
@@ -37,13 +46,14 @@ export const ProductionUI = {
     let h = '';
     if (tr) {
       const done = (tr.total - tr.left) / tr.total;
-      h += `<button class="pq-it cur${this.armCancel === b.id ? ' arm' : ''}" data-q="t" data-bid="${b.id}" data-i="-1" style="--p:${(done * 100).toFixed(0)}%" title="${esc(`Training ${units[tr.role].name}: ${tr.left > 1 ? `ready in ${tr.left} rounds` : 'ready at the end of this round'} · tap twice to stop (refund ${trainCost(fac, tr.role)})`)}">${icon(tr.role, 18)}<i class="rd">${tr.left}</i></button>`;
+      const qi = this.qInfo(this.trainItem(tr));
+      h += `<button class="pq-it cur${qi.tech ? ' tech' : ''}${this.armCancel === b.id ? ' arm' : ''}" data-q="t" data-bid="${b.id}" data-i="-1" style="--p:${(done * 100).toFixed(0)}%" title="${esc(`${qi.tech ? 'Researching' : 'Training'} ${qi.name}: ${tr.left > 1 ? `ready in ${tr.left} rounds` : 'ready at the end of this round'} · tap twice to stop (refund ${qi.cost})`)}">${icon(qi.ic, 18)}<i class="rd">${tr.left}</i></button>`;
     } else if (b.train) {
-      h += `<button class="pq-it cur stopped" data-q="t" data-bid="${b.id}" data-i="-1" title="Stopped: refunded when the round starts · tap to keep training">${icon(b.train.role, 18)}<i class="rd">✕</i></button>`;
+      h += `<button class="pq-it cur stopped" data-q="t" data-bid="${b.id}" data-i="-1" title="Stopped: refunded when the round starts · tap to keep it">${icon(this.qInfo(this.trainItem(b.train)).ic, 18)}<i class="rd">✕</i></button>`;
     }
     const rp = P.repeatOf(b);
     if (rp && !list.length && !tr) h += `<button class="pq-it rep${cls(f[0])}" data-q="t" data-bid="${b.id}" data-i="-2" title="${esc(`Repeating ${units[rp].name}: ${this.waitText(f[0])} · tap to stop repeating`)}">${icon(rp, 18)}<i class="n">⟳</i></button>`;
-    h += list.map((role, i) => `<button class="pq-it${cls(f[i])}" data-q="t" data-bid="${b.id}" data-i="${i}" title="${esc(`${units[role].name} · ${trainCost(fac, role)} · ${RULES.trainRounds[role]} rd · ${this.waitText(f[i])} · tap to remove, drag to reorder`)}">${icon(role, 18)}</button>`).join('');
+    h += list.map((role, i) => { const qi = this.qInfo(role); return `<button class="pq-it${qi.tech ? ' tech' : ''}${cls(f[i])}" data-q="t" data-bid="${b.id}" data-i="${i}" title="${esc(`${qi.tech ? 'Research: ' : ''}${qi.name} · ${qi.cost} · ${qi.rounds} rd · ${this.waitText(f[i])} · tap to remove, drag to reorder`)}">${icon(qi.ic, 18)}</button>`; }).join('');
     if (rp && (list.length || tr)) h += `<span class="pq-rep" title="Then keeps training ${esc(units[rp].name)}">⟳${icon(rp, 14)}</span>`;
     return h;
   },
@@ -51,7 +61,7 @@ export const ProductionUI = {
     if (!this.state || this.phase !== 'planning') return [];
     const fac = this.faction(this.me);
     const gs = [{ kind: 'b', name: 'Build', ic: 'build', n: this.planner.bqList().length, max: RULES.queueMaxBuild }];
-    for (const b of trainers(this.state, this.me)) gs.push({ kind: 't', b, name: BUILDINGS[b.type].name[fac], ic: BUILDINGS[b.type].icon, n: this.planner.tqList(b).length, max: RULES.queueMax });
+    for (const b of trainers(this.state, this.me)) gs.push({ kind: 't', b, name: bdef(b).name[fac], ic: BUILDINGS[b.type].icon, n: this.planner.tqList(b).length, max: RULES.queueMax });
     return gs;
   },
   renderProd() {
@@ -115,7 +125,7 @@ export const ProductionUI = {
     if (this.armCancel !== b.id) {
       this.armCancel = b.id; clearTimeout(this.armT);
       this.armT = setTimeout(() => { this.armCancel = null; this.changed(); }, 3000);
-      this.toast(`Tap again to stop training (refund ${trainCost(this.faction(this.me), b.train.role)})`);
+      this.toast(`Tap again to stop ${b.train.tech ? 'the research' : 'training'} (refund ${this.qInfo(this.trainItem(b.train)).cost})`);
       this.changed(); return;
     }
     this.armCancel = null;

@@ -52,6 +52,10 @@ and Men-at-arms; the Crypt trains the swarm.
   caster troop, **Necromancers**, comes from the Ossuary. The **Monolith** (built on graves like every
   Undead building) spreads graves and heals instead of giving command points.
 - **Both:** a fallen hero leaves a **revive zone**; hold it for 3 rounds to bring the hero back (§5.7b).
+- **Tech tree** (§11.7, since 2026-11-24): HQ tiers (Tier 2 unlocks the elite squads and the tech
+  buildings), research at the HQ and two tech buildings per faction, and one exclusive doctrine pick per
+  tier. Kingdom research leans on economy, steel and its hero; Undead research on graves, bones and
+  casters (the Warband in threes is Tier 3 research).
 
 ---
 
@@ -124,7 +128,8 @@ everything after it).
 
 ### 3.2 Command points (CP)
 - Each round a side may give **direct orders to `RULES.cp` = 3 squads**, plus **+1 per finished
-  Kingdom Banner** (max +2; the Undead have no CP building since 2026-11-17). **Heroes and builders
+  Kingdom Banner** (max +2; the Undead have no CP building since 2026-11-17), **+1 with the Kingdom's
+  Citadel** (Tier 3, §11.7). **Heroes and builders
   are free** (no CP).
 - Squads without direct orders follow their **stance** (§4). Stance changes are free and unlimited.
 - AI difficulty changes the AI's CP: Easy −1, Hard +1 (§14.8).
@@ -369,6 +374,10 @@ such enemy (a normal volley toward it, needing a clear line; a lobbing unit lobs
 
 ## 7. Units *(generated)*
 
+Base stats below; research (§11.7) changes some of them in a game. **Gated squads** train only after
+the HQ's Tier 2: Kingdom Shieldwall and Outriders (Castle); Undead Grave Guard, Wraiths and
+Necromancers (Mausoleum). Everything else is available from the start.
+
 <!-- GEN:units -->
 **Kingdom** (`FACTIONS.kingdom.units`)
 
@@ -493,8 +502,8 @@ Damage per round = hits per 100 AP x damageAfter(dmg per model x models, armour)
 <!-- GEN:economy -->
 | Faction | Resource | Start | HQ income/rnd | Gather (AP per 1 resource) | Builder gathering a full round | Buildable |
 | --- | --- | --- | --- | --- | --- | --- |
-| Kingdom | Gold | 60 | 6 | farm 8 (4 gatherers), mine 10 (2 gatherers) | farm ~12, mine ~10 | barracks, tower, farm, mine, banner, wall |
-| Undead Legion | Souls | 90 | 1 | - (no builders) | - | barracks, tower, well, monolith, wall |
+| Kingdom | Gold | 60 | 6 | farm 8 (4 gatherers), mine 10 (2 gatherers) | farm ~12, mine ~10 | barracks, tower, farm, mine, banner, wall, forge, chapel |
+| Undead Legion | Souls | 90 | 1 | - (no builders) | - | barracks, tower, well, monolith, wall, pit, sanctum |
 
 Builders: Kingdom up to 10 peasant squads (not in the army cap); Undead 0 (buildings rise by themselves). HQ trains: Kingdom builder/fighter; Undead Legion swarm.
 
@@ -510,7 +519,7 @@ Builders: Kingdom up to 10 peasant squads (not in the army cap); Undead 0 (build
 | fast | 30 | 16 | 2 | Barracks / Ossuary |
 | mage | - | 22 | 2 | Ossuary (Undead only) |
 
-Souls: every model that dies (either side, not summoned skeletons) on the undead side's grave ground pays 3 souls (a hero: 15); graveyards: hq 10", barracks 6", tower 6", monolith 6", wall 6", well 10" (a new site spreads 50 % at once and the rest by the end of the round; the Crypt starts at 10"). Pairs: Skeleton Warband x2.
+Souls: every model that dies (either side, not summoned skeletons) on the undead side's grave ground pays 3 souls (a hero: 15); graveyards: hq 10", barracks 6", tower 6", monolith 6", wall 6", pit 6", sanctum 6", well 10" (a new site spreads 50 % at once and the rest by the end of the round; the Crypt starts at 10"). Pairs: Skeleton Warband x2.
 
 **Undead death economy: souls back when a whole squad dies on your graves vs its cost** (both sides' deaths pay; the table uses undead squads)
 
@@ -652,6 +661,10 @@ item waits.
 | `wall` | Palisade / Bone Fence | 6 | 60 | 0.6 | 1 | 80 | 24 | 6 | 3 x 0.5 | 0 | - | - | - | kingdom, undead |
 | `farm` | Farm / Farm | 25 | 140 | 1.4 | - | 90 | 27 | 3 | 4.2 x 3.4 | 5 | - | 2 | 4 gatherers | kingdom |
 | `mine` | Mine / Mine | 30 | 160 | 1.6 | - | 100 | 30 | 6 | circle r 1.1 | 7 | - | 6 | resource site only | kingdom |
+| `forge` | Blacksmith / Blacksmith | 40 | 200 | 2 | - | 120 | 36 | 7 | 3.5 x 2.5 | 5 | - | - | - | kingdom |
+| `chapel` | Chapel / Chapel | 35 | 160 | 1.6 | - | 100 | 30 | 6 | circle r 1 | 6 | - | - | - | kingdom |
+| `pit` | Charnel Pit / Charnel Pit | 30 | 160 | 1.6 | 2 | 100 | 30 | 6 | 3 x 2.5 | 5 | - | - | - | undead |
+| `sanctum` | Dark Sanctum / Dark Sanctum | 30 | 160 | 1.6 | 2 | 90 | 27 | 5 | circle r 1 | 7 | - | - | - | undead |
 | `well` | Soul Well / Soul Well | 20 | 160 | 1.6 | 2 | 90 | 27 | 5 | circle r 1.1 | 7 | - | 2 | resource site only; soul collector (undefined") | undead |
 
 Repair (Kingdom builders): builder AP x (max HP / work) HP per AP. Undead buildings rise by 80 work a round (at most 2 at once) and mend 5 % of max HP a round. Siege damage taken: damageAfter(raw x 2.5, armour) (no defends).
@@ -734,6 +747,93 @@ raw damage = `fire.dmg × 4` (HQ 3 × 4 = 12, tower 4 × 4 = 16); forest cover a
 apply. One shot per building per round.
 
 ---
+
+### 11.7 Tech tree (`js/data/tech.js`; queue rules in `js/sim/base.js`)
+Upgrades form a branching tree per faction, not a straight line (since 2026-11-24). References:
+Warcraft III tiers and Blacksmith / Graveyard / Temple of the Damned; Age of Empires ages and Mill /
+Mining Camp upgrades; StarCraft II research in a building's queue; Age of Mythology minor gods, Dawn of
+War commanders and C&C Generals powers for the exclusive picks.
+- **Where:** research is done at the **HQ** (tiers, economy, doctrines) and at **tech buildings**
+  (Kingdom: Blacksmith, Chapel; Undead: Charnel Pit, Dark Sanctum). Tech buildings are ordinary
+  buildings of the side (built by peasants / rising on graves) that only research.
+- **The queue:** research items (`'tech:<id>'`) go in the building's training queue (max 5 items with
+  the squads). At round start the front item **pays its cost and starts** (`b.train = { tech, left,
+  total }`); the building trains nothing meanwhile. It **waits** (strictly in order) while the side
+  can't pay (`gold` / `souls`) or its requirements aren't finished yet (`needs`, with the reason).
+  Research counts down at the end of every round next to training; when done, the tech joins the
+  side's list (`s.tech[p]`), a `researched` event fires and it takes effect at once. Stopping research
+  in progress refunds it in full, as with training.
+- **Queueing is allowed when:** the building researches it (`at`), it isn't done, under way or
+  queued anywhere, the other doctrine of its pair isn't taken, and each prerequisite (`needs`) is done,
+  under way, or queued **earlier in the same line** (so Plough → Castle → Crop Rotation can be queued
+  together). `needsBuilding` (Castle: a Barracks; Citadel: a Blacksmith or Chapel) must stand,
+  finished.
+- **Tiers:** the HQ upgrade is itself research (`hqTier`): Tier 2 (Castle / Mausoleum) unlocks the
+  **elite squads** (gates below), the **tech buildings** ("Needs the Castle" in placement) and the tier
+  2 research and doctrine; Tier 3 (Citadel / Necropolis) the strongest research and the last doctrine.
+  The HQ gets more HP (current HP grows by the same amount), stronger fire or graves, and a bigger model.
+- **Doctrines:** one exclusive pick per tier: researching one locks the other for the rest of the game.
+- **Research is kept** when the building that did it is destroyed (only research in progress there is
+  lost; it isn't refunded since the building is gone).
+- **How effects apply:** every squad and building carries its side's tech key (`tk`); `defOf(q)` and
+  `bdef(b)` return the base definition with the side's research applied (cached per key), so damage,
+  armour, range, HP, mana, skill fields, Warband pairs, building HP / fire / graves / heal all follow.
+  HP research raises current HP with the maximum. Side-wide rules (`ruleOf`): farm gathering AP, farm /
+  mine / HQ income, souls per model, death grave areas, revive rounds, summon life, Warriors training in
+  1 round, the Plague drain (enemy squads on your graves lose 1 HP per model a round, never their last
+  HP).
+
+<!-- GEN:tech -->
+**Kingdom** (`TECH` in `js/data/tech.js`). Gates: Shieldwall need Castle; Outriders need Castle; Blacksmith needs Castle; Chapel needs Castle.
+
+| id | Name | Tier | At | Cost | Rounds | Needs | Doctrine | Effect |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `castle` | Castle | 2 | Keep | 60 | 3 | a Barracks | - | Tier 2: the Keep becomes a Castle (HP 300, stronger fire). Unlocks Shieldwall and Outriders, the Blacksmith, the Chapel and a doctrine. |
+| `citadel` | Citadel | 3 | Keep | 100 | 4 | Castle, a Blacksmith or Chapel | - | Tier 3: the Citadel (HP 400, fire 5, +1 command point). Unlocks the strongest research and the last doctrine. |
+| `plough` | Heavy Plough | 1 | Keep | 20 | 1 | - | - | Farmers work faster: 7 AP per gold instead of 8. |
+| `rotation` | Crop Rotation | 2 | Keep | 40 | 2 | Heavy Plough, Castle | - | Every farm earns +1 gold a round by itself. |
+| `shafts` | Deep Shafts | 2 | Keep | 35 | 2 | Castle | - | Mines earn +3 gold a round. |
+| `guild` | Guild Charter | 3 | Keep | 60 | 3 | Crop Rotation, Citadel | - | The Citadel earns +4 gold a round. |
+| `steel1` | Steel Weapons I | 2 | Blacksmith | 30 | 2 | - | - | Soldiers deal 15 % more damage. |
+| `steel2` | Steel Weapons II | 3 | Blacksmith | 50 | 3 | Steel Weapons I, Citadel | - | Soldiers deal another 15 % more damage. |
+| `plate1` | Plate Armour I | 2 | Blacksmith | 30 | 2 | - | - | Soldiers +2 armour. |
+| `plate2` | Plate Armour II | 3 | Blacksmith | 50 | 3 | Plate Armour I, Citadel | - | Soldiers +2 more armour. |
+| `bodkin` | Bodkin Bolts | 2 | Blacksmith | 35 | 2 | Steel Weapons I | - | Crossbows shoot 2″ further; Piercing Bolt +2 damage. |
+| `legend` | Heroic Legend | 2 | Chapel | 40 | 2 | - | - | The Chosen +40 HP; Leap Strike reaches 2″ further. |
+| `valour` | Valour | 2 | Chapel | 35 | 2 | - | - | Rally reaches 2″ further and gives +2 more armour. |
+| `hospital` | Field Hospital | 2 | Chapel | 40 | 2 | Valour | - | Your squads within 4″ of a Chapel heal 3 HP per model a round. |
+| `chosen` | Return of the Chosen | 3 | Chapel | 45 | 3 | Heroic Legend, Citadel | - | A fallen hero comes back after 2 rounds of holding its spot instead of 3. |
+| `knightly` | Knightly Order | 2 | Keep | 40 | 2 | Castle | tier 2 pick | Doctrine: Outriders charge 40 % harder and get +2 armour. |
+| `yeomanry` | Free Yeomanry | 2 | Keep | 40 | 2 | Castle | tier 2 pick | Doctrine: Crossbows reload faster (volley 25 AP); peasants +3 armour and hit harder. |
+| `crusade` | Crusade | 3 | Keep | 70 | 3 | Citadel | tier 3 pick | Doctrine: all soldiers deal 10 % more damage and get +1 defend. |
+| `fortress` | Fortress Realm | 3 | Keep | 70 | 3 | Citadel | tier 3 pick | Doctrine: buildings +30 % HP, towers +2″ range, Palisades need half the work. |
+
+**Undead Legion** (`TECH` in `js/data/tech.js`). Gates: Grave Guard need Mausoleum; Wraiths need Mausoleum; Necromancers need Mausoleum; Charnel Pit needs Mausoleum; Dark Sanctum needs Mausoleum.
+
+| id | Name | Tier | At | Cost | Rounds | Needs | Doctrine | Effect |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `mausoleum` | Mausoleum | 2 | Crypt | 40 | 3 | a Ossuary | - | Tier 2: the Crypt becomes a Mausoleum (HP 300, graves 12″). Unlocks Grave Guard, Wraiths and Necromancers, the Charnel Pit, the Dark Sanctum and a doctrine. |
+| `necropolis` | Necropolis | 3 | Crypt | 70 | 4 | Mausoleum, a Charnel Pit or Dark Sanctum | - | Tier 3: the Necropolis (HP 380, graves 14″). Unlocks the strongest research and the last doctrine. |
+| `restless` | Restless Earth | 1 | Crypt | 15 | 1 | - | - | Graves spread 25 % more where things die. |
+| `harvest` | Soul Harvest | 2 | Crypt | 30 | 2 | Mausoleum | - | Every model dying on your graves gives +1 soul. |
+| `blight` | Spreading Blight | 2 | Crypt | 25 | 2 | Restless Earth | - | Every Undead building spreads its graves 2″ further. |
+| `massgraves` | Mass Graves | 3 | Crypt | 45 | 3 | Soul Harvest, Necropolis | - | Monoliths heal 2 more HP per model and spread graves 3″ further. |
+| `bones1` | Sharpened Bones I | 2 | Charnel Pit | 20 | 2 | - | - | Skeletons deal 15 % more damage (Warband, Warriors, Archers, summons). |
+| `bones2` | Sharpened Bones II | 3 | Charnel Pit | 35 | 3 | Sharpened Bones I, Necropolis | - | Skeletons deal another 15 % more damage. |
+| `plating1` | Bone Plating I | 2 | Charnel Pit | 20 | 2 | - | - | Skeletons +1 armour. |
+| `plating2` | Bone Plating II | 3 | Charnel Pit | 35 | 3 | Bone Plating I, Necropolis | - | Skeletons +1 more armour. |
+| `swarm3` | Endless Swarm | 3 | Charnel Pit | 45 | 3 | Sharpened Bones I, Necropolis | - | Skeleton Warbands come three squads at a time instead of two. |
+| `shroud` | Wraith Shroud | 2 | Charnel Pit | 30 | 2 | - | - | Wraiths +2 armour; their charge hits 30 % harder. |
+| `necromancy` | Necromancy | 2 | Dark Sanctum | 25 | 2 | - | - | Necromancers +20 mana and +5 mana a round. |
+| `greater` | Greater Summoning | 2 | Dark Sanctum | 35 | 2 | Necromancy | - | Summoned skeletons last 4 rounds instead of 3. |
+| `chain` | Chain Storm | 2 | Dark Sanctum | 35 | 2 | - | - | Dark Thunder jumps once more (the Lich and Necromancers). |
+| `phylactery` | Phylactery | 3 | Dark Sanctum | 45 | 3 | Greater Summoning, Necropolis | - | The Lich comes back after 2 rounds instead of 3, and has +25 mana. |
+| `bonetide` | Bone Tide | 2 | Crypt | 30 | 2 | Mausoleum | tier 2 pick | Doctrine: Warbands and Warriors +1 HP per model; Warriors train in 1 round. |
+| `darkarts` | Dark Arts | 2 | Crypt | 30 | 2 | Mausoleum | tier 2 pick | Doctrine: the Lich and Necromancers regain 10 more mana a round; Dark Thunder hits 30 % harder. |
+| `horde` | Endless Horde | 3 | Crypt | 60 | 3 | Necropolis | tier 3 pick | Doctrine: Summon Warband raises one more squad (the Lich 3, Necromancers 2). |
+| `plague` | Plague of Graves | 3 | Crypt | 60 | 3 | Necropolis | tier 3 pick | Doctrine: enemy squads standing on your graves lose 1 HP per model at the end of every round. |
+
+<!-- /GEN:tech -->
 
 ## 12. Fog of war and intel (`js/sim/vision.js`)
 
@@ -1003,7 +1103,26 @@ builder. **Training:** Kingdom peasants up to min(10, 2 + floor(round / 3), 8) f
 ≥ cost + 10), one at a time at the Keep; every idle training building with an empty queue (Barracks /
 Ossuary, and the Crypt for warbands) trains: fast if the enemy has ≥ 2 shooters and it has < 2 fast;
 else a tank if it has none; else ranged if it has fewer ranged than fighters; else a fighter (the Crypt
-only trains warbands).
+only trains warbands). Gated squads (§11.7) are replaced by the first trainable one.
+
+### 14.6b Tech (research, tiers, doctrines)
+- **Tech buildings:** once the HQ has Tier 2, the first tech building (Blacksmith / Charnel Pit) as soon
+  as the resource covers its cost + 10; the second (Chapel / Dark Sanctum) from round 12 with cost + 20.
+- **Saving:** from round 8 (a Barracks standing, Tier 2 not done or under way) every other building and
+  training keeps the Tier 2 cost back (Barracks and Mines / Wells excepted); from round 18 the same for
+  Tier 3 once it can be researched.
+- **Research:** while its army is at least half the known enemy squads, every idle HQ / tech building
+  (no training, empty queue) starts the first item of its priority list that it may research now and can
+  pay with **20** to spare (Easy: 45; the HQ tier upgrades need no spare). The HQ tiers wait until round 5
+  (Tier 2) / 14 (Tier 3).
+  - Kingdom: Keep plough, castle, doctrine, shafts, rotation, citadel, doctrine, guild; Blacksmith
+    steel1, plate1, bodkin, steel2, plate2; Chapel valour, legend, hospital, chosen.
+  - Undead: Crypt restless, mausoleum, doctrine, harvest, blight, necropolis, doctrine, massgraves;
+    Charnel Pit bones1, plating1, shroud, swarm3, bones2, plating2; Dark Sanctum chain, necromancy,
+    greater, phylactery.
+- **Doctrines:** Tier 2: Kingdom Free Yeomanry if it has at least as many Crossbows as Outriders, else
+  Knightly Order; Undead Bone Tide if its Warband + Warriors outnumber 4 × its Necromancers, else Dark
+  Arts. Tier 3: by the game seed + side (Crusade / Fortress Realm, Endless Horde / Plague of Graves).
 
 ### 14.7 Home defence
 If an enemy squad is within 12″ of its HQ, squads within 16″ of the HQ are ranked first and fight.
@@ -1112,8 +1231,7 @@ Balance report 2026-11-24 · 8 seeds x 2 orders per map · AI normal · stop at 
 ---
 
 ## 16b. Planned (not in the game yet)
-- **Upgrades:** an upgrade that makes the Skeleton Warband train in **threes** instead of pairs (its
-  `pair` 2 → 3). Other upgrades to follow.
+- Nothing open here: the Warband in threes is now the **Endless Swarm** research (§11.7, 2026-11-24).
 
 ## 17. Tuning guide (where each number lives)
 
@@ -1128,6 +1246,7 @@ Balance report 2026-11-24 · 8 seeds x 2 orders per map · AI normal · stop at 
 | Undead rising buildings | `RULES.riseWork` (work per round, 80), `RULES.maxRising` (2 at once), `RULES.undeadMend` (0.05 of max HP per round) | build speed and resilience of the Undead base |
 | Souls (death economy) | `soulPerModel` 3 (per model dying on graves: cheap many-model squads pay back more than they cost), `soulPerHero` 15; `FACTIONS.undead.eco.hq` (Crypt, 1), `BUILDINGS.well.income` (2) | the whole Undead economy; the flat incomes are only a floor |
 | Ground look (visual only) | `js/render/ground.js` (`TEX` 4 texels per inch, `EDGE` 1.6″ soft edge, shader colours); props in `js/render/graves.js` (`CELL` 0.95″, density cov² × 0.32) and forests in `js/render/table.js` | blight and forest floors as a ground texture |
+| Tech tree | `js/data/tech.js`: `TECH.<id>` (`cost`, `rounds`, `tier`, `needs`, `needsBuilding`, `doctrine`, effects in `units` / `buildings` / `rules`), `GATES` (squads per HQ tier), `BUILDING_GATES`; tech buildings in `BUILDINGS` (`forge`, `chapel`, `pit`, `sanctum`) | when each faction's power arrives; AI priority lists in `js/ai/ai.js` (`PRIO`) |
 | Kingdom farms | `BUILDINGS.farm` (`w`, `d` = land used, `slots` = farmers, `income`), `FACTIONS.kingdom.eco.gather.farm` (AP per gold), `FACTIONS.kingdom.train.builder` | late-game gold; land trade-off |
 | Mage / mana | `units.<role>.mana` (`max`, `start`, `regen`), each skill's `mana`; `isMage` in `js/data/units.js` | how often the Lich and Necromancers cast |
 | Necromancers (troop) | `FACTIONS.undead.units.mage` (2 × 10 HP, bolt `VOLLEY(25, 4, 9)`, mana 60 / 40 / +15, `THUNDER(15, 20, 6, 10, 2, 3, 0.7)`, `SUMMON(20, 35, 4, 1)`), `train.mage` (22), `RULES.trainRounds.mage` (2) | high tier: cost may change |
@@ -1287,6 +1406,10 @@ Whenever rules, numbers, the AI or maps change:
 | A swarm unit trained in pairs | StarCraft zerglings (two per egg) | cheap, fragile bodies in numbers | slow (tier 3) so it can't rush; an upgrade to threes is planned |
 | Auto skills toggle | Warcraft III autocast | units use abilities by themselves when switched on | applies to every skill of a squad without orders |
 | Hero revive by holding the spot | the owner's original design (compare Warcraft III's altar revive) | a fallen hero can come back | you revive it on the battlefield by holding the ground where it fell |
+| HQ tiers that unlock squads and buildings | Warcraft III (Town Hall → Keep → Castle), Age of Empires (ages) | a tier upgrade at the base gates elite units and tech | the tier is researched in the HQ's queue like other research |
+| Research in a building's queue; weapon / armour lines | StarCraft II (Forge, Engineering Bay), Warcraft III (Blacksmith, Graveyard), Age of Empires (Blacksmith) | upgrades are researched one at a time and block the building | shares the training queue; paid when it starts |
+| Economy research | Age of Empires (Mill, Mining Camp upgrades) | faster gathering and better income | Kingdom farms / mines / Keep; Undead graves and souls |
+| Exclusive doctrine picks per tier | Age of Mythology (minor gods), Dawn of War (commander choices), C&C Generals (generals' powers) | a choice that rules out its alternative | one pair per tier, picked by researching it |
 | Win only by destroying the HQ | base-kill victory in many RTS games (e.g. StarCraft's destroy-all-buildings, simplified to the HQ) | the game is decided at the enemy base | a side with no army still plays on while its HQ stands |
 | Fast squads: few heavy hits | cavalry in many RTS games (high damage, slower attack) | burst damage instead of many small hits | 2 swings a round, so they strip fewer defends |
 | Blight as a ground texture with soft, noisy edges; big headstones and crosses | Warcraft III Undead blight (named by the owner for the look), StarCraft Zerg creep | the land itself turns dark and dead where the faction spreads, with an organic edge | it is the graveyard (souls); the props thin out toward the edge |

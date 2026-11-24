@@ -5,6 +5,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { RULES, FACTIONS, BUILDINGS, squadRadius, trainsOf, maxBuildersOf, gatherSlotsOf } from '../js/data/units.js';
 import { MAPS, MAP_ORDER, buildMapTerrain, mapSites, boardOf, DEPLOY, HQ_X } from '../js/data/maps.js';
 import { damageAfter } from '../js/sim/resolve.js';
+import { TECH, GATES, BUILDING_GATES, techsOf } from '../js/data/tech.js';
 
 const DOC = new URL('../docs/GAME.md', import.meta.url);
 const F = ['kingdom', 'undead'];
@@ -143,7 +144,19 @@ function genMaps() {
   return out.join('\n');
 }
 
-const GEN = { rules: genRules, units: genUnits, skills: genSkills, derived: genDerived, buildings: genBuildings, economy: genEconomy, maps: genMaps };
+function genTech() {
+  const out = [];
+  const where = (t, f) => t.at === 'hq' ? BUILDINGS.hq.name[f] : BUILDINGS[t.at].name[f];
+  for (const f of F) {
+    out.push(`**${FACTIONS[f].name}** (\`TECH\` in \`js/data/tech.js\`). Gates: ${Object.entries(GATES[f]).map(([r, id]) => `${FACTIONS[f].units[r].name} need ${TECH[id].name}`).join('; ')}; ${Object.entries(BUILDING_GATES).filter(([b]) => FACTIONS[f].buildings.includes(b)).map(([b, id]) => `${BUILDINGS[b].name[f]} needs ${TECH[id].name}`).join('; ')}.\n`);
+    out.push(table(['id', 'Name', 'Tier', 'At', 'Cost', 'Rounds', 'Needs', 'Doctrine', 'Effect'],
+      techsOf(f).map(t => ['`' + t.id + '`', t.name, t.tier, where(t, f), t.cost, t.rounds, [...(t.needs || []).map(n => TECH[n].name), ...(t.needsBuilding ? ['a ' + t.needsBuilding.map(b => BUILDINGS[b].name[f]).join(' or ')] : [])].join(', ') || '-', t.doctrine ? t.doctrine.endsWith('2') ? 'tier 2 pick' : 'tier 3 pick' : '-', t.desc.replace(/\|/g, '/')])));
+    out.push('');
+  }
+  return out.join('\n');
+}
+
+const GEN = { tech: genTech, rules: genRules, units: genUnits, skills: genSkills, derived: genDerived, buildings: genBuildings, economy: genEconomy, maps: genMaps };
 let doc = readFileSync(DOC, 'utf8');
 for (const [k, fn] of Object.entries(GEN)) {
   const re = new RegExp(`(<!-- GEN:${k} -->)[\\s\\S]*?(<!-- /GEN:${k} -->)`);

@@ -1,3 +1,4 @@
+import { techUnit } from './tech.js';
 // Data: rules, factions and rosters. Every tunable number lives here.
 // Distances are in inches (the board is a 48" x 32" battle mat).
 
@@ -132,7 +133,7 @@ export const FACTIONS = {
     },
     // Gold: a steady builder economy (keep, big farms worked by many peasants, mines on resource sites)
     eco: { res: 'gold', name: 'Gold', icon: 'gold', start: 60, hq: 6, gather: { farm: 8, mine: 10 } },
-    buildings: ['barracks', 'tower', 'farm', 'mine', 'banner', 'wall'],
+    buildings: ['barracks', 'tower', 'farm', 'mine', 'banner', 'wall', 'forge', 'chapel'],
     train: { builder: 10, tank: 30, fighter: 24, ranged: 26, fast: 30 },
     hqTrains: ['builder', 'fighter'],   // the Keep trains peasants and Men-at-arms
     maxBuilders: 10,
@@ -156,7 +157,7 @@ export const FACTIONS = {
     // trickle and spread graves far. No builders.
     // a death economy: the Crypt (1) and Soul Wells (2) only keep it from stalling; deaths on graves pay the rest
     eco: { res: 'souls', name: 'Souls', icon: 'souls', start: 90, hq: 1, gather: {} },
-    buildings: ['barracks', 'tower', 'well', 'monolith', 'wall'],
+    buildings: ['barracks', 'tower', 'well', 'monolith', 'wall', 'pit', 'sanctum'],
     train: { tank: 16, fighter: 9, swarm: 14, ranged: 13, fast: 16, mage: 22 },
     // balancing rule (owner): low tier (swarm, fighter, ranged) keep their costs, change their stats;
     // high tier (tank, fast, mage, the Lich's spells) may change costs
@@ -186,6 +187,11 @@ export const BUILDINGS = {
   wall:     { name: { kingdom: 'Palisade', undead: 'Bone Fence' }, icon: 'fortify', cost: 6, work: 60, hp: 80, armor: 6, shape: 'rect', w: 3, d: 0.5, vision: 0, grave: 6 },
   farm:     { name: { kingdom: 'Farm', undead: 'Farm' }, icon: 'farm', cost: 25, work: 140, hp: 90, armor: 3, shape: 'rect', w: 4.2, d: 3.4, vision: 5, income: 2, slots: 4 },
   mine:     { name: { kingdom: 'Mine', undead: 'Mine' }, icon: 'node', cost: 30, work: 160, hp: 100, armor: 6, shape: 'circle', r: 1.1, vision: 7, income: 6, site: true },
+  // tech buildings (research only; they need the HQ's tier 2: BUILDING_GATES in js/data/tech.js)
+  forge:    { name: { kingdom: 'Blacksmith', undead: 'Blacksmith' }, icon: 'attack', cost: 40, work: 200, hp: 120, armor: 7, shape: 'rect', w: 3.5, d: 2.5, vision: 5, research: true },
+  chapel:   { name: { kingdom: 'Chapel', undead: 'Chapel' }, icon: 'rally', cost: 35, work: 160, hp: 100, armor: 6, shape: 'circle', r: 1.0, vision: 6, research: true },
+  pit:      { name: { kingdom: 'Charnel Pit', undead: 'Charnel Pit' }, icon: 'attack', cost: 30, work: 160, hp: 100, armor: 6, shape: 'rect', w: 3, d: 2.5, vision: 5, grave: 6, research: true },
+  sanctum:  { name: { kingdom: 'Dark Sanctum', undead: 'Dark Sanctum' }, icon: 'mage', cost: 30, work: 160, hp: 90, armor: 5, shape: 'circle', r: 1.0, vision: 7, grave: 6, research: true },
   well:     { name: { kingdom: 'Soul Well', undead: 'Soul Well' }, icon: 'souls', cost: 20, work: 160, hp: 90, armor: 5, shape: 'circle', r: 1.1, vision: 7, income: 2, site: true, souls: true, grave: 10 },
 };
 export const ecoOf = faction => FACTIONS[faction].eco;
@@ -193,7 +199,7 @@ export const trainCost = (faction, role) => FACTIONS[faction].train[role] || 0;
 // roles a building type trains for a faction (the HQ trains different things per faction)
 export const trainsOf = (type, faction) => (BUILDINGS[type].trains === 'faction' ? FACTIONS[faction].hqTrains : BUILDINGS[type].trains || []).filter(r => FACTIONS[faction].units[r]);
 // squads one training produces (the undead swarm comes in pairs)
-export const pairOf = (faction, role) => FACTIONS[faction].units[role]?.pair || 1;
+export const pairOf = (faction, role, tk = '') => (FACTIONS[faction].units[role] ? unitDef(faction, role, tk).pair : 0) || 1;
 export const maxBuildersOf = faction => FACTIONS[faction].maxBuilders ?? RULES.maxBuilders;
 export const gatherSlotsOf = type => BUILDINGS[type].slots || RULES.gatherSlots;
 // mages: units with mana cast skills with no cooldown, several times a round
@@ -209,7 +215,7 @@ export function squadRadius(def, models) {
   return base + 0.42 * Math.sqrt(Math.max(1, models));
 }
 
-export function unitDef(faction, role) { return FACTIONS[faction].units[role]; }
+export function unitDef(faction, role, tk = '') { return techUnit(FACTIONS[faction].units[role], faction, role, tk); }
 export const isMelee = def => def.attack.kind === 'swing';
 export const skillsOf = def => def.skills || [];
 export const skillOf = (def, kind) => (def.skills || []).find(k => k.kind === kind) || null;

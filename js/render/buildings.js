@@ -33,7 +33,7 @@ function wallBlock(k, x, z, w, d, h, cols, y0 = 0) {
   }
 }
 
-function keep(k, P, und) {
+function keep(k, P, und, w, d, tier = 1) {
   const S = und ? DSTONE : STONE;
   // base plinth, main keep, four corner towers, battlements, banner / glow
   k.hull(jit(box(0, 0.15, 0, 4.2, 0.3, 4.2), 0.03), S[1]);
@@ -48,6 +48,57 @@ function keep(k, P, und) {
   k.hull(box(0, 0.9, 1.62, 0.9, 1.2, 0.1), und ? 0x1a161e : DWOOD, { sh: 0 });            // gate
   if (!und) { k.hull(box(0, 4.3, 0, 0.08, 2.4, 0.08), DWOOD); k.hull([[0, 5.4, 0], [0, 4.6, 0], [0.9, 5.2, 0.02], [0.9, 4.8, 0.02], [0, 5.4, 0.05]], P.cloth); }
   else { k.hull(jit([...ring(0, 2.9, 0, 0.5, 6), [0, 4.2, 0]]), BONE); k.add(new THREE.IcosahedronGeometry(0.28, 0), P.glow, { y: 4.4, sh: 0 }); }
+  // tier 2 (Castle / Mausoleum): a tall central tower; tier 3 (Citadel / Necropolis): outer spires and gilding
+  if (tier >= 2) {
+    k.hull(jit([...ring(0, 2.9, -0.6, 0.85, 8), ...ring(0, 5.4, -0.6, 0.72, 8)], 0.03), S[0]);
+    k.hull(jit([...ring(0, 5.4, -0.6, 0.92, 8), ...ring(0, 5.75, -0.6, 0.92, 8)], 0.02), S[2]);
+    if (und) k.hull(ring(0, 5.75, -0.6, 0.7, 6).concat([[0, 7.0, -0.6]]), 0x2b2533);
+    else k.hull(ring(0, 5.75, -0.6, 0.82, 8).concat([[0, 7.0, -0.6]]), P.cloth);
+    k.hull(box(0, 4.2, 0.12, 0.3, 0.5, 0.06), und ? 0x1a161e : 0xf5d78a, { sh: 0 });   // window
+  }
+  if (tier >= 3) {
+    for (const [sx, sz] of [[-1, 0], [1, 0], [0, 1]]) {
+      const x = sx * 2.25, z = sz * 2.25 - (sz ? 0 : 0.2);
+      k.hull(jit([...ring(x, 0, z, 0.42, 6), ...ring(x, 2.6, z, 0.32, 6)], 0.02), S[1]);
+      k.hull(ring(x, 2.6, z, 0.42, 6).concat([[x, 3.5, z]]), und ? 0x5b3a7a : P.cloth);
+    }
+    if (und) k.add(new THREE.IcosahedronGeometry(0.34, 0), P.glow, { y: 7.3, z: -0.6, sh: 0 });
+    else k.add(new THREE.ConeGeometry(0.16, 0.45, 4), 0xf5c542, { y: 7.2, z: -0.6 });
+  }
+}
+// Kingdom Blacksmith: a stone smithy with a big chimney, an anvil and a weapon rack
+function forge(k, P) {
+  wallBlock(k, 0, 0, 3.2, 2.2, 1.2, STONE);
+  k.hull([[-1.75, 1.2, -1.25], [1.75, 1.2, -1.25], [-1.75, 1.2, 1.25], [1.75, 1.2, 1.25], [-1.75, 2.1, 0], [1.75, 2.1, 0]], 0x55473d);
+  k.hull(jit(box(1.1, 1.8, -0.4, 0.6, 2.4, 0.6), 0.03), STONE[2]);
+  k.hull(box(1.1, 3.05, -0.4, 0.4, 0.12, 0.4), 0x2b2522);
+  k.add(new THREE.IcosahedronGeometry(0.16, 0), 0xff8a2a, { x: 1.1, y: 3.2, z: -0.4, sh: 0 });   // embers
+  k.hull(box(-0.6, 0.35, 1.5, 0.55, 0.3, 0.3), 0x4a4a52); k.hull(box(-0.6, 0.55, 1.5, 0.75, 0.12, 0.32), 0x6a6a74);   // anvil
+  for (let i = 0; i < 3; i++) k.hull(box(0.4 + i * 0.25, 0.7, 1.35, 0.06, 1.2, 0.06), 0xc8ccd4);   // swords on a rack
+  k.hull(box(0.65, 0.4, 1.35, 0.8, 0.08, 0.1), DWOOD);
+}
+// Kingdom Chapel: a small round chapel with a pointed spire and a bell
+function chapel(k, P) {
+  k.hull(jit([...ring(0, 0, 0, 1.0, 10), ...ring(0, 1.6, 0, 0.92, 10)], 0.03), STONE[0]);
+  k.hull(ring(0, 1.6, 0, 1.05, 10).concat([[0, 2.4, 0]]), 0x4a5a7a);
+  k.hull(jit([...ring(0, 2.2, 0, 0.32, 6), ...ring(0, 3.3, 0, 0.28, 6)], 0.02), STONE[1]);
+  k.hull(ring(0, 3.3, 0, 0.36, 6).concat([[0, 4.3, 0]]), P.cloth);
+  k.hull(box(0, 4.45, 0, 0.06, 0.4, 0.06), 0xf5c542); k.hull(box(0, 4.5, 0, 0.26, 0.06, 0.06), 0xf5c542);   // finial
+  k.hull(box(0, 0.6, 0.95, 0.5, 1.1, 0.08), DWOOD, { sh: 0 });
+}
+// Undead Charnel Pit: a sunken pit of bones under a frame of ribs, with a bubbling green glow
+function pit(k, P) {
+  k.hull(jit([...ring(0, 0, 0, 1.45, 10), ...ring(0, 0.3, 0, 1.3, 10)], 0.05), DSTONE[1]);
+  k.add(new THREE.CylinderGeometry(0.95, 0.95, 0.05, 10), P.glow || 0x7dff9a, { y: 0.32, sh: 0 });
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; k.hull(jit([...ring(Math.cos(a) * 1.25, 0.2, Math.sin(a) * 1.25, 0.08, 4), [Math.cos(a) * 0.5, 1.9, Math.sin(a) * 0.5]], 0.02), BONE); }
+  for (let i = 0; i < 6; i++) k.add(new THREE.IcosahedronGeometry(0.15, 0), BONE, { x: Math.cos(i * 1.3) * 0.6, y: 0.45, z: Math.sin(i * 1.3) * 0.6, sh: 0.1 });
+}
+// Undead Dark Sanctum: a ring of dark monoliths around a floating crystal
+function sanctum(k, P) {
+  k.hull(jit([...ring(0, 0, 0, 1.0, 8), ...ring(0, 0.25, 0, 0.9, 8)], 0.03), DSTONE[0]);
+  for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2, x = Math.cos(a) * 0.8, z = Math.sin(a) * 0.8; k.hull(jit([...ring(x, 0.25, z, 0.16, 4), ...ring(x, 1.8 + (i % 2) * 0.4, z, 0.1, 4)], 0.02), DSTONE[i % 3]); }
+  k.hull([...ring(0, 1.3, 0, 0.32, 4, Math.PI / 4), [0, 1.85, 0], [0, 0.85, 0]], 0x5b3a7a);
+  k.add(new THREE.OctahedronGeometry(0.3, 0), P.glow || 0x7dff9a, { y: 2.6, sh: 0, sy: 1.6 });
 }
 function barracks(k, P, und) {
   if (!und) {
@@ -131,13 +182,13 @@ function well(k, P) {
 }
 
 const CACHE = new Map();
-export function buildingGeo(type, faction, w, d) {
-  const key = type + '|' + faction + '|' + w + '|' + d;
+export function buildingGeo(type, faction, w, d, tier = 1) {
+  const key = type + '|' + faction + '|' + w + '|' + d + '|' + tier;
   if (CACHE.has(key)) return CACHE.get(key);
   R = rng(key.length * 7 + type.charCodeAt(0));
   const P = PAINT[faction], und = faction.startsWith('undead');
   const k = new Kit(13, [0, 3, 0.7]);
-  ({ hq: keep, barracks, tower, banner, monolith: (k, P) => banner(k, P, true), wall: palisade, farm, mine, well }[type])(k, P, und, w, d);
+  ({ hq: keep, barracks, tower, banner, monolith: (k, P) => banner(k, P, true), wall: palisade, farm, mine, well, forge, chapel, pit, sanctum }[type])(k, P, und, w, d, tier);
   const g = k.build();
   CACHE.set(key, g);
   return g;
@@ -157,7 +208,7 @@ export class BuildingView {
     const def = BUILDINGS[b.type];
     this.mat = paintMat('terrain');
     this.group = new THREE.Group();
-    this.mesh = new THREE.Mesh(buildingGeo(b.type, faction, b.w || 0, b.d || 0), this.mat);
+    this.mesh = new THREE.Mesh(buildingGeo(b.type, faction, b.w || 0, b.d || 0, b.tier || 1), this.mat);
     this.mesh.castShadow = true; this.mesh.receiveShadow = true;
     this.group.add(this.mesh);
     const sw = def.shape === 'circle' ? def.r * 2.2 : (b.w || 2) + 0.3, sd = def.shape === 'circle' ? def.r * 2.2 : (b.d || 2) + 0.3;
@@ -168,7 +219,7 @@ export class BuildingView {
     this.ring.rotation.x = -Math.PI / 2; this.ring.position.y = 0.09;
     this.group.add(this.ring);
     this.group.position.set(b.x, 0, b.z);
-    this.height = { hq: 5, tower: 5, banner: 3.6, monolith: 3.6, wall: 1.6, farm: 1.6, mine: 1.4, well: 1.4 }[b.type] || 2.6;
+    this.height = { hq: (b.tier || 1) >= 2 ? 7.2 : 5, chapel: 4.5, tower: 5, banner: 3.6, monolith: 3.6, wall: 1.6, farm: 1.6, mine: 1.4, well: 1.4 }[b.type] || 2.6;
     this.rises = String(faction).startsWith('undead');   // undead sites rise out of the ground (no scaffold)
     if (this.rises && def.work) {
       // heaving earth around a rising site: chunks of dirt and broken stone that bob while it rises

@@ -4,7 +4,8 @@ import { emptyOrders, emptyPlan, defOf, radiusOf, apFor } from '../sim/state.js'
 import { planCost, actionCost, cpUsage, SKILL_KINDS } from '../sim/orders.js';
 import { clampAim, engagedWith } from '../sim/resolve.js';
 import { Nav, pathAP, walkAP } from '../sim/nav.js';
-import { obstacles, navKey, placeError, footprint, armySize, builderCount, BUILDINGS, trainCost, bdef, startQueues, trainsRole } from '../sim/base.js';
+import { obstacles, navKey, placeError, footprint, armySize, builderCount, BUILDINGS, trainCost, bdef, startQueues, trainsRole, itemCost, isTechItem, techError, gateOf, researchesAt } from '../sim/base.js';
+import { TECH } from '../data/tech.js';
 import { builderPlan, builderIdleTarget, gatherTarget } from '../sim/builders.js';
 import { gatherRate, hitRadius } from '../sim/base.js';
 import { norm, segCircle, dist } from '../sim/geom.js';
@@ -291,17 +292,20 @@ export class Planner {
   // supply after this round's queue starts (and refunds)
   supplyLeft() {
     let v = (this.s.supply || [0, 0])[this.g.me];
-    for (const b of this.s.buildings) if (this.draft.cancel.includes(b.id) && b.train) v += trainCost(this.fac, b.train.role);
+    for (const b of this.s.buildings) if (this.draft.cancel.includes(b.id) && b.train) v += b.train.tech ? TECH[b.train.tech].cost : trainCost(this.fac, b.train.role);
     const fc = this.forecast();
     this.bqList().forEach((it, i) => { if (fc.builds[i]?.starts) v -= BUILDINGS[it.type].cost; });
-    for (const b of this.s.buildings) if (b.owner === this.g.me && b.queue) this.tqList(b).forEach((r, i) => { if (fc.trains[b.id]?.[i]?.starts) v -= trainCost(this.fac, r); });
+    for (const b of this.s.buildings) if (b.owner === this.g.me && b.queue) this.tqList(b).forEach((r, i) => { if (fc.trains[b.id]?.[i]?.starts) v -= itemCost(this.fac, r); });
     return v;
   }
   // squads training or starting this round (for the army count)
   armyNext() {
     const fc = this.forecast();
-    let n = armySize(this.s, this.g.me) - this.draft.cancel.length;
-    for (const l of Object.values(fc.trains)) n += l.filter(x => x.starts).length;
+    let n = armySize(this.s, this.g.me) - this.draft.cancel.filter(id => this.s.buildings.find(b => b.id === id)?.train?.role).length;
+    for (const [bid, l] of Object.entries(fc.trains)) {
+      const b = this.s.buildings.find(x => x.id === bid), list = b ? this.tqList(b) : [];
+      l.forEach((x, i) => { if (x.starts && !isTechItem(x.repeat ? b.repeat : list[i])) n++; });
+    }
     return n;
   }
   // footprints of the queued buildings (except index `except`)
@@ -329,10 +333,20 @@ export class Planner {
   }
   unqueueBuild(i) { this.editBq(l => l.splice(i, 1)); }
   moveBuild(i, j) { this.editBq(l => { if (j < 0 || j >= l.length) return; const [x] = l.splice(i, 1); l.splice(j, 0, x); }); }
+  // role or 'tech:<id>'
   trainError(b, role) {
     if (b.build) return 'Still under construction';
-    if (!trainsRole(b, role, this.fac)) return 'It can\'t train that';
     if (this.tqList(b).length >= RULES.queueMax) return `Queue full (${RULES.queueMax})`;
+    if (isTechItem(role)) {
+      const id = role.slice(5);
+      if (!researchesAt(b.type, this.fac).some(t => t.id === id)) return 'It can\'t research that';
+      const mine = this.tqList(b).filter(isTechItem).map(r => r.slice(5));
+      const others = this.s.buildings.filter(x => x.owner === this.g.me && x.id !== b.id && x.queue).flatMap(x => this.tqList(x).filter(isTechItem).map(r => r.slice(5)));
+      return techError(this.s, this.g.me, id, b, mine, others);
+    }
+    if (!trainsRole(b, role, this.fac)) return 'It can\'t train that';
+    const g = gateOf(this.s, this.g.me, role);
+    if (g) return 'Needs the ' + TECH[g].name;
     return '';
   }
   editTq(b, fn) { const l = this.tqList(b).slice(); fn(l); this.draft.tq[b.id] = l; this.g.changed(); }

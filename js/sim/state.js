@@ -1,7 +1,7 @@
 // Game state: squads of miniatures on a terrain board.
 import { RULES, FACTIONS, squadRadius, unitDef } from '../data/units.js';
 import { DEPLOY, HQ_X, mapDef, buildMapTerrain, mapSites, mirrorOn, boardOf } from '../data/maps.js';
-import { addBuilding, obstacles } from './base.js';
+import { addBuilding, obstacles, tkOf, ruleOf } from './base.js';
 import { pointBlocked } from './nav.js';
 import { initSeen } from './vision.js';
 import { rng } from './rng.js';
@@ -27,6 +27,7 @@ export function createGame(seed = 1, factions = ['kingdom', 'undead'], mapId = '
     bq: [[], []], nextQid: 0,
     graves: [[], []],    // undead: leftover graveyard patches { x, z, r, cap } (from destroyed buildings)
     revive: [null, null], // a fallen hero's revive zone { x, z, progress, round }
+    tech: [[], []], techKey: ['', ''],   // finished research per side (js/data/tech.js) and its sorted key
   };
   // each HQ starts at one of three spots along its back edge (so it has to be scouted)
   const hqz = [0, 1].map(() => def.hqSpots[Math.floor(R() * def.hqSpots.length) % def.hqSpots.length]);
@@ -57,8 +58,8 @@ export function createGame(seed = 1, factions = ['kingdom', 'undead'], mapId = '
 }
 
 export function addSquad(s, owner, role, x, z) {
-  const faction = s.players[owner].faction;
-  const def = unitDef(faction, role);
+  const faction = s.players[owner].faction, tk = tkOf(s, owner);
+  const def = unitDef(faction, role, tk);
   const q = {
     id: 'q' + (s.nextId++), owner, faction, paint: s.players[owner].paint || faction, role, x, z,
     fx: owner === 0 ? 1 : -1, fz: 0,   // facing (unit vector)
@@ -66,8 +67,9 @@ export function addSquad(s, owner, role, x, z) {
     stance: role === 'builder' ? 'guard' : 'advance',   // squads advance by default; builders work on their own
     cd: {},                            // skill cooldowns: kind -> rounds left
   };
+  if (tk) q.tk = tk;
   if (def.mana) q.mana = def.mana.start; // mages: mana left
-  if (def.summoned) q.ttl = RULES.summonTtl;   // summoned squads: rounds left before they crumble
+  if (def.summoned) q.ttl = RULES.summonTtl + ruleOf(s, owner, 'summonTtl');   // summoned squads: rounds left before they crumble
   s.squads.push(q);
   return q;
 }
@@ -83,7 +85,8 @@ export function freeSpot(s, q) {
   }
 }
 
-export const defOf = q => FACTIONS[q.faction].units[q.role];
+// a squad's definition with its side's research applied (q.tk = the side's tech key)
+export const defOf = q => unitDef(q.faction, q.role, q.tk);
 export const radiusOf = q => squadRadius(defOf(q), q.models);
 export const alive = q => q.hp > 0;
 export const modelsFor = (q, hp) => Math.max(0, Math.ceil(hp / defOf(q).hpPer - 1e-9));

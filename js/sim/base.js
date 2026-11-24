@@ -1,11 +1,77 @@
 // Base & economy: buildings (footprints, obstacles, placement), shrine nodes, supply,
 // training. Deterministic, shared by the resolver, the planner UI and the AI.
-import { RULES, BUILDINGS, FACTIONS, squadRadius, trainCost, trainsOf, maxBuildersOf, pairOf } from '../data/units.js';
+import { RULES, BUILDINGS, FACTIONS, squadRadius, trainCost, trainsOf, maxBuildersOf, pairOf, unitDef } from '../data/units.js';
 import { dist, inRect } from './geom.js';
 import { pointBlocked } from './nav.js';
+import { TECH, GATES, BUILDING_GATES, techBuilding, techRules, techKey } from '../data/tech.js';
 
-export const bdef = b => BUILDINGS[b.type];
-export const bname = (b, faction) => BUILDINGS[b.type].name[faction];
+// a building's definition with its side's research applied (b.tk = the side's tech key)
+export const bdef = b => techBuilding(BUILDINGS[b.type], b.type, b.tk);
+
+// ---- tech ----
+export const tkOf = (s, p) => (s.techKey && s.techKey[p]) || '';
+export const hasTech = (s, p, id) => !!(s.tech && s.tech[p] && s.tech[p].includes(id));
+export const researching = (s, p, id) => (s.buildings || []).some(b => b.owner === p && b.hp > 0 && b.train && b.train.tech === id);
+const ruleCache = new Map();
+// a side-wide research bonus (TECH.<id>.rules), or dflt
+export function ruleOf(s, p, key, dflt = 0) {
+  const k = tkOf(s, p);
+  if (!k) return dflt;
+  let r = ruleCache.get(k);
+  if (!r) { r = techRules(k.split(',')); ruleCache.set(k, r); }
+  return r[key] ?? dflt;
+}
+// the tech a role still waits for (its HQ tier), or ''
+export function gateOf(s, p, role) { const g = GATES[s.players[p].faction]?.[role]; return g && !hasTech(s, p, g) ? g : ''; }
+// tech a building type researches for a faction
+export const researchesAt = (type, faction) => Object.values(TECH).filter(t => t.faction === faction && t.at === type);
+const bnames = (types, faction) => types.map(t => BUILDINGS[t].name[faction]).join(' or ');
+// can side p research `id` (at building b)? earlier: tech queued before it in the same line; others:
+// tech queued in other buildings. start: the research would start now (needs must be finished).
+// Returns '' or a reason.
+export function techError(s, p, id, b = null, earlier = [], others = [], start = false) {
+  const t = TECH[id], fac = s.players[p].faction;
+  if (!t || t.faction !== fac) return 'Your side can\'t research that';
+  if (b && t.at !== b.type) return 'Researched at the ' + BUILDINGS[t.at].name[fac];
+  if (hasTech(s, p, id)) return 'Already researched';
+  if (!start && (researching(s, p, id) || others.includes(id) || earlier.includes(id))) return 'Already under way';
+  if (t.doctrine) {
+    const sib = Object.values(TECH).filter(x => x.doctrine === t.doctrine && x.id !== id).find(x => hasTech(s, p, x.id) || researching(s, p, x.id) || (!start && (others.includes(x.id) || earlier.includes(x.id))));
+    if (sib) return 'You chose ' + sib.name;
+  }
+  for (const n of t.needs || []) if (!hasTech(s, p, n) && (start || !(researching(s, p, n) || earlier.includes(n)))) return 'Needs ' + TECH[n].name;
+  if (t.needsBuilding && !(s.buildings || []).some(x => x.owner === p && x.hp > 0 && !x.build && t.needsBuilding.includes(x.type))) return 'Needs a ' + bnames(t.needsBuilding, fac);
+  return '';
+}
+// queue items are roles or 'tech:<id>' (research)
+export const isTechItem = it => typeof it === 'string' && it.startsWith('tech:');
+export const itemCost = (fac, it) => isTechItem(it) ? (TECH[it.slice(5)]?.cost || 0) : trainCost(fac, it);
+export const itemRounds = (fac, it) => isTechItem(it) ? (TECH[it.slice(5)]?.rounds || 1) : RULES.trainRounds[it] || 2;
+// a finished research: record it and refresh every squad and building of the side (max HP grows with it)
+export function finishTech(s, p, id) {
+  s.tech = s.tech || [[], []]; s.techKey = s.techKey || ['', ''];
+  if (s.tech[p].includes(id)) return;
+  s.tech[p].push(id);
+  const key = techKey(s.tech[p]);
+  s.techKey[p] = key;
+  for (const q of s.squads) {
+    if (q.owner !== p) continue;
+    const old = FACTIONS[q.faction].units[q.role] && unitDefTk(q.faction, q.role, q.tk);
+    q.tk = key;
+    const nw = unitDefTk(q.faction, q.role, key);
+    if (old && nw.hpPer !== old.hpPer && q.hp > 0) q.hp = Math.round((q.hp + q.models * (nw.hpPer - old.hpPer)) * 1000) / 1000;
+  }
+  for (const b of s.buildings) {
+    if (b.owner !== p) continue;
+    const old = bdef(b).hp;
+    b.tk = key;
+    const nw = bdef(b).hp;
+    if (nw !== old && !b.build && b.hp > 0) b.hp = Math.max(1, Math.round(b.hp + nw - old));
+    if (b.type === 'hq' && TECH[id].hqTier) b.tier = TECH[id].hqTier;
+  }
+}
+const unitDefTk = (f, r, tk) => unitDef(f, r, tk);
+export const bname = (b, faction) => bdef(b).name[faction];
 
 // footprint of a building at (x,z) with rot (0 or 1 = rotated 90 degrees)
 export function footprint(type, x, z, rot = 0) {
@@ -23,10 +89,11 @@ export function edgeDist(b, x, z) {
   return Math.sqrt(dx * dx + dz * dz);
 }
 export function addBuilding(s, owner, type, x, z, rot = 0, built = true) {
-  const d = BUILDINGS[type];
-  const b = { id: 'b' + (s.nextBid = (s.nextBid || 0) + 1), owner, type, rot, ...footprint(type, x, z, rot),
-    hp: built || !d.work ? d.hp : Math.max(1, Math.round(d.hp * RULES.siteHp)), build: built ? 0 : d.work, train: null, vision: built || !d.work ? d.vision : 3 };
-  if (d.trains) b.queue = [];
+  const b = { id: 'b' + (s.nextBid = (s.nextBid || 0) + 1), owner, type, rot, ...footprint(type, x, z, rot) };
+  if (tkOf(s, owner)) b.tk = tkOf(s, owner);
+  const d = bdef(b);   // with the side's research (HP, work)
+  Object.assign(b, { hp: built || !d.work ? d.hp : Math.max(1, Math.round(d.hp * RULES.siteHp)), build: built ? 0 : d.work, train: null, vision: built || !d.work ? d.vision : 3 });
+  if (d.trains || d.research) b.queue = [];
   s.buildings.push(b);
   return b;
 }
@@ -72,6 +139,7 @@ export const canBuild = (s, p, type) => FACTIONS[s.players[p].faction].buildings
 export function placeError(s, p, type, x, z, rot = 0, extra = [], squads = true) {
   const W = s.board.w, H = s.board.h, d = BUILDINGS[type];
   if (!d || !canBuild(s, p, type)) return 'Your side can\'t build that';
+  if (BUILDING_GATES[type] && !hasTech(s, p, BUILDING_GATES[type])) return 'Needs the ' + TECH[BUILDING_GATES[type]].name;
   const f = footprint(type, x, z, rot), half = f.r !== undefined ? f.r : Math.max(f.w, f.d) / 2;
   if (x - half < 0.3 || z - half < 0.3 || x + half > W - 0.3 || z + half > H - 0.3) return 'Off the board';
   // only on ground the side has seen; undead buildings only on their own graves (like blight / creep)
@@ -92,18 +160,21 @@ export function placeError(s, p, type, x, z, rot = 0, extra = [], squads = true)
     if (overlaps(f, tf, 0.2)) return 'Blocked by terrain';
   }
   for (const b of live) if (overlaps(f, b, 0.3)) return 'Too close to another building';
-  if (squads) for (const q of s.squads) if (q.hp > 0 && overlaps(f, { x: q.x, z: q.z, r: squadRadius(FACTIONS[q.faction].units[q.role], q.models) }, 0.1)) return 'A squad is standing there';
+  if (squads) for (const q of s.squads) if (q.hp > 0 && overlaps(f, { x: q.x, z: q.z, r: squadRadius(unitDef(q.faction, q.role, q.tk), q.models) }, 0.1)) return 'A squad is standing there';
   const count = t => live.filter(b => b.owner === p && b.type === t).length;
   if (type === 'banner' && count('banner') >= RULES.maxBannerCp) return `At most ${RULES.maxBannerCp} ${d.name[s.players[p].faction].toLowerCase()}s`;
   return '';
 }
 export function bannerCount(s, p) { return (s.buildings || []).filter(b => b.owner === p && b.type === 'banner' && b.hp > 0).length; }
-export function bonusCp(s, p) { return Math.min(RULES.maxBannerCp, (s.buildings || []).filter(b => b.owner === p && b.type === 'banner' && b.hp > 0 && !b.build).length); }
+export function bonusCp(s, p) {
+  const own = (s.buildings || []).filter(b => b.owner === p && b.hp > 0 && !b.build);
+  return Math.min(RULES.maxBannerCp, own.filter(b => b.type === 'banner').length) + own.filter(b => b.type === 'hq').reduce((n, b) => n + (bdef(b).cp || 0), 0);   // + the Citadel
+}
 export const isBuilder = q => q.role === 'builder';
 export function builderCount(s, p) { return s.squads.filter(q => q.owner === p && q.hp > 0 && isBuilder(q)).length + (s.buildings || []).filter(b => b.owner === p && b.train && b.train.role === 'builder').length; }
 // squads counted against the army cap: builders (their own cap) and summoned squads don't count
 export const inArmy = q => !isBuilder(q) && !q.ttl;
-export function armySize(s, p) { return s.squads.filter(q => q.owner === p && q.hp > 0 && inArmy(q)).length + (s.buildings || []).filter(b => b.owner === p && b.train && b.train.role !== 'builder').reduce((n, b) => n + pairOf(s.players[p].faction, b.train.role), 0); }
+export function armySize(s, p) { return s.squads.filter(q => q.owner === p && q.hp > 0 && inArmy(q)).length + (s.buildings || []).filter(b => b.owner === p && b.train && b.train.role && b.train.role !== 'builder').reduce((n, b) => n + pairOf(s.players[p].faction, b.train.role, tkOf(s, p)), 0); }
 // undead grave ground of side p: graveyards around its buildings and leftover patches
 export function graveCircles(s, p) {
   return (s.buildings || []).filter(b => b.owner === p && b.hp > 0 && b.grave > 0).map(b => ({ x: b.x, z: b.z, r: b.grave, b }))
@@ -111,7 +182,7 @@ export function graveCircles(s, p) {
 }
 // a living own Lich or Necromancer squad within `range` of (x, z)? (raising a Monolith)
 export function casterNear(s, p, x, z, range) {
-  return s.squads.some(q => q.owner === p && q.hp > 0 && (q.role === 'hero' || q.role === 'mage') && FACTIONS[q.faction].units[q.role].mana && dist(q.x, q.z, x, z) <= range);
+  return s.squads.some(q => q.owner === p && q.hp > 0 && (q.role === 'hero' || q.role === 'mage') && unitDef(q.faction, q.role, q.tk).mana && dist(q.x, q.z, x, z) <= range);
 }
 // has side p ever seen the ground at (x, z)? (no memory recorded: yes)
 export function seenBy(s, p, x, z) {
@@ -128,7 +199,7 @@ export function spreadGraves(s, p, c, x, z, n) {
   let ux = x - c.x, uz = z - c.z;
   const l = Math.hypot(ux, uz);
   if (l < 0.05) { ux = p === 0 ? 1 : -1; uz = 0; } else { ux /= l; uz /= l; }   // died at the centre: toward the enemy
-  const r = RULES.graveBlob * Math.sqrt(n), circles = graveCircles(s, p);
+  const r = RULES.graveBlob * ruleOf(s, p, 'graveBlobMult', 1) * Math.sqrt(n), circles = graveCircles(s, p);
   let t = c.r;
   for (let i = 0; i < 120 && circles.some(o => dist(o.x, o.z, c.x + ux * t, c.z + uz * t) < o.r - r * 0.5); i++) t += 0.25;
   const W = s.board ? s.board.w : 48, H = s.board ? s.board.h : 32;
@@ -152,15 +223,16 @@ export function incomeOf(s, p) {
   let v = 0;
   for (const b of s.buildings || []) {
     if (b.owner !== p || b.hp <= 0 || b.build) continue;
-    if (b.type === 'hq') v += eco.hq;
-    else v += BUILDINGS[b.type].income || 0;
+    if (b.type === 'hq') v += eco.hq + ruleOf(s, p, 'hqIncome');
+    else v += (bdef(b).income || 0) + (b.type === 'farm' ? ruleOf(s, p, 'farmIncome') : b.type === 'mine' ? ruleOf(s, p, 'mineIncome') : 0);
   }
   return Math.round(v * (s.players[p].incomeMult || 1));   // AI difficulty
 }
 // AP of builder work per 1 resource when gathering at building b (0 = can't gather there)
 export function gatherRate(s, b) {
   if (!b || b.hp <= 0 || b.build) return 0;
-  return FACTIONS[s.players[b.owner].faction].eco.gather[b.type] || 0;
+  const r = FACTIONS[s.players[b.owner].faction].eco.gather[b.type] || 0;
+  return r && b.type === 'farm' ? Math.max(1, r + ruleOf(s, b.owner, 'farmGather')) : r;
 }
 // can building b train `role` (ignoring supply)?
 export function trainsRole(b, role, faction) { return trainsOf(b.type, faction).includes(role); }
@@ -169,7 +241,8 @@ export function trainsRole(b, role, faction) { return trainsOf(b.type, faction).
 // Two kinds: one base build queue per side (s.bq[p], items { qid, type, x, z, rot }) that free
 // builders take from, and a queue of roles on every training building (b.queue). Items are paid
 // when they start (at the start of a round); a queue whose front item can't start waits.
-export const trainers = (s, p) => (s.buildings || []).filter(b => b.owner === p && b.hp > 0 && !b.build && trainsOf(b.type, s.players[p].faction).length);
+// training buildings and research buildings (they share one queue each)
+export const trainers = (s, p) => (s.buildings || []).filter(b => b.owner === p && b.hp > 0 && !b.build && (trainsOf(b.type, s.players[p].faction).length || researchesAt(b.type, s.players[p].faction).length));
 const qfoot = (it, p) => ({ type: it.type, x: it.x, z: it.z, rot: it.rot, owner: p, ...footprint(it.type, it.x, it.z, it.rot) });
 export const buildQueue = (s, p) => (s.bq && s.bq[p]) || [];
 
@@ -195,17 +268,27 @@ export function validateQueue(s, p, o = {}) {
     bq.push({ qid, type: it.type, x, z, rot });
   }
   const tq = {}, legacy = Array.isArray(o.trains) ? o.trains : [];
+  const queuedTech = [];   // research queued so far (each tech only once, doctrines exclusive)
   for (const b of trainers(s, p)) {
     const rep = oq.trains && oq.trains[b.id];
     const list = Array.isArray(rep) ? rep : (b.queue || []).concat(legacy.filter(t => t && t.bid === b.id).map(t => t.role));
-    tq[b.id] = list.filter(r => typeof r === 'string' && trainCost(fac, r) && trainsRole(b, r, fac)).slice(0, RULES.queueMax);
+    const ok = [], earlier = [];
+    for (const r of list) {
+      if (ok.length >= RULES.queueMax || typeof r !== 'string') continue;
+      if (r.startsWith('tech:')) {
+        const id = r.slice(5);
+        if (techError(s, p, id, b, earlier, queuedTech)) continue;
+        earlier.push(id); queuedTech.push(id); ok.push(r);
+      } else if (trainCost(fac, r) && trainsRole(b, r, fac) && !gateOf(s, p, r)) ok.push(r);
+    }
+    tq[b.id] = ok;
   }
   const cancel = [...new Set((Array.isArray(oq.cancel) ? oq.cancel : []).filter(bid => trainers(s, p).some(b => b.id === bid && b.train)))];
   // repeat: { bid: role | null } locks a training building onto one role (it trains it whenever its queue is empty)
   const repeat = {};
   for (const [bid, role] of Object.entries(oq.repeat || {})) {
     const b = trainers(s, p).find(x => x.id === bid);
-    if (b && (role === null || (typeof role === 'string' && trainCost(fac, role) && trainsRole(b, role, fac)))) repeat[bid] = role;
+    if (b && (role === null || (typeof role === 'string' && trainCost(fac, role) && trainsRole(b, role, fac) && !gateOf(s, p, role)))) repeat[bid] = role;
   }
   return { bq, tq, cancel, repeat };
 }
@@ -218,9 +301,9 @@ export function applyQueue(s, p, v, ev = () => {}) {
   for (const [bid, role] of Object.entries(v.repeat || {})) { const b = s.buildings.find(x => x.id === bid); if (role) b.repeat = role; else delete b.repeat; }
   for (const bid of v.cancel) {
     const b = s.buildings.find(x => x.id === bid);
-    const refund = trainCost(s.players[p].faction, b.train.role);
+    const refund = b.train.tech ? TECH[b.train.tech].cost : trainCost(s.players[p].faction, b.train.role);
     s.supply[p] += refund;
-    ev({ type: 'trainCancel', id: b.id, role: b.train.role, owner: p, refund });
+    ev({ type: 'trainCancel', id: b.id, role: b.train.role, tech: b.train.tech, owner: p, refund });
     b.train = null;
   }
 }
@@ -237,7 +320,7 @@ export function startQueues(s, p, opts = {}) {
   const fac = s.players[p].faction, res = FACTIONS[fac].eco.res;
   const cancel = new Set(opts.cancel || []);
   let supply = s.supply[p];
-  for (const b of s.buildings) if (cancel.has(b.id) && b.owner === p && b.train) supply += trainCost(fac, b.train.role);
+  for (const b of s.buildings) if (cancel.has(b.id) && b.owner === p && b.train) supply += b.train.tech ? TECH[b.train.tech].cost : trainCost(fac, b.train.role);
   const out = { builds: [], trains: {} };
   // sites that can be under way at once: one per builder (undead: RULES.maxRising, they rise on their own)
   const crews = rises(s, p) ? RULES.maxRising : s.squads.filter(q => q.owner === p && q.hp > 0 && isBuilder(q)).length;
@@ -269,7 +352,7 @@ export function startQueues(s, p, opts = {}) {
   }
   if (apply) s.bq[p] = keep;
   let army = armySize(s, p), nb = builderCount(s, p);
-  for (const b of cancel.size ? s.buildings : []) if (cancel.has(b.id) && b.owner === p && b.train) { if (b.train.role === 'builder') nb--; else army--; }
+  for (const b of cancel.size ? s.buildings : []) if (cancel.has(b.id) && b.owner === p && b.train && b.train.role) { if (b.train.role === 'builder') nb--; else army--; }
   for (const b of trainers(s, p).sort((a, c) => +a.id.slice(1) - +c.id.slice(1))) {
     const list = out.trains[b.id] = [];
     let busy = !!b.train && !cancel.has(b.id), started = false;
@@ -279,18 +362,36 @@ export function startQueues(s, p, opts = {}) {
     const fromRepeat = !list0.length && !!rep;
     for (const role of fromRepeat ? [rep] : list0) {
       if (busy) { list.push({ wait: 'line' }); continue; }
-      const c = trainCost(fac, role);
+      if (role.startsWith('tech:')) {
+        // research: paid when it starts; the building trains nothing meanwhile
+        const id = role.slice(5), t = TECH[id];
+        let wait = '', need = 0;
+        if (!t || techError(s, p, id, b, [], [], true)) wait = 'needs';
+        else if (supply < t.cost) { wait = res; need = t.cost - supply; }
+        busy = true;
+        if (wait) { list.push({ wait, need, why: t ? techError(s, p, id, b, [], [], true) : '' }); continue; }
+        supply -= t.cost;
+        list.push({ starts: true }); started = true;
+        if (apply) {
+          s.supply[p] -= t.cost;
+          b.train = { tech: id, left: t.rounds, total: t.rounds };
+          ev({ type: 'research', id: b.id, tech: id, owner: p });
+        }
+        continue;
+      }
+      const c = trainCost(fac, role), tk = tkOf(s, p);
       let wait = '', need = 0;
-      if (role !== 'builder' && army + pairOf(fac, role) > s.board.cap) wait = 'cap';
+      if (gateOf(s, p, role)) wait = 'needs';
+      else if (role !== 'builder' && army + pairOf(fac, role, tk) > s.board.cap) wait = 'cap';
       else if (role === 'builder' && nb >= maxBuildersOf(fac)) wait = 'builders';
       else if (supply < c) { wait = res; need = c - supply; }
       busy = true;
       if (wait) { list.push({ wait, need }); continue; }
-      supply -= c; if (role === 'builder') nb++; else army += pairOf(fac, role);
+      supply -= c; if (role === 'builder') nb++; else army += pairOf(fac, role, tk);
       list.push({ starts: true, repeat: fromRepeat }); started = true;
       if (apply) {
         s.supply[p] -= c;
-        const n = RULES.trainRounds[role] || 2;
+        const n = role === 'fighter' && ruleOf(s, p, 'fastWarriors') ? 1 : RULES.trainRounds[role] || 2;
         b.train = { role, left: n, total: n };
         ev({ type: 'train', id: b.id, role, owner: p });
       }
@@ -310,7 +411,7 @@ export function spawnSpot(s, b, radius) {
     const r = base + ring * 1.2;
     const x = b.x + Math.cos(a) * r * dir, z = b.z + Math.sin(a) * r;
     if (pointBlocked(obs, x, z, radius)) continue;
-    if (s.squads.some(q => q.hp > 0 && dist(q.x, q.z, x, z) < radius + squadRadius(FACTIONS[q.faction].units[q.role], q.models) + 0.1)) continue;
+    if (s.squads.some(q => q.hp > 0 && dist(q.x, q.z, x, z) < radius + squadRadius(unitDef(q.faction, q.role, q.tk), q.models) + 0.1)) continue;
     return { x, z };
   }
   return null;

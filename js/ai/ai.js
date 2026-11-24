@@ -4,7 +4,8 @@ import { RULES, FACTIONS, isMelee, isShooter, skillOf, cdOf, isMage, maxBuilders
 import { losCut, engagedWith } from '../sim/resolve.js';
 import { emptyOrders, emptyPlan, defOf, radiusOf, apFor } from '../sim/state.js';
 import { nearestEnemy, meleePlan, trimPath } from '../sim/stances.js';
-import { obstacles, navKey, placeError, bonusCp, armySize, armyValue, BUILDINGS, trainCost, footprint, nearestFreeSite, builderCount, trainsRole, edgeDist, bdef, buildQueue, siteTaken, seenBy, graveCircles } from '../sim/base.js';
+import { obstacles, navKey, placeError, bonusCp, armySize, armyValue, BUILDINGS, trainCost, footprint, nearestFreeSite, builderCount, trainsRole, edgeDist, bdef, buildQueue, siteTaken, seenBy, graveCircles, hasTech, techError, gateOf, tkOf, inArmy, researching } from '../sim/base.js';
+import { TECH } from '../data/tech.js';
 import { builderPlan } from '../sim/builders.js';
 import { autoSkills } from '../sim/skills.js';
 import { Nav, pointBlocked } from '../sim/nav.js';
@@ -42,7 +43,7 @@ export function aiOrders(s, p, memory = aiMemory(), opts = {}) {
       enemies = [{ id: '?', owner: 1 - p, faction: s.players[1 - p].faction, role: 'fighter', x: sp.x, z: sp.z, fx: 1, fz: 0, models: 4, hp: 80, cd: {} }];
     }
   } else if (hqTarget) enemies.push(hqTarget);
-  if (s.buildings) Object.assign(o, economy(s, p, enemies.filter(e => !e.isHq), o));
+  if (s.buildings) Object.assign(o, economy(s, p, enemies.filter(e => !e.isHq), o, level));
 
   // ---- waves: gather the army at a rally point, attack together, fall back to regroup ----
   const wave = memory.wave || (memory.wave = { phase: 'gather', since: s.round, size: 0, hqHp: 0 });
@@ -220,7 +221,7 @@ function clearSpot(s, x0, z0) {
 export function aiMemory() { return { seen: {}, prev: {} }; }
 
 // ---- economy: builders put up a per-faction build order; keep training ----------------
-function economy(s, p, known, orders) {
+function economy(s, p, known, orders, level = 'normal') {
   const out = { builds: [], trains: [] };
   let supply = s.supply[p];
   const fac = s.players[p].faction, gold = fac === 'kingdom';
@@ -244,13 +245,18 @@ function economy(s, p, known, orders) {
     const plan = emptyPlan(); plan.actions = bp.actions; orders.squads[q.id] = plan; busy.add(q.id);
   }
   const rising = !!FACTIONS[fac].rises;
+  // saving for the HQ's next tier: from round 8 (tier 2) / 18 (tier 3) other spending keeps that much back
+  const tier2 = gold ? 'castle' : 'mausoleum', t3 = gold ? 'citadel' : 'necropolis';
+  const saveFor = mine.some(b => b.type === 'barracks' && !b.build) && s.round >= 8 && !hasTech(s, p, tier2) && !researching(s, p, tier2) ? tier2
+    : s.round >= 18 && hasTech(s, p, tier2) && !hasTech(s, p, t3) && !researching(s, p, t3) && !techError(s, p, t3, null, [], [], true) ? t3 : '';
+  const saving = saveFor ? TECH[saveFor].cost : 0;
   const place = (type, prefer) => {
     const free = builders.filter(x => !busy.has(x.id));
     if (rising && mine.filter(b => b.build > 0).length + queued.length >= RULES.maxRising) return false;   // undead: at most 2 rising
     // once there is a barracks, keep enough back to train a squad (except for its own site)
     // (except for the first farm: the kingdom's economy comes first)
     const reserve = count('barracks') && mine.some(b => b.type === 'barracks' && !b.build) && type !== 'barracks' && !(type === 'farm' && !count('farm')) ? 24 : 0;
-    if ((!free.length && !rising) || supply - reserve < BUILDINGS[type].cost) return false;
+    if ((!free.length && !rising) || supply - reserve - (type === 'barracks' || BUILDINGS[type].site ? 0 : saving) < BUILDINGS[type].cost) return false;
     const cand = [];
     if (BUILDINGS[type].site) {
       // free sites the side has seen, nearest first (placeError checks seen ground and, for the undead, graves)
@@ -304,6 +310,7 @@ function economy(s, p, known, orders) {
   const side = (x, z) => -Math.abs(fwd * (x - hq.x) - 1) - Math.abs(Math.abs(z - hq.z) - 5) * 0.5;
   const threat = known.filter(e => dist(e.x, e.z, hq.x, hq.z) < 14);
   const site = gold ? 'mine' : 'well';
+  const tech1 = gold ? 'forge' : 'pit', tech2 = gold ? 'chapel' : 'sanctum';
   // where the horde is heading: the known enemy HQ, else the middle of the table
   const ehq = knownEnemyHq(s, p);
   const rangeTarget = ehq ? { x: ehq.x, z: ehq.z } : { x: s.board.w / 2, z: s.board.h / 2 };
@@ -323,12 +330,35 @@ function economy(s, p, known, orders) {
       // rich with a bigger army cap: more barracks so the money turns into squads
       (count('barracks') && count('barracks') < Math.min(4, 1 + Math.floor(supply / 60)) && s.round >= 5 && place('barracks', (x, z) => -Math.abs(z - hq.z) * 0.4 - Math.abs(fwd * (x - hq.x) - 3))) ||
       (FACTIONS[fac].buildings.includes('banner') && count('banner') < RULES.maxBannerCp && s.round >= 5 && supply >= BUILDINGS.banner.cost + 20 && place('banner', (x, z) => -dist(x, z, hq.x, hq.z))) ||
+      // tech buildings once the HQ reached tier 2: the first right away, the second a few rounds later
+      (hasTech(s, p, tier2) && !count(tech1) && supply >= BUILDINGS[tech1].cost + 10 && place(tech1, side)) ||
+      (hasTech(s, p, tier2) && count(tech1) && !count(tech2) && s.round >= 12 && supply >= BUILDINGS[tech2].cost + 20 && place(tech2, side)) ||
       // undead: a Monolith (heal + graves) on its graves toward the front, one more every 8 rounds
       (rising && s.round >= 5 && count('monolith') < 1 + Math.floor(s.round / 8) && supply >= BUILDINGS.monolith.cost + 25 && place('monolith', (x, z) => -dist(x, z, rangeTarget.x, rangeTarget.z))) ||
       (count('tower') < 2 && s.round >= 6 && supply >= BUILDINGS.tower.cost + 30 && place('tower', forward));
     if (!ok) break;
   }
   // idle builders stay home (hold), next to the HQ
+  // research: one item at a time per HQ / tech building, from a priority list, when there is money to
+  // spare and the army isn't badly outnumbered (the HQ tier first; doctrines by the army mix / seed)
+  const researched = new Set(), busyB = new Set();
+  const myArmy = s.squads.filter(q => q.owner === p && inArmy(q)).length;
+  if (myArmy >= known.length * 0.5) {
+    const myRoles0 = s.squads.filter(q => q.owner === p).map(q => q.role), cnt = r => myRoles0.filter(x => x === r).length;
+    const d2 = gold ? (cnt('ranged') >= cnt('fast') ? 'yeomanry' : 'knightly') : (cnt('swarm') + cnt('fighter') > 4 * Math.max(1, cnt('mage')) ? 'bonetide' : 'darkarts');
+    const d3 = gold ? ((s.seed + p) % 2 ? 'crusade' : 'fortress') : ((s.seed + p) % 2 ? 'horde' : 'plague');
+    const PRIO = gold
+      ? { hq: ['plough', 'castle', d2, 'shafts', 'rotation', 'citadel', d3, 'guild'], forge: ['steel1', 'plate1', 'bodkin', 'steel2', 'plate2'], chapel: ['valour', 'legend', 'hospital', 'chosen'] }
+      : { hq: ['restless', 'mausoleum', d2, 'harvest', 'blight', 'necropolis', d3, 'massgraves'], pit: ['bones1', 'plating1', 'shroud', 'swarm3', 'bones2', 'plating2'], sanctum: ['chain', 'necromancy', 'greater', 'phylactery'] };
+    const reserve = level === 'easy' ? 45 : 20;
+    for (const b of mine.filter(b => !b.build && !b.train && !(b.queue || []).length && PRIO[b.type])) {
+      // the HQ waits until round 5 for its tier upgrade and keeps training early on
+      const id = PRIO[b.type].find(id => !techError(s, p, id, b, [], [...researched], true) && !researched.has(id));
+      if (!id || supply < TECH[id].cost + (TECH[id].hqTier ? 0 : reserve) || (TECH[id].hqTier && s.round < (TECH[id].hqTier === 2 ? 5 : 14))) continue;
+      out.trains.push({ bid: b.id, role: 'tech:' + id }); supply -= TECH[id].cost; researched.add(id);
+      busyB.add(b.id);
+    }
+  }
   // training: kingdom peasants grow with the game (farmers), then soldiers from every training building
   let army = armySize(s, p), nb = builderCount(s, p);
   // few peasants until a Barracks stands (soldiers first), then more for the farms
@@ -336,13 +366,15 @@ function economy(s, p, known, orders) {
   // peasants only as needed: 1 to build, plus farmers for the farms (3 each) and miners (2 each)
   const jobs = 1 + 3 * mine.filter(b => b.type === 'farm' && !b.build).length + 2 * mine.filter(b => b.type === 'mine' && !b.build).length;
   const wantB = Math.min(maxBuildersOf(fac), hasBarracks ? Math.max(2, jobs) : 2, 8);
-  if (trainsOf('hq', fac).includes('builder') && nb < wantB && s.round >= 2 && !hq.train && !(hq.queue || []).length && supply >= trainCost(fac, 'builder') + 10) {
+  if (trainsOf('hq', fac).includes('builder') && nb < wantB && s.round >= 2 && !hq.train && !busyB.has(hq.id) && !(hq.queue || []).length && supply - (saveFor && !researched.has(saveFor) ? saving : 0) >= trainCost(fac, 'builder') + 10) {
     out.trains.push({ bid: hq.id, role: 'builder' }); supply -= trainCost(fac, 'builder');
   }
+  // still saving for the HQ's next tier: training keeps that much back too
+  if (saveFor && !researched.has(saveFor)) supply -= saving;
   const shooters = known.filter(e => isShooter(defOf(e))).length;
   // undead without a Soul Well: keep enough souls to spread graves to a site and raise a well there
   if (rising && !count(site)) supply -= BUILDINGS.well.cost + 2 * BUILDINGS.wall.cost;
-  for (const b of mine.filter(b => !b.build && !b.train && !(b.queue || []).length && trainsOf(b.type, fac).some(r => r !== 'builder'))) {
+  for (const b of mine.filter(b => !b.build && !b.train && !busyB.has(b.id) && !(b.queue || []).length && trainsOf(b.type, fac).some(r => r !== 'builder'))) {
     if (army >= s.board.cap) break;
     const myRoles = s.squads.filter(q => q.owner === p).map(q => q.role);
     const n = r => myRoles.filter(x => x === r).length;
@@ -350,10 +382,12 @@ function economy(s, p, known, orders) {
     const swarm = trainsOf(b.type, fac).includes('swarm') && (b.type === 'hq' || n('swarm') <= n('fighter') + n('ranged'));
     const mage = trainsOf(b.type, fac).includes('mage') && n('mage') < Math.floor(army / 6);
     let role = mage ? 'mage' : swarm ? 'swarm' : shooters >= 2 && n('fast') < 2 ? 'fast' : n('tank') < 1 ? 'tank' : n('ranged') < n('fighter') ? 'ranged' : 'fighter';
-    if (!trainsOf(b.type, fac).includes(role)) role = trainsOf(b.type, fac).find(r => r !== 'builder');
+    if (!trainsOf(b.type, fac).includes(role) || gateOf(s, p, role)) role = trainsOf(b.type, fac).find(r => r !== 'builder' && !gateOf(s, p, r) && (r !== 'fighter' || !trainsOf(b.type, fac).includes('ranged') || n('ranged') >= n('fighter')));
+    if (!role) continue;
     if (supply < trainCost(fac, role)) continue;
-    if (army + pairOf(fac, role) > s.board.cap) continue;
-    out.trains.push({ bid: b.id, role }); supply -= trainCost(fac, role); army += pairOf(fac, role);
+    const pr = pairOf(fac, role, tkOf(s, p));
+    if (army + pr > s.board.cap) continue;
+    out.trains.push({ bid: b.id, role }); supply -= trainCost(fac, role); army += pr;
   }
   return out;
 }

@@ -2,7 +2,8 @@
 // training docks, building nameplates and the economy readout. Mixed into Game.
 import * as THREE from 'three';
 import { RULES, FACTIONS, BUILDINGS, trainCost, trainsOf } from '../data/units.js';
-import { footprint, hitRadius, armySize, nearestFreeSite, siteTaken, bdef, incomeOf, gatherRate, startQueues, placeError, graveCircles } from '../sim/base.js';
+import { footprint, hitRadius, armySize, nearestFreeSite, siteTaken, bdef, incomeOf, gatherRate, startQueues, placeError, graveCircles, researchesAt, hasTech, techError } from '../sim/base.js';
+import { TECH } from '../data/tech.js';
 import { makeMini } from '../render/minis.js';
 import { buildingsSeenBy } from '../sim/vision.js';
 import { defOf } from '../sim/state.js';
@@ -24,10 +25,15 @@ const FX = (type, fac) => {
     wall: 'Blocks movement and volleys.',
     farm: `A big field: +${d.income} gold every round, and up to ${d.slots} peasants farm it (1 gold per ${FACTIONS.kingdom.eco.gather.farm} AP each).`,
     mine: `Built on a resource site: +${d.income} gold every round.`,
-    well: `Built on a resource site: +${d.income} souls every round, and every model that dies within ${RULES.soulRange}″ (either side) gives ${RULES.soulPerModel} souls (a hero ${RULES.soulPerHero}).`,
+    well: `Built on a resource site: +${d.income} souls every round, and spreads graves ${d.grave}″ around it. Every model that dies on your graves (either side) gives ${RULES.soulPerModel} souls (a hero ${RULES.soulPerHero}).`,
+    monolith: `Spreads graves ${d.grave}″ around it and heals your squads within ${d.heal?.radius}″ by ${d.heal?.hp} HP per model every round.`,
+    forge: 'Researches weapons and armour for your soldiers (open the Tech tree to plan).',
+    chapel: 'Researches The Chosen\'s legend, Valour for Rally, and a Field Hospital that heals squads near Chapels.',
+    pit: 'Researches sharper bones and plating for your skeletons, the Endless Swarm and Wraith Shroud.',
+    sanctum: 'Researches Necromancy, Chain Storm, Greater Summoning and the Phylactery for your casters.',
   }[type];
 };
-const SHORT = { barracks: 'Trains squads', tower: 'Sees far · shoots', banner: '+1 command point', wall: 'Blocks paths and shots', farm: `Big · ${BUILDINGS.farm.slots} farmers`, mine: `On a site · +${BUILDINGS.mine.income} gold`, well: `On a site · souls from deaths` };
+const SHORT = { forge: 'Weapons & armour', chapel: 'Hero & healing', pit: 'Skeleton upgrades', sanctum: 'Caster upgrades', monolith: 'Graves · heals', barracks: 'Trains squads', tower: 'Sees far · shoots', banner: '+1 command point', wall: 'Blocks paths and shots', farm: `Big · ${BUILDINGS.farm.slots} farmers`, mine: `On a site · +${BUILDINGS.mine.income} gold`, well: `On a site · souls from deaths` };
 
 export const BaseUI = {
   // ---------------------------------------------------------------- views
@@ -37,7 +43,7 @@ export const BaseUI = {
   // undead: buildings rise out of the ground (no builders)
   rises(p = this.me) { return !!FACTIONS[this.faction(p)].rises; },
   ecoName(p = this.me) { return this.eco(p).name.toLowerCase(); },
-  bname(b) { return BUILDINGS[b.type].name[this.faction(b.owner)]; },
+  bname(b) { return bdef(b).name[this.faction(b.owner)]; },
 
   // a fallen hero lies where it fell (its revive point) until it returns
   syncBodies(state) {
@@ -85,8 +91,9 @@ export const BaseUI = {
       const key = b.vkey || b.id;
       keep.add(key);
       let v = this.bviews.get(key);
-      if (v && v.sig !== b.type + b.rot + b.owner) { v.destroy(); v = null; this.bviews.delete(key); }
-      if (!v) { v = new BuildingView(b, this.paint(b.owner), this.view.layers.units); v.sig = b.type + b.rot + b.owner; this.bviews.set(key, v); }
+      const sig = b.type + b.rot + b.owner + '|' + (b.tier || 1);   // the HQ's tier swaps its model
+      if (v && v.sig !== sig) { v.destroy(); v = null; this.bviews.delete(key); }
+      if (!v) { v = new BuildingView(b, this.paint(b.owner), this.view.layers.units); v.sig = sig; this.bviews.set(key, v); }
       v.group.position.set(b.x, 0, b.z);
       v.update({ build: b.build, ghost: b.ghost || b.stale, visible: !(b.dying > 1), dying: b.dying, work: b.build ? 1 - b.build / (bdef(b).work || 1) : 1 });
       v.ring.visible = !b.ghost;
@@ -291,7 +298,7 @@ export const BaseUI = {
     this.changed();
   },
   selectedBuilding() { return this.selB ? (this.blist || []).find(b => b.id === this.selB) || null : null; },
-  needsWork(b) { return !!b && b.owner === this.me && !b.ghost && !b.stale && (b.build > 0 || b.hp < BUILDINGS[b.type].hp); },
+  needsWork(b) { return !!b && b.owner === this.me && !b.ghost && !b.stale && (b.build > 0 || b.hp < bdef(b).hp); },
   // send the nearest builder (preferring ones without orders) to finish / repair a building
   sendBuilder(b) {
     const cost = q => (this.planner.plan(q.id) ? 100 : 0) + Math.hypot(q.x - b.x, q.z - b.z);
@@ -385,9 +392,27 @@ export const BaseUI = {
   },
 
   // dock for a selected building: training cards, work / repair, or info
+  // a research card: done / researching / queued / available / locked (reason) / excluded (the other doctrine)
+  techState(t, b = null) {
+    const P = this.planner, s = this.state, me = this.me;
+    if (hasTech(s, me, t.id)) return { st: 'done', why: 'Researched' };
+    const busy = s.buildings.find(x => x.owner === me && x.train?.tech === t.id && P.training(x));
+    if (busy) return { st: 'busy', why: `Researching · ${busy.train.left} rd left` };
+    const queued = s.buildings.some(x => x.owner === me && x.queue && P.tqList(x).includes('tech:' + t.id));
+    if (queued) return { st: 'queued', why: 'Queued' };
+    const at = b && b.type === t.at ? b : s.buildings.find(x => x.owner === me && x.type === t.at && !x.build && x.hp > 0);
+    const err = at ? P.trainError(at, 'tech:' + t.id) : techError(s, me, t.id) || ('Build a ' + BUILDINGS[t.at].name[this.faction(me)] + ' first');
+    if (err.startsWith('You chose')) return { st: 'excluded', why: err };
+    if (err) return { st: 'locked', why: err, at };
+    return { st: 'ok', why: `${t.cost} ${this.eco().name.toLowerCase()} · ${t.rounds} rd`, at };
+  },
+  techCardHTML(t, b) {
+    const k = this.techState(t, b);
+    return `<button class="rs-card ${k.st}${t.hqTier ? ' tier' : ''}${t.doctrine ? ' doc' : ''}" data-rs="${t.id}" ${k.st === 'ok' ? '' : 'disabled'} title="${esc(t.desc)}">${icon(t.icon, 18)}<b>${esc(t.name)}${t.doctrine ? ' <i>doctrine</i>' : ''}</b><small>${esc(k.st === 'ok' ? k.why : k.st === 'done' ? '✓ Researched' : k.why)}</small><span class="rs-d">${esc(t.desc)}</span></button>`;
+  },
   renderBuildingDock(b) {
     const dock = $('dock'), info = $('info');
-    const fac = this.faction(b.owner), d = BUILDINGS[b.type], eco = this.eco();
+    const fac = this.faction(b.owner), d = bdef(b), eco = this.eco();
     const hpTxt = `${Math.round(b.hp)}/${d.hp} HP · armour ${d.armor}`;
     if (b.queued !== undefined) {
       const i = b.queued, n = this.planner.bqList().length;
@@ -405,8 +430,9 @@ export const BaseUI = {
       return;
     }
     const roles = b.owner === this.me && !b.stale ? trainsOf(b.type, fac) : [];
+    const techs = b.owner === this.me && !b.stale ? researchesAt(b.type, fac) : [];
     const work = this.needsWork(b) ? `<div style="margin-top:8px"><button class="chip" data-x="work">${icon('builder', 14)} ${b.build ? 'Send a builder to finish it' : 'Send a builder to repair it'}</button></div>` : '';
-    if (!roles.length) {
+    if (!roles.length && !techs.length) {
       dock.classList.add('hidden'); info.classList.remove('hidden');
       const st = b.build ? ` · under construction: ${Math.round(d.work - b.build)}/${d.work} work` : '';
       info.innerHTML = `<b>${b.owner === this.me ? 'Your' : 'Enemy'} ${esc(d.name[fac])}</b>${b.stale ? ' (last seen)' : ''} · ${hpTxt}${st}<br><span style="color:var(--muted)">${FX(b.type, fac)}${b.owner !== this.me ? ' Attack it with swings, volleys and skills: buildings take extra damage.' : ''}</span>${work}`;
@@ -417,20 +443,23 @@ export const BaseUI = {
     const units = FACTIONS[fac].units, P = this.planner;
     const tr = P.training(b), list = P.tqList(b), fc = P.forecast().trains[b.id] || [];
     const full = list.length >= RULES.queueMax;
-    const status = b.build ? `Under construction (${Math.round(d.work - b.build)}/${d.work} work): it can train once it is finished.`
-      : tr ? `Training ${esc(units[tr.role].name)}: ${tr.left > 1 ? `ready in ${tr.left} rounds` : 'it arrives at the end of this round'}.${list.length ? ` Next: ${esc(units[list[0]].name)} starts the round after.` : ''}`
-      : list.length ? `${esc(units[list[0]].name)}: ${esc(this.waitText(fc[0]))}.`
+    const trInfo = tr && this.qInfo(this.trainItem(tr));
+    const status = b.build ? `Under construction (${Math.round(d.work - b.build)}/${d.work} work): it can ${roles.length ? 'train' : 'research'} once it is finished.`
+      : tr ? `${trInfo.tech ? 'Researching' : 'Training'} ${esc(trInfo.name)}: ${tr.left > 1 ? `ready in ${tr.left} rounds` : `${trInfo.tech ? 'done' : 'it arrives'} at the end of this round`}.${list.length ? ` Next: ${esc(this.qInfo(list[0]).name)} starts the round after.` : ''}`
+      : list.length ? `${esc(this.qInfo(list[0]).name)}: ${esc(this.waitText(fc[0]))}.`
       : P.repeatOf(b) ? `${esc(units[P.repeatOf(b)].name)} (repeat): ${esc(this.waitText(fc[0]))}.`
-      : `Tap a squad to queue it (up to ${RULES.queueMax}), or lock it onto one below. Each is paid when its training starts.`;
+      : roles.length ? `Tap a squad to queue it (up to ${RULES.queueMax}), or lock it onto one below. Each is paid when its training starts.` : 'Tap a research to queue it. It is paid when it starts, and the building does nothing else meanwhile.';
     dock.innerHTML = `<div class="dk-head"><div><div class="nm">${esc(d.name[fac])}</div><div class="sub">${hpTxt} · ${icon(eco.icon, 12)} ${P.supplyLeft()} after this round's starts · army ${P.armyNext()}/${this.state.board.cap}</div></div><button class="ib x" data-tr="close">✕</button></div>
       ${b.build ? '' : `<div class="bd-sec">Queue · ${list.length}/${RULES.queueMax} · tap to remove, drag to reorder</div><div class="pq-row in-dock">${this.queueRowHTML('t', b) || '<span class="pq-empty">Empty</span>'}</div>`}
-      <div class="dk-btns">${roles.map(role => {
+      ${roles.length ? `<div class="dk-btns">${roles.map(role => {
         const u = units[role];
         const err = P.trainError(b, role);
         const nq = list.filter(r => r === role).length;
-        return `<button class="act cat-none" data-tr="${role}" ${err ? 'disabled' : ''} title="${esc(err || `${u.models} models · tap to add to the queue`)}">${icon(role, 20)}${esc(u.name)}<small>${trainCost(fac, role)} ${esc(eco.name.toLowerCase())} · ${RULES.trainRounds[role]} rd${nq ? ` · ×${nq}` : ''}</small></button>`;
-      }).join('')}</div>
-      ${b.build ? '' : `<div class="bd-sec">Keep training (repeat) · trains it whenever the queue is empty</div><div class="rep-row">${roles.map(role => `<button class="chip${P.repeatOf(b) === role ? ' on' : ''}" data-rep="${role}" title="${P.repeatOf(b) === role ? 'Stop repeating' : 'Lock onto ' + esc(units[role].name)}">${icon(role, 14)} ${esc(units[role].name)}</button>`).join('')}${P.repeatOf(b) ? '<button class="chip" data-rep="">✕ Off</button>' : ''}</div>`}
+        const locked = err.startsWith('Needs');
+        return `<button class="act cat-none${locked ? ' locked' : ''}" data-tr="${role}" ${err ? 'disabled' : ''} title="${esc(err || `${u.models} models · tap to add to the queue`)}">${icon(role, 20)}${esc(u.name)}<small>${locked ? '🔒 ' + esc(err.replace('Needs the ', 'needs ')) : `${trainCost(fac, role)} ${esc(eco.name.toLowerCase())} · ${RULES.trainRounds[role]} rd${nq ? ` · ×${nq}` : ''}`}</small></button>`;
+      }).join('')}</div>` : ''}
+      ${techs.length && !b.build ? `<div class="bd-sec">Research <button class="chip sm" data-x="tree">🜲 Tech tree</button></div><div class="rs-cards">${techs.map(t => this.techCardHTML(t, b)).join('')}</div>` : ''}
+      ${b.build || !roles.length ? '' : `<div class="bd-sec">Keep training (repeat) · trains it whenever the queue is empty</div><div class="rep-row">${roles.map(role => `<button class="chip${P.repeatOf(b) === role ? ' on' : ''}" data-rep="${role}" title="${P.repeatOf(b) === role ? 'Stop repeating' : 'Lock onto ' + esc(units[role].name)}">${icon(role, 14)} ${esc(units[role].name)}</button>`).join('')}${P.repeatOf(b) ? '<button class="chip" data-rep="">✕ Off</button>' : ''}</div>`}
       <div class="hint">${status}${full ? ' The queue is full.' : ''}${P.repeatOf(b) ? ` Locked: it keeps training ${esc(units[P.repeatOf(b)].name)} after the queue runs out.` : ''}</div>${work}`;
     this.wireQueueRows(dock);
     dock.querySelectorAll('[data-rep]').forEach(el => el.onclick = () => { P.setRepeat(b, el.dataset.rep || P.repeatOf(b)); sfx('confirm'); });
@@ -438,7 +467,12 @@ export const BaseUI = {
       if (el.dataset.tr === 'close') { this.selB = null; this.changed(); return; }
       if (P.queueTrain(b, el.dataset.tr)) { sfx('confirm'); this.texts.add(b.x, b.z, `Queued ${units[el.dataset.tr].name}`, 'ok', 2.8, 1.3); }
     });
-    dock.querySelector('[data-x]')?.addEventListener('click', () => this.sendBuilder(b));
+    dock.querySelectorAll('[data-rs]').forEach(el => el.onclick = () => {
+      const t = TECH[el.dataset.rs];
+      if (P.queueTrain(b, 'tech:' + t.id)) { sfx('confirm'); this.texts.add(b.x, b.z, `Queued research: ${t.name}`, 'ok', 2.8, 1.3); }
+    });
+    dock.querySelector('[data-x="tree"]')?.addEventListener('click', () => this.openTechTree());
+    dock.querySelector('[data-x="work"]')?.addEventListener('click', () => this.sendBuilder(b));
   },
 
   // while placing: your build zone, or the free resource sites for mines / wells
@@ -463,12 +497,12 @@ export const BaseUI = {
       seen.add(lid);
       let el = this.labels.get(lid);
       if (!el) { el = document.createElement('div'); el.className = 'sl bl'; layer.appendChild(el); this.labels.set(lid, el); }
-      const d = BUILDINGS[b.type], fac = this.faction(b.owner);
+      const d = bdef(b), fac = this.faction(b.owner);
       const mine = this.phase === 'planning' && b.owner === this.me && !b.ghost;
       const tr = mine ? this.planner.training(b) : b.owner === this.me ? b.train : null;
       const nq = mine && b.queue ? this.planner.tqList(b).length : 0, rp = mine && b.queue ? this.planner.repeatOf(b) : null;
       const sel = b.id === this.selB;
-      const status = b.queued !== undefined ? `#${b.queued + 1} queued · ${b.fc?.starts ? 'starts now' : (this.waitText(b.fc).replace(/^Waits:? ?/, 'waits ') || 'waits')}` : b.ghost ? 'planned' : b.stale ? 'last seen' : b.build ? (this.rises(b.owner) ? `rising · ${Math.ceil(b.build / RULES.riseWork)} rd` : `${Math.round(d.work - b.build)}/${d.work} work`) : tr ? `training ${FACTIONS[fac].units[tr.role].name}${tr.left > 1 ? ` · ${tr.left} rd` : ''}${nq ? ` · +${nq} queued` : ''}${rp ? ' · ⟳' : ''}` : nq ? `${nq} queued` : rp ? `⟳ ${FACTIONS[fac].units[rp].name}` : '';
+      const status = b.queued !== undefined ? `#${b.queued + 1} queued · ${b.fc?.starts ? 'starts now' : (this.waitText(b.fc).replace(/^Waits:? ?/, 'waits ') || 'waits')}` : b.ghost ? 'planned' : b.stale ? 'last seen' : b.build ? (this.rises(b.owner) ? `rising · ${Math.ceil(b.build / RULES.riseWork)} rd` : `${Math.round(d.work - b.build)}/${d.work} work`) : tr ? `${tr.tech ? 'researching ' + TECH[tr.tech].name : 'training ' + FACTIONS[fac].units[tr.role].name}${tr.left > 1 ? ` · ${tr.left} rd` : ''}${nq ? ` · +${nq} queued` : ''}${rp ? ' · ⟳' : ''}` : nq ? `${nq} queued` : rp ? `⟳ ${FACTIONS[fac].units[rp].name}` : '';
       const key = `${Math.round(b.hp)}|${status}|${sel}|${zoomedOut}|${b.dying !== undefined}`;
       if (el.dataset.key !== key) {
         el.dataset.key = key;

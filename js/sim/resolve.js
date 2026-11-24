@@ -9,14 +9,14 @@
 //  first enemy that moves in the front cone, in any tier), cover (forests halve volleys),
 //  line of sight (walls and rocks stop volleys; lobs arc over), skill cooldowns.
 // Produces the new state and a log used for scrubbable playback.
-import { RULES, isMelee, isShooter, skillOf, cdOf, gatherSlotsOf, isMage } from '../data/units.js';
+import { RULES, isMelee, isShooter, skillOf, cdOf, gatherSlotsOf, isMage, unitDef } from '../data/units.js';
 import { dist, norm, segRect, segCircle } from './geom.js';
 import { clone, defOf, radiusOf, modelsFor, speedOf } from './state.js';
 import { validateOrders, actionCost } from './orders.js';
 import { buildStancePlan } from './stances.js';
 import { terrainFactor, pointBlocked, blocks, blocksMove, boardOf } from './nav.js';
 import { visibleTo, canSee, updateIntel } from './vision.js';
-import { obstacles, navKey, hitRadius, bdef, applyQueue, startQueues, graveAt, spreadGraves, spawnSpot, armyValue, incomeOf, edgeDist, gatherRate } from './base.js';
+import { obstacles, navKey, hitRadius, bdef, applyQueue, startQueues, graveAt, spreadGraves, finishTech, tkOf, ruleOf, spawnSpot, armyValue, incomeOf, edgeDist, gatherRate } from './base.js';
 import { approachSpot } from './builders.js';
 import { Nav } from './nav.js';
 import { BUILDINGS, FACTIONS, trainCost } from '../data/units.js';
@@ -542,7 +542,7 @@ export function resolveRound(state0, ordersIn) {
           const ang = (i / sk.count) * Math.PI * 2 + 0.6, off = sk.count > 1 ? 0.9 : 0;
           const z = addSquad(s, q.owner, 'summon', st.cx + Math.cos(ang) * off, st.cz + Math.sin(ang) * off);
           z.fx = q.owner === 0 ? 1 : -1; z.stance = 'advance';   // summoned skeletons march on the enemy
-          z.ttl = RULES.summonTtl + 1;                           // this round doesn't count toward its life
+          z.ttl = RULES.summonTtl + ruleOf(s, q.owner, 'summonTtl') + 1;                           // this round doesn't count toward its life
           freeSpot(s, z);
           ev({ type: 'spawn', id: z.id, bid: q.id, role: 'summon', owner: q.owner, x: r3(z.x), z: r3(z.z), fx: z.fx, summon: true, mid: true, faction: z.faction, paint: z.paint, models: z.models, hp: z.hp });
           rec(z, T);
@@ -788,8 +788,14 @@ export function resolveRound(state0, ordersIn) {
   // training
   for (const b of s.buildings) {
     if (!b.train || --b.train.left > 0) continue;
+    if (b.train.tech) {   // research done: the whole side gets it
+      const id = b.train.tech; b.train = null;
+      finishTech(s, b.owner, id);
+      ev({ type: 'researched', id: b.id, tech: id, owner: b.owner });
+      continue;
+    }
     const role = b.train.role; b.train = null;
-    const def = FACTIONS[s.players[b.owner].faction].units[role];
+    const def = unitDef(s.players[b.owner].faction, role, tkOf(s, b.owner));
     const spot = spawnSpot(s, b, 0.5 + 0.42 * Math.sqrt(def.models) + (def.look === 'rider' || def.look === 'wraith' ? 0.12 : 0));
     if (!spot) { ev({ type: 'spawnFail', id: b.id, role }); continue; }
     // the undead swarm comes in pairs: the second squad stands next to the first
@@ -848,7 +854,7 @@ export function resolveRound(state0, ordersIn) {
     for (const d of deaths) {
       const c = graveAt(s, p, d.x, d.z);
       if (!c) continue;
-      const amount = d.hero ? RULES.soulPerHero : d.n * RULES.soulPerModel;
+      const amount = d.hero ? RULES.soulPerHero : d.n * (RULES.soulPerModel + ruleOf(s, p, 'soulPerModel'));
       s.supply[p] += amount;
       ev({ type: 'souls', owner: p, x: r3(d.x), z: r3(d.z), amount });
       // the graves spread where they died: a small grave area at that graveyard's nearest edge
@@ -861,6 +867,15 @@ export function resolveRound(state0, ordersIn) {
       const cap = bdef(b).grave;
       if ((b.grave || 0) < cap) { b.grave = r3(cap); ev({ type: 'graves', id: b.id, r: b.grave }); }
     }
+    // Plague of Graves (research): enemy squads standing on these graves lose HP per model (never the last HP)
+    const drain = ruleOf(s, p, 'graveDrain');
+    if (drain) for (const q of s.squads) {
+      if (q.owner === p || q.hp <= 0 || !graveAt(s, p, q.x, q.z)) continue;
+      const loss = Math.min(q.hp - 1, drain * q.models);
+      if (loss <= 0) continue;
+      q.hp = r3(q.hp - loss); q.models = modelsFor(q, q.hp);
+      ev({ type: 'plague', id: q.id, owner: p, amount: loss, hp: q.hp, models: q.models });
+    }
   }
   // revive: any of its squads standing in the zone at the end of a round adds progress; enemies inside don't stop it
   for (const p of [0, 1]) {
@@ -868,9 +883,9 @@ export function resolveRound(state0, ordersIn) {
     if (!z || z.round === round) continue;
     if (s.squads.some(o => o.owner === p && o.hp > 0 && o.role !== 'builder' && !o.ttl && dist(o.x, o.z, z.x, z.z) - radiusOf(o) <= RULES.reviveRadius)) {
       z.progress++;
-      ev({ type: 'reviveTick', owner: p, progress: z.progress, need: RULES.reviveRounds });
+      ev({ type: 'reviveTick', owner: p, progress: z.progress, need: RULES.reviveRounds + ruleOf(s, p, 'reviveRounds') });
     }
-    if (z.progress >= RULES.reviveRounds) {
+    if (z.progress >= RULES.reviveRounds + ruleOf(s, p, 'reviveRounds')) {
       const h = addSquad(s, p, 'hero', z.x, z.z), hd = defOf(h);
       h.hp = Math.max(1, Math.round(hd.hpPer * RULES.reviveHp));
       freeSpot(s, h);

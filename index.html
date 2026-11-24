@@ -31,6 +31,7 @@ try { for (const k of Object.keys(localStorage)) if (k.startsWith('tiers-v4-')) 
     <div class="top-r">
       <div class="eco" id="t-sup"></div>
       <div class="cp" id="t-cp" title="Command points: squads you can give exact orders to this round"></div>
+      <button class="ib" id="b-tech" title="Tech tree (T)"></button>
       <button class="ib" id="b-help" title="How to play">?</button>
       <button class="ib" id="b-menu" title="Menu">≡</button>
     </div>
@@ -137,6 +138,7 @@ try { for (const k of Object.keys(localStorage)) if (k.startsWith('tiers-v4-')) 
   <div class="card opts-card">
     <div class="help-head"><h2>Menu</h2><button class="ib" id="o-close">✕</button></div>
     <button class="opt" id="o-settings"><span><b>⚙ Settings</b><small>Graphics, audio, gameplay, camera and controls</small></span></button>
+    <button class="opt" id="o-tech"><span><b>Tech tree</b><small>Tiers, research and doctrines for your army</small></span></button>
     <button class="opt" id="o-help"><span><b>How to play</b><small>Rules, economy, fog, online and the icon legend</small></span></button>
     <button class="opt" id="o-quit"><span><b>Quit to main menu</b><small>Ends this battle</small></span></button>
   </div>

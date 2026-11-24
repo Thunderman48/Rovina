@@ -1,11 +1,12 @@
 // Headless tests for the simulation. Run: node tests/sim.test.mjs
-import { RULES, FACTIONS, BUILDINGS, trainCost, skillOf } from '../js/data/units.js';
+import { RULES, FACTIONS, BUILDINGS, trainCost, skillOf, pairOf } from '../js/data/units.js';
 import { createGame, addSquad, defOf, radiusOf, emptyOrders, emptyPlan } from '../js/sim/state.js';
 import { resolveRound, damageAfter, engagedWith, losCut } from '../js/sim/resolve.js';
 import { cpUsage, validateOrders } from '../js/sim/orders.js';
 import { aiOrders, aiMemory } from '../js/ai/ai.js';
 import { canSee, visibleTo } from '../js/sim/vision.js';
-import { placeError, addBuilding, incomeOf, obstacles, startQueues, armySize, spreadGraves } from '../js/sim/base.js';
+import { placeError, addBuilding, incomeOf, obstacles, startQueues, armySize, spreadGraves, finishTech, techError, gateOf, validateQueue, bdef, bname, tkOf, ruleOf, bonusCp } from '../js/sim/base.js';
+import { TECH } from '../js/data/tech.js';
 import { builderPlan } from '../js/sim/builders.js';
 import { buildStancePlan } from '../js/sim/stances.js';
 import { knownEnemyHq } from '../js/sim/vision.js';
@@ -824,13 +825,13 @@ test('training queue: each squad is paid when it starts, and they come out one a
 test('an unaffordable front item waits and nothing behind it jumps ahead', () => {
   const s = k(); s.supply[0] = 25;
   const b = addBuilding(s, 0, 'barracks', 6, 4, 0, true);
-  const fc = startQueues(s, 0, { tq: { [b.id]: ['tank', 'fighter'] } });
-  eq(fc.trains[b.id][0].wait, 'gold'); eq(fc.trains[b.id][0].need, 5); eq(fc.trains[b.id][1].wait, 'line');
-  let r = resolveRound(s, [qo({ trains: { [b.id]: ['tank', 'fighter'] } }), ob()]);
+  const fc = startQueues(s, 0, { tq: { [b.id]: ['ranged', 'fighter'] } });
+  eq(fc.trains[b.id][0].wait, 'gold'); eq(fc.trains[b.id][0].need, 1); eq(fc.trains[b.id][1].wait, 'line');
+  let r = resolveRound(s, [qo({ trains: { [b.id]: ['ranged', 'fighter'] } }), ob()]);
   let B = r.state.buildings.find(x => x.id === b.id);
-  eq(B.train, null, 'the tank waits (25 < 30) and the fighter (24) does not jump ahead'); eq(r.state.supply[0], 25 + incomeOf(r.state, 0));
+  eq(B.train, null, 'the crossbows wait (25 < 26) and the fighter (24) does not jump ahead'); eq(r.state.supply[0], 25 + incomeOf(r.state, 0));
   r = resolveRound(r.state, [ob(), ob()]);
-  eq(r.state.buildings.find(x => x.id === b.id).train.role, 'tank', 'starts once income arrives');
+  eq(r.state.buildings.find(x => x.id === b.id).train.role, 'ranged', 'starts once income arrives');
 });
 
 test('the army cap holds the queue; cancelling a waiting item is free, stopping training refunds it', () => {
@@ -987,6 +988,103 @@ test('graveyards spread almost at once to their building\'s reach; a destroyed b
   r = resolveRound(r.state, holdAll(r.state));
   ok(r.state.graves[1].some(g => g.x === 31.5 && g.r === BUILDINGS.well.grave), 'its graveyard stays');
   ok(placeError(r.state, 1, 'barracks', 24, 16) === '' || placeError(r.state, 1, 'barracks', 24, 16) !== 'Only in your third of the table', 'and you can build anywhere');
+});
+
+test('tech: research shares the training queue, is paid when it starts, and finishes for the whole side', () => {
+  const s = k(); s.supply[0] = 200;
+  const hq = s.buildings.find(b => b.owner === 0 && b.type === 'hq');
+  addBuilding(s, 0, 'barracks', 6, 4, 0, true);
+  // the Castle needs a Barracks; queue it with Men-at-arms behind it
+  let r = resolveRound(s, [qo({ trains: { [hq.id]: ['tech:castle', 'fighter'] } }), ob()]);
+  let H = r.state.buildings.find(b => b.id === hq.id);
+  eq(H.train.tech, 'castle'); eq(H.queue.join(), 'fighter', 'the fighter waits behind the research');
+  eq(r.state.supply[0], 200 - TECH.castle.cost + incomeOf(s, 0));
+  ok(events(r.log).some(e => e.type === 'research' && e.tech === 'castle'));
+  for (let i = 0; i < TECH.castle.rounds - 1; i++) r = resolveRound(r.state, [ob(), ob()]);
+  ok(r.state.tech[0].includes('castle'), 'researched after ' + TECH.castle.rounds + ' rounds');
+  H = r.state.buildings.find(b => b.id === hq.id);
+  eq(BUILDINGS.hq.hp, 220); eq(bdef(H).hp, 300); eq(H.hp, 300, 'the Keep became a Castle (HP grows)'); eq(H.tier, 2);
+  eq(bname(H, 'kingdom'), 'Castle');
+  ok(events(r.log).some(e => e.type === 'researched' && e.tech === 'castle'));
+});
+
+test('tech: gates, prerequisites, doctrines and tech buildings', () => {
+  const s = k(); s.supply[0] = 500;
+  const hq = s.buildings.find(b => b.owner === 0 && b.type === 'hq');
+  const bar = addBuilding(s, 0, 'barracks', 6, 4, 0, true);
+  // tier gates: no Shieldwall or Outriders before the Castle; no Blacksmith either
+  eq(gateOf(s, 0, 'tank'), 'castle'); eq(gateOf(s, 0, 'fighter'), '');
+  let v = validateQueue(s, 0, { queue: { trains: { [bar.id]: ['tank', 'fighter'] } } });
+  eq(v.tq[bar.id].join(), 'fighter', 'the gated Shieldwall is refused');
+  eq(placeError(s, 0, 'forge', 9, 13), 'Needs the Castle');
+  // prerequisites: Crop Rotation needs the Plough and the Castle; queued after them in the line it is fine
+  eq(techError(s, 0, 'rotation', hq), 'Needs Heavy Plough');
+  v = validateQueue(s, 0, { queue: { trains: { [hq.id]: ['tech:plough', 'tech:castle', 'tech:rotation'] } } });
+  eq(v.tq[hq.id].join(), 'tech:plough,tech:castle,tech:rotation');
+  // at the wrong building / twice
+  eq(techError(s, 0, 'steel1', hq), 'Researched at the Blacksmith');
+  v = validateQueue(s, 0, { queue: { trains: { [hq.id]: ['tech:plough', 'tech:plough'] } } });
+  eq(v.tq[hq.id].length, 1, 'the same research only once');
+  // doctrines: one pick locks the other
+  finishTech(s, 0, 'castle');
+  eq(gateOf(s, 0, 'tank'), ''); eq(placeError(s, 0, 'forge', 9, 13), '');
+  v = validateQueue(s, 0, { queue: { trains: { [hq.id]: ['tech:knightly', 'tech:yeomanry'] } } });
+  eq(v.tq[hq.id].join(), 'tech:knightly', 'only one doctrine of a pair');
+  finishTech(s, 0, 'knightly');
+  eq(techError(s, 0, 'yeomanry', hq), 'You chose Knightly Order');
+  // the Citadel needs a Blacksmith or a Chapel
+  eq(techError(s, 0, 'citadel', hq, [], [], true), 'Needs a Blacksmith or Chapel');
+});
+
+test('tech: effects reach squads, buildings and side rules', () => {
+  const s = arena([[0, 'fighter', 10, 16], [0, 'ranged', 10, 20], [1, 'swarm', 40, 4], [1, 'hero', 40, 10]]);
+  const mf = s.squads[0], cb = s.squads[1];
+  const dmg0 = defOf(mf).attack.dmg, arm0 = defOf(mf).armor, hp0 = mf.hp, rng0 = defOf(cb).attack.range;
+  finishTech(s, 0, 'steel1'); finishTech(s, 0, 'plate1'); finishTech(s, 0, 'bodkin'); finishTech(s, 0, 'legend');
+  ok(Math.abs(defOf(mf).attack.dmg - dmg0 * 1.15) < 0.01, 'Steel Weapons I'); eq(defOf(mf).armor, arm0 + 2, 'Plate Armour I');
+  eq(defOf(cb).attack.range, rng0 + 2, 'Bodkin Bolts');
+  eq(mf.hp, hp0, 'no HP change without an HP research');
+  eq(FACTIONS.kingdom.units.fighter.attack.dmg, dmg0, 'the base data is untouched');
+  // a squad trained later gets it too; JSON clone keeps it
+  const z = addSquad(s, 0, 'fighter', 12, 12);
+  eq(defOf(z).armor, arm0 + 2);
+  eq(defOf(JSON.parse(JSON.stringify(z))).armor, arm0 + 2, 'survives a clone');
+  // HP research raises current HP with the max
+  const sw = s.squads[2], swHp = sw.hp;
+  finishTech(s, 1, 'bonetide');
+  eq(sw.hp, swHp + sw.models, 'Bone Tide: +1 HP per model now');
+  // pair 3, summon count, revive, souls, grave areas, income
+  finishTech(s, 1, 'swarm3'); eq(pairOf('undead', 'swarm', tkOf(s, 1)), 3, 'Endless Swarm');
+  finishTech(s, 1, 'horde'); eq(skillOf(defOf(s.squads[3]), 'summon').count, 3, 'Endless Horde');
+  finishTech(s, 1, 'harvest'); eq(ruleOf(s, 1, 'soulPerModel'), 1);
+  finishTech(s, 1, 'restless'); eq(ruleOf(s, 1, 'graveBlobMult', 1), 1.25);
+  finishTech(s, 1, 'phylactery'); eq(RULES.reviveRounds + ruleOf(s, 1, 'reviveRounds'), RULES.reviveRounds - 1);
+  const inc0 = incomeOf(s, 0); finishTech(s, 0, 'castle'); finishTech(s, 0, 'citadel'); finishTech(s, 0, 'guild');
+  eq(incomeOf(s, 0), inc0 + 4, 'Guild Charter: Keep +4');
+  eq(bonusCp(s, 0), 1, 'the Citadel: +1 command point');
+});
+
+test('tech: Endless Swarm trains three squads; a destroyed tech building keeps its research', () => {
+  const s = arena([[0, 'fighter', 10, 4]]); s.supply[1] = 200;
+  finishTech(s, 1, 'swarm3');
+  const crypt = s.buildings.find(b => b.owner === 1 && b.type === 'hq');
+  const r = resolveRound(s, [orders(), { squads: {}, stances: {}, queue: { trains: { [crypt.id]: ['swarm'] } } }]);
+  eq(r.state.squads.filter(q => q.owner === 1 && q.role === 'swarm').length, 3);
+  // research survives losing the building that did it
+  const t = arena([[0, 'fighter', 10, 4]]); t.supply[1] = 200;
+  finishTech(t, 1, 'mausoleum');
+  const pit = addBuilding(t, 1, 'pit', 38, 13, 0, true);
+  const r2 = resolveRound(t, [orders(), { squads: {}, stances: {}, queue: { trains: { [pit.id]: ['tech:bones1'] } } }]);
+  ok(r2.state.buildings.find(b => b.id === pit.id).train.tech === 'bones1');
+  finishTech(r2.state, 1, 'plating1');
+  r2.state.buildings = r2.state.buildings.filter(b => b.id !== pit.id);
+  ok(r2.state.tech[1].includes('plating1') && defOf(addSquad(r2.state, 1, 'fighter', 40, 20)).armor === FACTIONS.undead.units.fighter.armor + 1, 'kept');
+});
+
+test('tech: the AI tiers up and researches in an AI-vs-AI game', () => {
+  let s = createGame(1, ['kingdom', 'undead'], 'crossing'); const mem = [aiMemory(), aiMemory()];
+  while (s.winner === null && s.round < 40) s = resolveRound(s, [aiOrders(s, 0, mem[0]), aiOrders(s, 1, mem[1])]).state;
+  ok(s.tech[0].length + s.tech[1].length >= 3, 'research done: ' + JSON.stringify(s.tech));
 });
 
 test('the Monolith: an ordinary Undead building on graves that heals and spreads graves', () => {

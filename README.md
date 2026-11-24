@@ -21,6 +21,9 @@ It is a static site with no build step and no server, so it runs on GitHub Pages
 * **Two economies.** The Kingdom earns **gold** from its Keep, mines and farms worked by up to 4
   peasants each. The Undead earn **souls** mainly from every model that dies on their graveyards;
   the Crypt (1) and Soul Wells (2) only trickle.
+* **A tech tree for each army** (🜲 button or T). Upgrade your HQ to Tier 2 to unlock elite squads and
+  tech buildings (Blacksmith and Chapel / Charnel Pit and Dark Sanctum), then Tier 3. Research shares
+  the building's queue, and at each tier you pick one of two doctrines that changes how your army plays.
 * **Production queues.** Queue up to 5 buildings for your base (free builders take the next one) and up
   to 5 squads at each HQ / Barracks. Everything is paid when it starts, and the **Production** bar above
   your squad cards shows every queue: tap to cancel, drag to reorder.
@@ -62,6 +65,5 @@ node tests/sim.test.mjs          # simulation tests
 * Every tunable number lives in `js/data/units.js`; the maps in `js/data/maps.js`.
 
 ## To do
-* Upgrades (planned): first, Skeleton Warbands trained in threes instead of pairs.
 * Phone and tablet layout pass: dock size, crowded nameplates, and the builder panel covering
   half the screen on phones.
