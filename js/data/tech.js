@@ -60,8 +60,8 @@ export const TECH = {
                buildings: [{ types: ['hq', 'barracks', 'tower', 'farm', 'mine', 'banner', 'wall', 'forge', 'chapel'], hpMult: 1.3 }, { types: ['tower'], fireRange: 2 }, { types: ['wall'], workMult: 0.5 }] },
 
   // ---------------------------------------------------------------- Undead
-  mausoleum: { faction: 'undead', name: 'Mausoleum', icon: 'goal', at: 'hq', cost: 40, rounds: 3, tier: 2, hqTier: 2, needsBuilding: ['barracks'],
-               desc: 'Tier 2: the Crypt becomes a Mausoleum (HP 300, graves 12″). Unlocks Grave Guard, Wraiths and Necromancers, the Charnel Pit, the Dark Sanctum and a doctrine.',
+  mausoleum: { faction: 'undead', name: 'Mausoleum', icon: 'goal', at: 'hq', cost: 40, rounds: 2, tier: 2, hqTier: 2, needsBuilding: ['barracks'],
+               desc: 'Tier 2: the Crypt becomes a Mausoleum (HP 300, graves 12″). Unlocks Grave Guard and Wraiths (Ossuary), Necromancers (Crypt), the Charnel Pit, the Dark Sanctum and a doctrine.',
                buildings: [{ types: ['hq'], hp: 300, graveSet: 12, name: 'Mausoleum' }] },
   necropolis:{ faction: 'undead', name: 'Necropolis', icon: 'goal', at: 'hq', cost: 70, rounds: 4, tier: 3, hqTier: 3, needs: ['mausoleum'], needsBuilding: ['pit', 'sanctum'],
                desc: 'Tier 3: the Necropolis (HP 380, graves 14″). Unlocks the strongest research and the last doctrine.',

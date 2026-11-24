@@ -162,7 +162,7 @@ export const FACTIONS = {
     // balancing rule (owner): low tier (swarm, fighter, ranged) keep their costs, change their stats;
     // high tier (tank, fast, mage, the Lich's spells) may change costs
     lowTier: ['swarm', 'fighter', 'ranged'],
-    hqTrains: ['swarm'],
+    hqTrains: ['swarm', 'mage'],   // the Crypt raises the swarm and (from the Mausoleum) the Necromancers
     graves: true,             // its buildings spread graveyards
     maxBuilders: 0,
     rises: true,              // buildings rise out of the ground by themselves (RULES.riseWork per round)
@@ -178,7 +178,7 @@ delete FACTIONS.undead.units.summon.pair;
 //  income: per round once finished. site: must stand on a resource site. souls: collects souls nearby.
 export const BUILDINGS = {
   hq:       { name: { kingdom: 'Keep', undead: 'Crypt' }, icon: 'goal', cost: 0, work: 0, hp: 220, armor: 8, shape: 'rect', w: 4, d: 4, vision: 10, fire: { dmg: 3, range: 8 }, trains: 'faction', grave: 10 },
-  barracks: { name: { kingdom: 'Barracks', undead: 'Ossuary' }, icon: 'spawn', cost: 30, work: 240, hp: 150, armor: 8, shape: 'rect', w: 3.5, d: 2.5, vision: 6, trains: ['tank', 'fighter', 'swarm', 'ranged', 'fast', 'mage'], grave: 6 },
+  barracks: { name: { kingdom: 'Barracks', undead: 'Ossuary' }, icon: 'spawn', cost: 30, work: 240, hp: 150, armor: 8, shape: 'rect', w: 3.5, d: 2.5, vision: 6, trains: ['tank', 'fighter', 'swarm', 'ranged', 'fast'], grave: 6 },
   tower:    { name: { kingdom: 'Watchtower', undead: 'Bone Spire' }, icon: 'range', cost: 25, work: 200, hp: 110, armor: 6, shape: 'circle', r: 0.9, vision: 13, fire: { dmg: 4, range: 11 }, grave: 6 },
   banner:   { name: { kingdom: 'Banner', undead: 'Obelisk' }, icon: 'cp', cost: 20, work: 120, hp: 60, armor: 4, shape: 'circle', r: 0.55, vision: 6, cp: 1 },
   // undead: the only building allowed off graves; must be raised near the Lich or Necromancers (caster);

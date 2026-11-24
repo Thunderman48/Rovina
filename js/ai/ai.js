@@ -383,8 +383,8 @@ function economy(s, p, known, orders, level = 'normal') {
     const myRoles = s.squads.filter(q => q.owner === p).map(q => q.role);
     const n = r => myRoles.filter(x => x === r).length;
     // undead: half the time a cheap swarm pair (the horde), else the usual mix
+    const mage = trainsOf(b.type, fac).includes('mage') && !gateOf(s, p, 'mage') && n('mage') < Math.max(1, Math.floor(army / 6));
     const swarm = trainsOf(b.type, fac).includes('swarm') && (b.type === 'hq' || n('swarm') <= n('fighter') + n('ranged'));
-    const mage = trainsOf(b.type, fac).includes('mage') && n('mage') < Math.floor(army / 6);
     let role = mage ? 'mage' : swarm ? 'swarm' : shooters >= 2 && n('fast') < 2 ? 'fast' : n('tank') < 1 ? 'tank' : n('ranged') < n('fighter') ? 'ranged' : 'fighter';
     if (!trainsOf(b.type, fac).includes(role) || gateOf(s, p, role)) role = trainsOf(b.type, fac).find(r => r !== 'builder' && !gateOf(s, p, r) && (r !== 'fighter' || !trainsOf(b.type, fac).includes('ranged') || n('ranged') >= n('fighter')));
     if (!role) continue;

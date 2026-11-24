@@ -49,7 +49,7 @@ and Men-at-arms; the Crypt trains the swarm.
   from **deaths on grave ground** (which spreads it where they died; cheap squads pay back more than they cost), plus a
   tiny trickle from the Crypt (1) and Soul Wells (2). Hero **the Lich**, a slow **mage** with **mana**:
   Summon Warband (temporary skeletons), Dark Thunder (chain lightning), Corpse Explosion; its weaker
-  caster troop, **Necromancers**, comes from the Ossuary. The **Monolith** (built on graves like every
+  caster troop, **Necromancers**, comes from the Crypt (from Tier 2). The **Monolith** (built on graves like every
   Undead building) spreads graves and heals instead of giving command points.
 - **Both:** a fallen hero leaves a **revive zone**; hold it for 3 rounds to bring the hero back (§5.7b).
 - **Tech tree** (§11.7, since 2026-11-24): HQ tiers (Tier 2 unlocks the elite squads and the tech
@@ -292,7 +292,7 @@ width 0.6″; walls block it, forests give cover).
   fizzles (`fizzle` event; the mana is spent).
 
 **Necromancers (Undead troop, role `mage`, high tier):** 2 models × 10 HP, armour 1, tier 4, vision
-10, 1 defend, trained at the Ossuary (22 souls, 2 rounds). Same mage rules as the Lich (no cooldowns,
+10, 1 defend, trained **at the Crypt only** (22 souls, 2 rounds; since 2026-11-24, once the Crypt is a Mausoleum). Same mage rules as the Lich (no cooldowns,
 repeat casts while AP and mana last), with its own mana: **60 max, 40 at the start, +15 a round**.
 - **Bolt** (basic attack): a volley line, 25 AP, 4 per model (8 for the full squad), range 9″.
 - **Dark Thunder (weaker)** (`thunder`, 15 AP, **20 mana**): the same rules as the Lich's, aim within
@@ -375,8 +375,8 @@ such enemy (a normal volley toward it, needing a clear line; a lobbing unit lobs
 ## 7. Units *(generated)*
 
 Base stats below; research (§11.7) changes some of them in a game. **Gated squads** train only after
-the HQ's Tier 2: Kingdom Shieldwall and Outriders (Castle); Undead Grave Guard, Wraiths and
-Necromancers (Mausoleum). Everything else is available from the start.
+the HQ's Tier 2: Kingdom Shieldwall and Outriders (Castle); Undead Grave Guard, Wraiths (both at the
+Ossuary) and Necromancers (Mausoleum; trained at the Crypt only). Everything else is available from the start.
 
 <!-- GEN:units -->
 **Kingdom** (`FACTIONS.kingdom.units`)
@@ -505,7 +505,7 @@ Damage per round = hits per 100 AP x damageAfter(dmg per model x models, armour)
 | Kingdom | Gold | 60 | 6 | farm 8 (4 gatherers), mine 10 (2 gatherers) | farm ~12, mine ~10 | barracks, tower, farm, mine, banner, wall, forge, chapel |
 | Undead Legion | Souls | 90 | 1 | - (no builders) | - | barracks, tower, well, monolith, wall, pit, sanctum |
 
-Builders: Kingdom up to 10 peasant squads (not in the army cap); Undead 0 (buildings rise by themselves). HQ trains: Kingdom builder/fighter; Undead Legion swarm.
+Builders: Kingdom up to 10 peasant squads (not in the army cap); Undead 0 (buildings rise by themselves). HQ trains: Kingdom builder/fighter; Undead Legion swarm/mage.
 
 **Training cost (resource) and time (rounds)**
 
@@ -653,8 +653,8 @@ item waits.
 <!-- GEN:buildings -->
 | Type | Names (Kingdom / Undead) | Cost | Work (builder AP) | Builder-rounds | Undead rise rounds | HP | Site HP | Armour | Footprint | Vision | Fire (after the tiers) | Income/rnd | Special | Built by |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `hq` | Keep / Crypt | 0 | 0 | 0 | - | 220 | 66 | 8 | 4 x 4 | 10 | 3 x 4 = 12 raw, range 8" | - | trains kingdom: builder/fighter, undead: swarm | kingdom, undead |
-| `barracks` | Barracks / Ossuary | 30 | 240 | 2.4 | 3 | 150 | 45 | 8 | 3.5 x 2.5 | 6 | - | - | trains tank/fighter/swarm/ranged/fast/mage | kingdom, undead |
+| `hq` | Keep / Crypt | 0 | 0 | 0 | - | 220 | 66 | 8 | 4 x 4 | 10 | 3 x 4 = 12 raw, range 8" | - | trains kingdom: builder/fighter, undead: swarm/mage | kingdom, undead |
+| `barracks` | Barracks / Ossuary | 30 | 240 | 2.4 | 3 | 150 | 45 | 8 | 3.5 x 2.5 | 6 | - | - | trains tank/fighter/swarm/ranged/fast | kingdom, undead |
 | `tower` | Watchtower / Bone Spire | 25 | 200 | 2 | 3 | 110 | 33 | 6 | circle r 0.9 | 13 | 4 x 4 = 16 raw, range 11" | - | - | kingdom, undead |
 | `banner` | Banner / Obelisk | 20 | 120 | 1.2 | - | 60 | 18 | 4 | circle r 0.55 | 6 | - | - | +1 CP | kingdom |
 | `monolith` | Monolith / Monolith | 20 | 120 | 1.2 | 2 | 70 | 21 | 4 | circle r 0.6 | 7 | - | - | - | undead |
@@ -812,7 +812,7 @@ War commanders and C&C Generals powers for the exclusive picks.
 
 | id | Name | Tier | At | Cost | Rounds | Needs | Doctrine | Effect |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `mausoleum` | Mausoleum | 2 | Crypt | 40 | 3 | a Ossuary | - | Tier 2: the Crypt becomes a Mausoleum (HP 300, graves 12″). Unlocks Grave Guard, Wraiths and Necromancers, the Charnel Pit, the Dark Sanctum and a doctrine. |
+| `mausoleum` | Mausoleum | 2 | Crypt | 40 | 2 | a Ossuary | - | Tier 2: the Crypt becomes a Mausoleum (HP 300, graves 12″). Unlocks Grave Guard and Wraiths (Ossuary), Necromancers (Crypt), the Charnel Pit, the Dark Sanctum and a doctrine. |
 | `necropolis` | Necropolis | 3 | Crypt | 70 | 4 | Mausoleum, a Charnel Pit or Dark Sanctum | - | Tier 3: the Necropolis (HP 380, graves 14″). Unlocks the strongest research and the last doctrine. |
 | `restless` | Restless Earth | 1 | Crypt | 15 | 1 | - | - | Graves spread 25 % more where things die. |
 | `harvest` | Soul Harvest | 2 | Crypt | 30 | 2 | Mausoleum | - | Every model dying on your graves gives +1 soul. |
@@ -1071,9 +1071,9 @@ regardless: ordered squads go for the HQ unless in a fight.
 ### 14.5b Revive and the swarm
 - A fallen hero's revive zone: the 2 nearest ordered squads that aren't within 6″ of an enemy walk to it
   and hold it (all defends) until the hero returns.
-- Training (Undead): the Crypt always trains the swarm; an Ossuary trains **Necromancers** while it has
-  fewer than floor(army / 6) of them, else a swarm pair whenever it has no more swarm squads than
-  Warriors + archers, else the usual pick. It only starts a pair with 2 free
+- Training (Undead): the Crypt trains **Necromancers** (once the Mausoleum unlocks them) while it has
+  fewer than max(1, floor(army / 6)) of them, else the swarm; an Ossuary trains a swarm pair whenever it
+  has no more swarm squads than Warriors + archers, else the usual pick. It only starts a pair with 2 free
   cap slots.
 
 ### 14.6 Economy (build order, one new building per free builder per round, up to 3)
