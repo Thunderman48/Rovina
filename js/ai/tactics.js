@@ -14,6 +14,7 @@ import { Nav } from '../sim/nav.js';
 import { engagedWith, losCut } from '../sim/resolve.js';
 import { squadDpr, power, fightRatio } from './combat.js';
 import { dist } from '../sim/geom.js';
+import { coverSpots } from '../sim/cover.js';
 
 const speedIn = q => defOf(q).tier * RULES.moveFactor * RULES.ap;   // inches a round
 
@@ -100,7 +101,11 @@ export function tactics(K, P, skill, mem, inf, tasks, o, rnd) {
       const range = def.attack.range, gap = dist(q.x, q.z, t.x, t.z) - radiusOf(t);
       const blocked = def.attack.kind === 'volley' && losCut(s.terrain, q.x, q.z, t.x, t.z) < 1;
       if (gap > range * 0.95 || blocked) {
-        const pts = trimPath(q.x, q.z, nav().path(q.x, q.z, t.x, t.z), range * (blocked ? 0.45 : 0.8));
+        let pts = trimPath(q.x, q.z, nav().path(q.x, q.z, t.x, t.z), range * (blocked ? 0.45 : 0.8));
+        // a firing spot in cover near where it would stop, still in range (Dawn of War style)
+        const end = pts[pts.length - 1];
+        const spot = end && !blocked && coverSpots(s, q, end.x, end.z, 2.5, t).find(sp => dist(sp.x, sp.z, t.x, t.z) - radiusOf(t) <= range - 0.5);
+        if (spot) { const p2 = nav().path(q.x, q.z, spot.x, spot.z); if (p2.length) pts = p2; }
         const ap = Math.min(left, 45);
         if (pts.length) { plan.actions.push({ kind: 'move', pts, ap }); left -= ap; }
       }

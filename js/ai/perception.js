@@ -6,7 +6,7 @@
 import { FACTIONS } from '../data/units.js';
 import { GATES } from '../data/tech.js';
 import { defOf } from '../sim/state.js';
-import { hitRadius } from '../sim/base.js';
+import { hitRadius, footOf } from '../sim/base.js';
 import { visibleTo, knownEnemyHq, observers, canSee } from '../sim/vision.js';
 import { HQ_X, mirrorOn } from '../data/maps.js';
 import { dist } from '../sim/geom.js';
@@ -24,7 +24,7 @@ export function perceive(s, p, mem, skill) {
   // reaction time: Easy plans from last round's picture
   if (skill.delay) { const now = enemies; enemies = mem.lagEnemies || now; mem.lagEnemies = now; }
   const known = Object.values((s.intel && s.intel[p] && s.intel[p].known) || {}).filter(b => b.hp > 0)
-    .map(b => ({ ...b, r: hitRadius(b), building: true }));
+    .map(b => ({ ...b, foot: footOf(b), r: hitRadius(b), building: true }));
   const ehq = knownEnemyHq(s, p);
   // the enemy HQ spots not yet seen (where to look while its HQ is unknown)
   const mirror = mirrorOn(s.board.w, s.board.h);

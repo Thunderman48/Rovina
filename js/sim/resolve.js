@@ -17,7 +17,8 @@ import { buildStancePlan } from './stances.js';
 import { terrainFactor, pointBlocked, blocks, blocksMove, boardOf } from './nav.js';
 import { visibleTo, canSee, updateIntel } from './vision.js';
 import { obstacles, navKey, hitRadius, bdef, applyQueue, startQueues, graveAt, spreadGraves, finishTech, tkOf, ruleOf, spawnSpot, armyValue, incomeOf, edgeDist, gatherRate } from './base.js';
-import { approachSpot } from './builders.js';
+import { approachSpot, closestOn } from './builders.js';
+import { coverOf, coverMult } from './cover.js';
 import { Nav } from './nav.js';
 import { BUILDINGS, FACTIONS, trainCost } from '../data/units.js';
 import { addSquad, freeSpot } from './state.js';
@@ -142,6 +143,12 @@ export function resolveRound(state0, ordersIn) {
   s.buildings = s.buildings || [];
   const obs = () => obstacles(s);
   const rad = e => e.type ? hitRadius(e) : radiusOf(e);
+  // buildings are hit by their real footprint (rect or circle), squads by their round base
+  const isB = e => !!e.type;
+  const edgeFrom = (e, x, z) => isB(e) ? edgeDist(e, x, z) : dist(x, z, e.x, e.z) - radiusOf(e);
+  const segHit = (ax, az, bx, bz, e, pad) => isB(e) && e.r === undefined ? segRect(ax, az, bx, bz, e, pad) : segCircle(ax, az, bx, bz, e.x, e.z, (isB(e) ? e.r : radiusOf(e)) + pad);
+  const inCircle = (e, cx, cz, R) => isB(e) ? edgeDist(e, cx, cz) <= R : dist(cx, cz, e.x, e.z) <= R + radiusOf(e) * 0.6;
+  const inArc = (ox, oz, dx, dz, R, ch, e) => { if (!isB(e)) return arcHits(ox, oz, dx, dz, R, ch, e.x, e.z, radiusOf(e)); const c = closestOn(e, ox, oz); return arcHits(ox, oz, dx, dz, R, ch, c.x, c.z, 0); };
   // enemy squads and buildings (allBuildings: own buildings too, for things that block shots)
   const targets = (q, allBuildings = false) => s.squads.filter(e => e.hp > 0 && e.owner !== q.owner)
     .concat(s.buildings.filter(b => b.hp > 0 && (allBuildings || b.owner !== q.owner)));
@@ -191,15 +198,17 @@ export function resolveRound(state0, ordersIn) {
       const src = unitAt(h.src);
       if (src) { const d = norm(src.x - q.x, src.z - q.z); if (d.l > 1e-4 && d.x * q.fx + d.z * q.fz >= r.wall.cosHalf) walled = true; }
     }
+    // cover where it stands now (walls only count against attacks from their far side)
+    const hs = unitAt(h.src), cover = coverOf(s, q, hs?.x, hs?.z), cm = coverMult(cover, h.kind);
     let defended = false;
     if (r && r.defends > 0) { r.defends--; defended = true; }
-    const dmg = damageAfter(h.dmg * (h.cover ? RULES.coverMult : 1) * (walled ? r.wall.mult : 1), defOf(q).armor + (r ? r.armor : 0), defended);
+    const dmg = damageAfter(h.dmg * cm * (walled ? r.wall.mult : 1), defOf(q).armor + (r ? r.armor : 0), defended);
     const before = q.models;
     q.hp = Math.max(0, q.hp - dmg);
     q.models = modelsFor(q, q.hp);
     if (before > q.models && !q.ttl) deaths.push({ x: q.x, z: q.z, n: before - q.models, hero: defOf(q).models === 1, T });
     if (h.stun && q.hp > 0) { q.stun = Math.max(q.stun || 0, h.stun); ev({ type: 'stun', id: q.id, src: h.src, ap: h.stun }); }
-    ev({ type: 'hit', src: h.src, dst: q.id, dmg, raw: Math.round(h.dmg), defended, cover: !!h.cover, walled, kind: h.kind, hp: q.hp, models: q.models, lost: before - q.models, defLeft: r ? r.defends : 0 });
+    ev({ type: 'hit', src: h.src, dst: q.id, dmg, raw: Math.round(h.dmg), defended, cover: cm < 1 ? cover : null, walled, kind: h.kind, hp: q.hp, models: q.models, lost: before - q.models, defLeft: r ? r.defends : 0 });
   }
   function applyHits(batch) {
     const byDst = new Map();
@@ -224,21 +233,20 @@ export function resolveRound(state0, ordersIn) {
     const bx = ox + dx * at.range, bz = oz + dz * at.range;
     const tCut = losCut(s.terrain, ox, oz, bx, bz);
     let best = null, bt = tCut;
-    for (const e of targets(q, true)) {
-      const tt = segCircle(ox, oz, bx, bz, e.x, e.z, rad(e) + at.width / 2);
+    // the first enemy on the line (its own side's buildings never stop or weaken its shots)
+    for (const e of targets(q)) {
+      const tt = segHit(ox, oz, bx, bz, e, at.width / 2);
       if (tt >= 0 && tt < bt) { bt = tt; best = e; }
     }
-    if (best && best.owner === q.owner) best = null;     // its own building is in the way
     const ex = ox + (bx - ox) * bt, ez = oz + (bz - oz) * bt;
-    const cover = best && !best.type ? inCover(s.terrain, ox, oz, best.x, best.z) : false;
-    if (best) hits.push({ src: q.id, dst: best, dmg: atkDmg(r, at.dmg), kind: 'volley', cover });
-    ev({ type: 'release', id: q.id, kind: 'volley', hit: best ? [best.id] : [], ex: r3(ex), ez: r3(ez), blocked: !best && bt < 1, cover, overwatch });
+    if (best) hits.push({ src: q.id, dst: best, dmg: atkDmg(r, at.dmg), kind: 'volley' });
+    ev({ type: 'release', id: q.id, kind: 'volley', hit: best ? [best.id] : [], ex: r3(ex), ez: r3(ez), blocked: !best && bt < 1, overwatch });
   }
   // a lobbed circle (or bone blast) at (cx,cz): everyone inside, walls don't matter
   function circleHit(r, kind, cx, cz, R, dmg, overwatch = false) {
     const q = r.q, struck = [];
     for (const e of targets(q)) {
-      if (dist(cx, cz, e.x, e.z) <= R + rad(e) * 0.6) { hits.push({ src: q.id, dst: e, dmg, kind }); struck.push(e.id); }
+      if (inCircle(e, cx, cz, R)) { hits.push({ src: q.id, dst: e, dmg, kind }); struck.push(e.id); }
     }
     ev({ type: 'release', id: q.id, kind, hit: struck, ex: r3(cx), ez: r3(cz), overwatch });
   }
@@ -263,8 +271,8 @@ export function resolveRound(state0, ordersIn) {
     const bx = ox + dx * sk.range, bz = oz + dz * sk.range;
     const tCut = losCut(s.terrain, ox, oz, bx, bz), struck = [];
     for (const e of targets(q)) {
-      const tt = segCircle(ox, oz, bx, bz, e.x, e.z, rad(e) + sk.width / 2);
-      if (tt >= 0 && tt < tCut) { hits.push({ src: q.id, dst: e, dmg: atkDmg(r, sk.dmg), kind: 'pierce', cover: !e.type && inCover(s.terrain, ox, oz, e.x, e.z) }); struck.push(e.id); }
+      const tt = segHit(ox, oz, bx, bz, e, sk.width / 2);
+      if (tt >= 0 && tt < tCut) { hits.push({ src: q.id, dst: e, dmg: atkDmg(r, sk.dmg), kind: 'pierce' }); struck.push(e.id); }
     }
     ev({ type: 'release', id: q.id, kind: 'pierce', hit: struck, ex: r3(ox + (bx - ox) * tCut), ez: r3(oz + (bz - oz) * tCut), blocked: !struck.length && tCut < 1 });
   }
@@ -304,7 +312,7 @@ export function resolveRound(state0, ordersIn) {
     }
     if (!best) { ev({ type: 'fizzle', id: q.id, kind: 'explode', ex: r3(cx), ez: r3(cz) }); return; }
     const dmg = (sk.base + sk.perModel * best.models) * r.mult, struck = [];
-    for (const e of targets(q)) if (dist(best.x, best.z, e.x, e.z) <= sk.radius + rad(e) * 0.6) { hits.push({ src: q.id, dst: e, dmg, kind: 'explode' }); struck.push(e.id); }
+    for (const e of targets(q)) if (inCircle(e, best.x, best.z, sk.radius)) { hits.push({ src: q.id, dst: e, dmg, kind: 'explode' }); struck.push(e.id); }
     best.hp = 0; best.models = 0;
     ev({ type: 'release', id: q.id, kind: 'explode', hit: struck, ex: r3(best.x), ez: r3(best.z), burst: best.id });
   }
@@ -315,7 +323,7 @@ export function resolveRound(state0, ordersIn) {
   // the nearest enemy already in reach takes the hit instead.
   function strike(r, st) {
     const q = r.q, at = r.def.attack, rq = radiusOf(q);
-    const gapTo = e => dist(q.x, q.z, e.x, e.z) - rq - rad(e);
+    const gapTo = e => edgeFrom(e, q.x, q.z) - rq;
     let tg = st.tg ? unitAt(st.tg) : null;
     if (tg && tg.hp <= 0) {
       tg = null;
@@ -324,7 +332,8 @@ export function resolveRound(state0, ordersIn) {
     }
     let lunge = 0;
     if (tg && gapTo(tg) > at.reach && !engagedWith(q, living()).length) {
-      const d = norm(tg.x - q.x, tg.z - q.z);
+      const aimAt = isB(tg) ? closestOn(tg, q.x, q.z) : tg;   // a building: its nearest edge
+      const d = norm(aimAt.x - q.x, aimAt.z - q.z);
       const want = Math.min(speedOf(q) * RULES.strikeLunge * terrainFactor(s.terrain, q.x, q.z), gapTo(tg) - at.reach * 0.9);
       const x0 = q.x, z0 = q.z;
       rec(q, T - 3);   // stands until just before the blow, then lunges (playback)
@@ -376,7 +385,7 @@ export function resolveRound(state0, ordersIn) {
         if (tg && (tg.hp <= 0 || tg.owner === q.owner || (!tg.type && !seenBy[q.owner].has(tg.id)))) tg = null;
         if (!tg) {
           let bd = 2;
-          for (const e of targets(q)) { const d = dist(a.x, a.z, e.x, e.z) - rad(e); if (d <= bd) { bd = d; tg = e; } }
+          for (const e of targets(q)) { const d = edgeFrom(e, a.x, a.z); if (d <= bd) { bd = d; tg = e; } }
         }
         r.st.tg = tg ? tg.id : null;
         face(tg ? tg.x : a.x, tg ? tg.z : a.z);
@@ -443,7 +452,7 @@ export function resolveRound(state0, ordersIn) {
         // first enemy squad in the way takes the impact
         let hit = null, ht = 2;
         for (const e of targets(q)) {
-          const tt = segCircle(q.x, q.z, nx, nz, e.x, e.z, rq + rad(e));
+          const tt = segHit(q.x, q.z, nx, nz, e, rq);
           if (tt >= 0 && tt < ht) { ht = tt; hit = e; }
         }
         // riders and wraiths weave through their own lines; only walls, rocks and the edge stop them
@@ -498,7 +507,7 @@ export function resolveRound(state0, ordersIn) {
             if (!pointBlocked(obs(), tx, tz, radiusOf(e) * 0.85)) { rec(e, T); e.x = tx; e.z = tz; rec(e, T + 1); pushed.push(e.id); moved.add(e.id); }
           }
           // Leap Strike: the landing also hits every enemy close around it
-          if (sk.dmg) for (const e of targets(q)) if (dist(q.x, q.z, e.x, e.z) <= radiusOf(q) + sk.radius + rad(e)) hits.push({ src: q.id, dst: e, dmg: atkDmg(r, sk.dmg), kind: 'leap' });
+          if (sk.dmg) for (const e of targets(q)) if (edgeFrom(e, q.x, q.z) <= radiusOf(q) + sk.radius) hits.push({ src: q.id, dst: e, dmg: atkDmg(r, sk.dmg), kind: 'leap' });
           ev({ type: 'land', id: q.id, kind: 'leap', ex: r3(q.x), ez: r3(q.z), pushed, dmg: !!sk.dmg });
           st.phase = 'done';
         }
@@ -527,7 +536,7 @@ export function resolveRound(state0, ordersIn) {
           if (!st.pts || !st.pts.length || (st.best !== undefined && gap >= st.best - 0.02 && r.el - st.bestAt > 8)) {
             const spot = approachSpot(s, b, q.x, q.z, radiusOf(q), q.id);
             const pts = spot ? Nav.for(obs(), radiusOf(q), navKey(s)).path(q.x, q.z, spot.x, spot.z) : [];
-            if (!pts.length) { if (!st.failed) { st.failed = true; ev({ type: 'workFail', id: q.id, bid: b.id }); } st.mode = null; }
+            if (!pts.length) { if (!st.failed) { st.failed = true; ev({ type: 'workFail', id: q.id, bid: b.id }); } st.mode = null; if (q.task?.bid === b.id) q.task = null; }   // unreachable: drop the task
             st.pts = pts; st.bestAt = r.el; st.best = gap;
           }
           if (gap < (st.best ?? 1e9) - 0.02) { st.best = gap; st.bestAt = r.el; }
@@ -576,13 +585,13 @@ export function resolveRound(state0, ordersIn) {
         const R = radiusOf(q) + at.reach;
         const struck = [];
         for (const e of targets(q)) {
-          if (arcHits(st.ox, st.oz, st.dx, st.dz, R, at.cosHalf, e.x, e.z, rad(e))) { hits.push({ src: q.id, dst: e, dmg: atkDmg(r, at.dmg), kind: 'swing' }); struck.push(e.id); }
+          if (inArc(st.ox, st.oz, st.dx, st.dz, R, at.cosHalf, e)) { hits.push({ src: q.id, dst: e, dmg: atkDmg(r, at.dmg), kind: 'swing' }); struck.push(e.id); }
         }
         ev({ type: 'release', id: q.id, kind: 'swing', hit: struck });
       } else if (a.kind === 'mighty') {
         const R = radiusOf(q) + sk.reach, struck = [];
         for (const e of targets(q)) {
-          if (arcHits(st.ox, st.oz, st.dx, st.dz, R, sk.cosHalf, e.x, e.z, rad(e))) { hits.push({ src: q.id, dst: e, dmg: atkDmg(r, sk.dmg), kind: 'mighty', stun: sk.stun }); struck.push(e.id); }
+          if (inArc(st.ox, st.oz, st.dx, st.dz, R, sk.cosHalf, e)) { hits.push({ src: q.id, dst: e, dmg: atkDmg(r, sk.dmg), kind: 'mighty', stun: sk.stun }); struck.push(e.id); }
         }
         ev({ type: 'release', id: q.id, kind: 'mighty', hit: struck });
       } else if (a.kind === 'summon') {
@@ -606,7 +615,7 @@ export function resolveRound(state0, ordersIn) {
       else if (a.kind === 'sweep') {
         const R = radiusOf(q) + sk.reach, struck = [];
         for (const e of targets(q)) {
-          if (dist(q.x, q.z, e.x, e.z) <= R + rad(e)) { hits.push({ src: q.id, dst: e, dmg: atkDmg(r, sk.dmg), kind: 'sweep' }); struck.push(e.id); }
+          if (edgeFrom(e, q.x, q.z) <= R) { hits.push({ src: q.id, dst: e, dmg: atkDmg(r, sk.dmg), kind: 'sweep' }); struck.push(e.id); }
         }
         ev({ type: 'release', id: q.id, kind: 'sweep', hit: struck });
       } else if (a.kind === 'step') {
@@ -813,7 +822,7 @@ export function resolveRound(state0, ordersIn) {
     T = 4;
     for (const sh of shots) {
       if (sh.e.hp <= 0) continue;
-      hits.push({ src: sh.b.id, dst: sh.e, dmg: sh.dmg, kind: 'volley', cover: inCover(s.terrain, sh.b.x, sh.b.z, sh.e.x, sh.e.z) });
+      hits.push({ src: sh.b.id, dst: sh.e, dmg: sh.dmg, kind: 'volley' });
       ev({ type: 'release', id: sh.b.id, kind: 'volley', hit: [sh.e.id], ex: r3(sh.e.x), ez: r3(sh.e.z), building: true });
     }
     const batch = hits; hits = [];

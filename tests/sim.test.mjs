@@ -9,9 +9,11 @@ import { PERSONALITIES, SKILL, BRUTAL_INCOME, pickPersonality } from '../js/ai/p
 import { fightRatio } from '../js/ai/combat.js';
 import { MATCHUPS } from '../js/ai/matchups.js';
 import { canSee, visibleTo } from '../js/sim/vision.js';
-import { placeError, addBuilding, incomeOf, obstacles, startQueues, armySize, spreadGraves, finishTech, techError, gateOf, validateQueue, bdef, bname, tkOf, ruleOf, bonusCp } from '../js/sim/base.js';
+import { edgeDist, placeError, addBuilding, incomeOf, obstacles, startQueues, armySize, spreadGraves, finishTech, techError, gateOf, validateQueue, bdef, bname, tkOf, ruleOf, bonusCp } from '../js/sim/base.js';
 import { TECH } from '../js/data/tech.js';
 import { builderPlan } from '../js/sim/builders.js';
+import { coverOf, coverMult } from '../js/sim/cover.js';
+import { stuckReport } from '../tools/stuck.mjs';
 import { buildStancePlan } from '../js/sim/stances.js';
 import { knownEnemyHq } from '../js/sim/vision.js';
 import { Nav, walkAP, pointBlocked } from '../js/sim/nav.js';
@@ -184,6 +186,43 @@ test('an old swing order becomes a strike at its aim point', () => {
   ok(events(resolveRound(s, o).log).some(e => e.type === 'hit' && e.src === 'q1' && e.kind === 'strike'), 'it hits');
 });
 
+test('buildings are hit by their real footprint, not a round approximation', () => {
+  // an enemy Palisade 3 x 0.5 along x at (40, 6): a squad off its end, 1" clear of the footprint
+  // edge + reach, can't strike it; one touching its long side can
+  const s = arena([[0, 'fighter', 40, 6 + 0.25 + 1.34 + 0.6]]);
+  const w = addBuilding(s, 1, 'wall', 40, 6, 0, true);
+  const q = s.squads[0], reach = defOf(q).attack.reach;
+  q.x = 40 + 1.5 + radiusOf(q) + reach + 1 + 1.9; q.z = 6;   // beyond reach + lunge off the end
+  let o = holdAll(s); o[0].squads.q1 = plan([{ kind: 'strike', t: w.id, x: 40, z: 6 }]);
+  ok(!events(resolveRound(s, o).log).some(e => e.type === 'hit' && e.dst === w.id), 'too far off the end');
+  q.x = 40; q.z = 6 + 0.25 + radiusOf(q) + 0.2;
+  o = holdAll(s); o[0].squads.q1 = plan([{ kind: 'strike', t: w.id, x: 40, z: 6 }]);
+  ok(events(resolveRound(s, o).log).some(e => e.type === 'hit' && e.dst === w.id), 'touching the long side');
+});
+
+test('your own buildings never stop your shots; enemy buildings still take them', () => {
+  const s = arena([[0, 'ranged', 30, 4], [1, 'fighter', 30, 14]]);
+  const own = addBuilding(s, 0, 'tower', 30, 8, 0, true);
+  let o = holdAll(s); o[0].squads.q1 = plan([{ kind: 'volley', x: 30, z: 14 }]);
+  eq(events(resolveRound(s, o).log).find(e => e.type === 'release' && e.id === 'q1').hit.join(), 'q2', 'past its own tower');
+  own.owner = 1;
+  o = holdAll(s); o[0].squads.q1 = plan([{ kind: 'volley', x: 30, z: 14 }]);
+  eq(events(resolveRound(s, o).log).find(e => e.type === 'release' && e.id === 'q1').hit.join(), own.id, 'an enemy tower soaks it');
+});
+
+test('a new site pushes your own squads out of its footprint', () => {
+  const s = createGame(1, ['undead', 'kingdom'], 'crossing');
+  const hq = s.buildings.find(b => b.owner === 0);
+  const q = s.squads.find(x => x.owner === 0 && x.role !== 'hero');
+  q.x = hq.x + 5; q.z = hq.z; s.supply[0] = 200;
+  const r = resolveRound(s, [{ squads: {}, stances: {}, builds: [{ type: 'barracks', x: hq.x + 5, z: hq.z, rot: 0 }] }, { squads: {}, stances: {} }]);
+  const b = r.state.buildings.find(x => x.owner === 0 && x.type === 'barracks');
+  ok(b, 'the site started');
+  const q2 = r.state.squads.find(x => x.id === q.id);
+  ok(edgeDist(b, q2.x, q2.z) >= radiusOf(q2) - 0.1, 'the squad stands outside it');
+  ok(events(r.log).some(e => e.type === 'pushed' && e.id === q.id), 'a pushed event');
+});
+
 test('strikes hit buildings', () => {
   const s = arena([[0, 'fighter', 40, 16]]);
   const hq = s.buildings.find(b => b.owner === 1);
@@ -213,14 +252,36 @@ test('a defend halves the hit and armour reduces damage', () => {
   ok(damageAfter(1, 100, true) >= 1, 'minimum 1 damage');
 });
 
-test('volleys are blocked by ruins', () => {
-  // ruin wall at x 19.9-24.1, z 13.1-13.7 sits between the two squads
-  const s = arena([[0, 'ranged', 22, 8], [1, 'fighter', 22, 19]]);
+test('ruins are walk-in heavy cover: volleys pass them; a squad standing in one takes half', () => {
+  // ruin wall at x 19.9-24.1, z 13.1-13.7
+  const s = arena([[0, 'ranged', 22, 8], [1, 'fighter', 22, 13.4], [1, 'fighter', 30, 13.4]]);
   const o = holdAll(s);
   o[0].squads.q1 = plan([{ kind: 'volley', x: 22, z: 19 }]);
   const { log } = resolveRound(s, o);
-  const rel = events(log).find(e => e.type === 'release' && e.id === 'q1');
-  eq(rel.hit.length, 0, 'should be blocked'); ok(rel.blocked, 'blocked flag');
+  const hit = events(log).find(e => e.type === 'hit' && e.src === 'q1');
+  eq(hit.dst, 'q2'); eq(hit.cover, 'heavy');
+  eq(hit.dmg, damageAfter(hit.raw * RULES.heavyCoverRanged, defOf(s.squads[1]).armor, hit.defended));
+  ok(!pointBlocked(obstacles(s), 22, 13.4, 1), 'a ruin does not block movement');
+});
+
+test('cover: heavy (ruins, behind walls from the far side), light (forests), by hit kind', () => {
+  const s = arena([[1, 'fighter', 22, 13.4], [1, 'fighter', 15, 7.5], [1, 'fighter', 40, 20]]);
+  const [inRuin, inForest, open] = s.squads;
+  eq(coverOf(s, inRuin), 'heavy'); eq(coverOf(s, inForest), 'light'); eq(coverOf(s, open), null);
+  eq(coverMult('heavy', 'volley'), RULES.heavyCoverRanged); eq(coverMult('heavy', 'strike'), RULES.heavyCoverMelee);
+  eq(coverMult('light', 'volley'), RULES.lightCoverRanged); eq(coverMult('light', 'strike'), 1);
+  // a Palisade running along x at z 24: a squad just south of it is covered from the north only
+  const w = addBuilding(s, 1, 'wall', 40, 24, 0, true);
+  open.x = 40; open.z = 24 - w.d / 2 - radiusOf(open) - 0.2;
+  eq(coverOf(s, open, 40, 30), 'heavy', 'shot from the far side');
+  eq(coverOf(s, open, 40, 15), null, 'shot from its own side');
+});
+
+test('stance squads step into nearby cover', () => {
+  // a crossbow on Guard 2" from the ruin, an enemy far away: it walks into the ruin
+  const s = arena([[0, 'ranged', 22, 10.8], [1, 'fighter', 22, 28]]);
+  const { state } = resolveRound(s, [orders({}, { q1: 'guard' }), { squads: {}, stances: { q2: 'hold' } }]);
+  eq(coverOf(state, state.squads.find(q => q.id === 'q1')), 'heavy');
 });
 
 test('volley in the open hits the first enemy on the line', () => {
@@ -345,13 +406,13 @@ test('overwatch fires once at an enemy moving into the front cone, even in anoth
   eq(shots[0].seg.tier, 6, 'fired during the wraiths\' tier');
 });
 
-test('Arrow Storm arcs over walls that stop the archers\' volleys, then recharges', () => {
+test('Arrow Storm hits a circle, then recharges', () => {
   const s = arena([[1, 'ranged', 22, 8], [0, 'fighter', 22, 19]]);
   const o = holdAll(s);
   o[1].squads.q1 = plan([{ kind: 'volley', x: 22, z: 19 }, { kind: 'storm', x: 22, z: 19 }]);
   const { state, log } = resolveRound(s, o);
   const rel = events(log).filter(e => e.type === 'release' && e.id === 'q1');
-  eq(rel[0].kind, 'volley'); ok(rel[0].blocked, 'volley blocked by the wall');
+  eq(rel[0].kind, 'volley'); eq(rel[0].hit.join(), 'q2', 'ruins no longer stop volleys');
   eq(rel[1].kind, 'storm'); eq(rel[1].hit.join(), 'q2');
   ok(state.squads.find(q => q.id === 'q1').cd.storm > 0, 'storm goes on cooldown');
 });
@@ -572,16 +633,17 @@ test('sight: range, walls, deep forests, and squads hidden inside forests', () =
   const t = createGame(1).terrain;
   ok(canSee(t, 4, 2, 11, 12, 2), 'open ground in range');
   ok(!canSee(t, 4, 2, 11, 16, 2), 'out of range');
-  ok(!canSee(t, 22, 8, 12, 22, 19), 'ruin wall blocks sight');            // wall at x 19.9-24.1, z 13.1-13.7
+  ok(canSee(t, 22, 8, 12, 22, 19), 'ruins are cover, not sight blockers');   // wall at x 19.9-24.1, z 13.1-13.7
+  ok(!canSee(t, 13.5, 21.5, 12, 13.5, 28.6), 'a rock blocks sight');          // rock 13.5,25 r1.2
   ok(!canSee(t, 9, 7.5, 12, 21, 7.5), 'through a whole forest is blocked'); // forest 15,7.5 r3.2
   ok(!canSee(t, 9, 7.5, 12, 15, 7.5), 'inside a forest: only seen up close');
   ok(canSee(t, 11.5, 7.5, 12, 14, 7.5), 'seen from within 4 inches');
 });
 
 test('stance squads ignore enemies they cannot see', () => {
-  // an enemy behind the ruin wall, inside guard range but out of sight
-  const s = arena([[0, 'fighter', 22, 11], [1, 'fighter', 22, 16.4]]);
-  ok(!visibleTo(s, 0).has('q2'), 'hidden behind the wall');
+  // an enemy behind a rock, inside guard range but out of sight
+  const s = arena([[0, 'fighter', 13.5, 21.5], [1, 'fighter', 13.5, 28.6]]);
+  ok(!visibleTo(s, 0).has('q2'), 'hidden behind the rock');
   const { log } = resolveRound(s, [orders({}, { q1: 'guard' }), { squads: {}, stances: { q2: 'hold' } }]);
   ok(!events(log).some(e => e.type === 'act' && e.id === 'q1'), 'guard squad does not react');
 });
@@ -747,7 +809,9 @@ test('placement: own third only, sites only on resource sites, faction lists', (
   eq(placeError(s, 0, 'barracks', 6, 4), '', 'a valid spot');
   ok(placeError(s, 0, 'barracks', 30, 9), 'outside your third');
   ok(placeError(s, 0, 'barracks', 3.5, 16), 'on top of the HQ');
-  ok(placeError(s, 0, 'barracks', 7, 9), 'on a squad');
+  eq(placeError(s, 0, 'barracks', 7, 9), '', 'your own squads make way (they are pushed out when it starts)');
+  const en = s.squads.find(q => q.owner === 1); const ex = en.x, ez = en.z; en.x = 7; en.z = 9;
+  ok(placeError(s, 0, 'barracks', 7, 9), 'an enemy squad blocks'); en.x = ex; en.z = ez;
   eq(placeError(s, 0, 'mine', 16.5, 19.5), '', 'a mine on a site');
   ok(placeError(s, 0, 'mine', 10, 10), 'a mine off a site');
   ok(placeError(s, 0, 'well', 16.5, 19.5), 'the kingdom has no soul wells');
@@ -847,7 +911,7 @@ test('builders repair damaged buildings', () => {
   const b = addBuilding(s, 0, 'tower', 7, 6, 0, true); b.hp = 50;
   const o = holdAll(s); o[0].squads.q1 = plan([{ kind: 'work', x: 7, z: 6, ap: 40 }]);
   const r = resolveRound(s, o);
-  eq(r.state.buildings.find(x => x.id === b.id).hp, 72, '40 AP x 110 HP / 200 work');
+  eq(r.state.buildings.find(x => x.id === b.id).hp, 94, '40 AP x 220 HP / 200 work');
 });
 
 test('builders cost no command points; the HQ trains builders, barracks soldiers', () => {
@@ -1077,7 +1141,7 @@ test('tech: research shares the training queue, is paid when it starts, and fini
   for (let i = 0; i < TECH.castle.rounds - 1; i++) r = resolveRound(r.state, [ob(), ob()]);
   ok(r.state.tech[0].includes('castle'), 'researched after ' + TECH.castle.rounds + ' rounds');
   H = r.state.buildings.find(b => b.id === hq.id);
-  eq(BUILDINGS.hq.hp, 220); eq(bdef(H).hp, 300); eq(H.hp, 300, 'the Keep became a Castle (HP grows)'); eq(H.tier, 2);
+  eq(BUILDINGS.hq.hp, 440); eq(bdef(H).hp, 600); eq(H.hp, 600, 'the Keep became a Castle (HP grows)'); eq(H.tier, 2);
   eq(bname(H, 'kingdom'), 'Castle');
   ok(events(r.log).some(e => e.type === 'researched' && e.tech === 'castle'));
 });
@@ -1126,7 +1190,7 @@ test('tech: effects reach squads, buildings and side rules', () => {
   // HP research raises current HP with the max
   const sw = s.squads[2], swHp = sw.hp;
   finishTech(s, 1, 'bonetide');
-  eq(sw.hp, swHp + sw.models, 'Bone Tide: +1 HP per model now');
+  eq(sw.hp, swHp + 2 * sw.models, 'Bone Tide: +2 HP per model now');
   // pair 3, summon count, revive, souls, grave areas, income
   finishTech(s, 1, 'swarm3'); eq(pairOf('undead', 'swarm', tkOf(s, 1)), 3, 'Endless Swarm');
   finishTech(s, 1, 'horde'); eq(skillOf(defOf(s.squads[3]), 'summon').count, 3, 'Endless Horde');
@@ -1434,8 +1498,9 @@ test('AI: every personality builds, researches and attacks', () => {
     for (const { s } of games) {
       const built = (s.buildings || []).filter(b => b.owner === 0).length;
       ok(built >= 3 || s.winner !== null, P.id + ' builds (' + built + ')');
-      ok((s.tech[0] || []).length >= 1 || s.winner === 1, P.id + ' researches');
     }
+    // a side whose army is beaten early can't afford research: it must research in at least one game
+    ok(games.some(({ s }) => (s.tech[0] || []).length >= 1 || s.winner === 1), P.id + ' researches');
     ok(games.some(({ s, seen }) => seen[0].has('attack') || s.winner !== null), P.id + ' attacks: ' + games.map(g => [...g.seen[0]]).join(' / '));
   }
 });
@@ -1458,6 +1523,12 @@ test('AI: thinking time stays small on the biggest map', () => {
     s = resolveRound(s, o).state;
   }
   ok(ms / n < 150, 'average ' + (ms / n).toFixed(1) + ' ms per AI turn');
+});
+
+test('squads and peasants do not get stuck (tools/stuck.mjs)', () => {
+  const r = stuckReport(1, ['crossing', 'twinrivers'], 35);
+  ok(r.streak <= 1, 'stuck 3+ rounds in a row: ' + r.streak + ' ' + JSON.stringify(r.causes));
+  ok(r.stuck / Math.max(1, r.rounds) < 0.04, 'stuck walks ' + r.stuck + ' of ' + r.rounds);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

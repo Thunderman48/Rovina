@@ -2,7 +2,7 @@
 // are listed for one side and mirrored through the centre; `lakes` in `center` are not mirrored.
 // Terrain kinds:
 //  forest : circle, slows movement (x0.6), hides squads inside it, gives cover
-//  ruin   : wall rectangle (x, z, w, d): blocks movement, sight and shots
+//  ruin   : rubble rectangle (x, z, w, d): walk-in heavy cover; slows movement, blocks neither sight nor shots
 //  rock   : circle: blocks movement, sight and shots
 //  lake   : circle of water: blocks movement only (you can see and shoot across it)
 //  river  : a stream across the whole table at x (slows movement x0.5), crossed at fords

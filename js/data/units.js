@@ -22,7 +22,13 @@ export const RULES = {
   riposteMult: 0.5,
   overwatchCost: 40,            // prepared overwatch: fire once at the first enemy that moves in the front cone (any tier)
   overwatchCos: 0.5,            // overwatch fires at enemies moving inside this front cone
-  coverMult: 0.5,               // volleys through a forest deal half damage
+  // cover (Dawn of War style): heavy = standing in a ruin, or right behind a Palisade / Bone Fence with the
+  // attacker on the far side; light = standing in a forest. Ranged hits and melee hits are reduced apart.
+  heavyCoverRanged: 0.5,
+  heavyCoverMelee: 0.75,
+  lightCoverRanged: 0.75,
+  ruinSlow: 0.75,               // movement x this inside a ruin
+  coverSeek: 3,                 // squads on Guard / Advance (and shooters choosing a firing spot) step into cover this close
   forestSlow: 0.75,             // movement x this inside a forest
   siegeMult: 2.5,               // attacks deal this much more to buildings
   strikeMult: 1.15,             // a melee Strike (target attack) deals this x its listed damage
@@ -128,12 +134,12 @@ export const FACTIONS = {
   kingdom: {
     name: 'Kingdom', short: 'KGD', colorCss: '#3a78d8',
     units: {
-      hero:    { name: 'The Chosen', role: 'hero', models: 1, hpPer: 130, armor: 9, tier: 5, look: 'lord', vision: 12, defends: 2, attack: STRIKE(25, 18, 1.6), skills: [LEAP(20, 7, 2, 12, 1.6, 'Leap Strike'), RALLY(20, 5, 2, 4, 1), MIGHTY(30, 28, 2.6, 0.2, 25)] },
-      tank:    { name: 'Shieldwall', role: 'tank', models: 3, hpPer: 34, armor: 12, tier: 4, look: 'shield', vision: 9, defends: 2, attack: STRIKE(30, 4, 1.3), skills: [WALL('Lock Shields')] },
-      fighter: { name: 'Men-at-arms', role: 'fighter', parry: true, models: 4, hpPer: 20, armor: 7, tier: 5, look: 'sword', vision: 9, defends: 1, attack: STRIKE(25, 5, 1.5) },
-      ranged:  { name: 'Crossbows', role: 'ranged', models: 4, hpPer: 15, armor: 3, tier: 5, look: 'crossbow', vision: 11, defends: 1, attack: VOLLEY(30, 4, 14), skills: [PIERCE(35, 5, 16)] },
-      fast:    { name: 'Outriders', role: 'fast', models: 3, hpPer: 24, armor: 5, tier: 6, look: 'rider', vision: 11, defends: 1, attack: STRIKE(45, 13, 1.7), skills: [CHARGE(35, 9, 9)] },
-      builder: { name: 'Peasants', role: 'builder', models: 2, hpPer: 14, armor: 2, tier: 5, look: 'peasant', vision: 8, defends: 0, attack: STRIKE(25, 2, 1.2) },
+      hero:    { name: 'The Chosen', role: 'hero', models: 1, hpPer: 260, armor: 9, tier: 5, look: 'lord', vision: 12, defends: 2, attack: STRIKE(25, 18, 1.6), skills: [LEAP(20, 7, 2, 12, 1.6, 'Leap Strike'), RALLY(20, 5, 2, 4, 1), MIGHTY(30, 28, 2.6, 0.2, 25)] },
+      tank:    { name: 'Shieldwall', role: 'tank', models: 3, hpPer: 68, armor: 12, tier: 4, look: 'shield', vision: 9, defends: 2, attack: STRIKE(30, 4, 1.3), skills: [WALL('Lock Shields')] },
+      fighter: { name: 'Men-at-arms', role: 'fighter', parry: true, models: 4, hpPer: 40, armor: 7, tier: 5, look: 'sword', vision: 9, defends: 1, attack: STRIKE(25, 5, 1.5) },
+      ranged:  { name: 'Crossbows', role: 'ranged', models: 4, hpPer: 30, armor: 3, tier: 5, look: 'crossbow', vision: 11, defends: 1, attack: VOLLEY(30, 4, 14), skills: [PIERCE(35, 5, 16)] },
+      fast:    { name: 'Outriders', role: 'fast', models: 3, hpPer: 48, armor: 5, tier: 6, look: 'rider', vision: 11, defends: 1, attack: STRIKE(45, 13, 1.7), skills: [CHARGE(35, 9, 9)] },
+      builder: { name: 'Peasants', role: 'builder', models: 2, hpPer: 28, armor: 2, tier: 5, look: 'peasant', vision: 8, defends: 0, attack: STRIKE(25, 2, 1.2) },
     },
     // Gold: a steady builder economy (keep, big farms worked by many peasants, mines on resource sites)
     eco: { res: 'gold', name: 'Gold', icon: 'gold', start: 60, hq: 6, gather: { farm: 8, mine: 10 } },
@@ -145,16 +151,16 @@ export const FACTIONS = {
   undead: {
     name: 'Undead Legion', short: 'UND', colorCss: '#9b59d0',
     units: {
-      hero:    { name: 'Lich', role: 'hero', models: 1, hpPer: 90, armor: 5, tier: 3, look: 'necro', vision: 12, defends: 1, magic: true, attack: VOLLEY(25, 10, 10, 0.6),
+      hero:    { name: 'Lich', role: 'hero', models: 1, hpPer: 180, armor: 5, tier: 3, look: 'necro', vision: 12, defends: 1, magic: true, attack: VOLLEY(25, 10, 10, 0.6),
                  mana: { max: 100, start: 60, regen: 25 }, skills: [SUMMON(20, 40, 4, 2), THUNDER(15, 25, 14, 11, 3, 3.5, 0.7), EXPLODE(10, 20, 9, 2.5, 8, 3)] },
-      tank:    { name: 'Grave Guard', role: 'tank', models: 3, hpPer: 21, armor: 9, tier: 4, look: 'graveguard', vision: 9, defends: 2, attack: STRIKE(30, 3.2, 1.3), skills: [WALL('Grave Wall')] },
-      fighter: { name: 'Skeleton Warriors', role: 'fighter', parry: true, models: 5, hpPer: 9, armor: 3, tier: 5, look: 'skeleton', vision: 9, defends: 1, attack: STRIKE(25, 2.4, 1.5) },
+      tank:    { name: 'Grave Guard', role: 'tank', models: 3, hpPer: 42, armor: 9, tier: 4, look: 'graveguard', vision: 9, defends: 2, attack: STRIKE(30, 3.2, 1.3), skills: [WALL('Grave Wall')] },
+      fighter: { name: 'Skeleton Warriors', role: 'fighter', parry: true, models: 5, hpPer: 18, armor: 3, tier: 5, look: 'skeleton', vision: 9, defends: 1, attack: STRIKE(25, 2.4, 1.5) },
       // the swarm: fragile, quick, cheap, trained two squads at a time (`pair`; a later upgrade: three)
-      swarm:   { name: 'Skeleton Warband', role: 'swarm', pair: 2, models: 6, hpPer: 4, armor: 0, tier: 3, look: 'skeleton', vision: 9, defends: 0, attack: STRIKE(25, 2.1, 1.4) },
-      ranged:  { name: 'Bone Archers', role: 'ranged', models: 4, hpPer: 10, armor: 1, tier: 5, look: 'archer', vision: 11, defends: 1, attack: VOLLEY(30, 2.4, 14, 0.9), skills: [STORM(35, 4, 15, 2.2)] },
-      fast:    { name: 'Wraiths', role: 'fast', models: 3, hpPer: 14, armor: 3, tier: 6, look: 'wraith', vision: 11, defends: 1, ghost: true, attack: STRIKE(45, 9, 1.7), skills: [CHARGE(35, 5.6, 9)] },
+      swarm:   { name: 'Skeleton Warband', role: 'swarm', pair: 2, models: 6, hpPer: 8, armor: 0, tier: 3, look: 'skeleton', vision: 9, defends: 0, attack: STRIKE(25, 2.1, 1.4) },
+      ranged:  { name: 'Bone Archers', role: 'ranged', models: 4, hpPer: 20, armor: 1, tier: 5, look: 'archer', vision: 11, defends: 1, attack: VOLLEY(30, 2.4, 14, 0.9), skills: [STORM(35, 4, 15, 2.2)] },
+      fast:    { name: 'Wraiths', role: 'fast', models: 3, hpPer: 28, armor: 3, tier: 6, look: 'wraith', vision: 11, defends: 1, ghost: true, attack: STRIKE(45, 9, 1.7), skills: [CHARGE(35, 5.6, 9)] },
       // a weaker caster troop: bolts, a weaker Dark Thunder, a one-squad summon
-      mage:    { name: 'Necromancers', role: 'mage', models: 2, hpPer: 10, armor: 1, tier: 4, look: 'necro', vision: 10, defends: 1, magic: true, attack: VOLLEY(25, 4, 9, 0.5),
+      mage:    { name: 'Necromancers', role: 'mage', models: 2, hpPer: 20, armor: 1, tier: 4, look: 'necro', vision: 10, defends: 1, magic: true, attack: VOLLEY(25, 4, 9, 0.5),
                  mana: { max: 60, start: 40, regen: 15 }, skills: [THUNDER(15, 20, 6, 10, 2, 3, 0.7), SUMMON(20, 35, 4, 1)] },
     },
     // Souls: fed by death on graveyards (grave ground spreads around undead buildings); Soul Wells give a
@@ -181,22 +187,22 @@ delete FACTIONS.undead.units.summon.pair;
 //  shape: 'rect' (w x d, rotated by rot 0/90) or 'circle' (r). fire: { dmg (x4 shots), range }
 //  income: per round once finished. site: must stand on a resource site. souls: collects souls nearby.
 export const BUILDINGS = {
-  hq:       { name: { kingdom: 'Keep', undead: 'Crypt' }, icon: 'goal', cost: 0, work: 0, hp: 220, armor: 8, shape: 'rect', w: 4, d: 4, vision: 10, fire: { dmg: 3, range: 8 }, trains: 'faction', grave: 10 },
-  barracks: { name: { kingdom: 'Barracks', undead: 'Ossuary' }, icon: 'spawn', cost: 30, work: 240, hp: 150, armor: 8, shape: 'rect', w: 3.5, d: 2.5, vision: 6, trains: ['tank', 'fighter', 'swarm', 'ranged', 'fast'], grave: 6 },
-  tower:    { name: { kingdom: 'Watchtower', undead: 'Bone Spire' }, icon: 'range', cost: 25, work: 200, hp: 110, armor: 6, shape: 'circle', r: 0.9, vision: 13, fire: { dmg: 4, range: 11 }, grave: 6 },
-  banner:   { name: { kingdom: 'Banner', undead: 'Obelisk' }, icon: 'cp', cost: 20, work: 120, hp: 60, armor: 4, shape: 'circle', r: 0.55, vision: 6, cp: 1 },
+  hq:       { name: { kingdom: 'Keep', undead: 'Crypt' }, icon: 'goal', cost: 0, work: 0, hp: 440, armor: 8, shape: 'rect', w: 4, d: 4, vision: 10, fire: { dmg: 3, range: 8 }, trains: 'faction', grave: 10 },
+  barracks: { name: { kingdom: 'Barracks', undead: 'Ossuary' }, icon: 'spawn', cost: 30, work: 240, hp: 300, armor: 8, shape: 'rect', w: 3.5, d: 2.5, vision: 6, trains: ['tank', 'fighter', 'swarm', 'ranged', 'fast'], grave: 6 },
+  tower:    { name: { kingdom: 'Watchtower', undead: 'Bone Spire' }, icon: 'range', cost: 25, work: 200, hp: 220, armor: 6, shape: 'circle', r: 0.9, vision: 13, fire: { dmg: 4, range: 11 }, grave: 6 },
+  banner:   { name: { kingdom: 'Banner', undead: 'Obelisk' }, icon: 'cp', cost: 20, work: 120, hp: 120, armor: 4, shape: 'circle', r: 0.55, vision: 6, cp: 1 },
   // undead: the only building allowed off graves; must be raised near the Lich or Necromancers (caster);
   // spreads graves and slowly heals friendly squads around it (heal: HP per model a round)
-  monolith: { name: { kingdom: 'Monolith', undead: 'Monolith' }, icon: 'heal', cost: 20, work: 120, hp: 70, armor: 4, shape: 'circle', r: 0.6, vision: 7, grave: 6, heal: { radius: 4, hp: 4 } },
-  wall:     { name: { kingdom: 'Palisade', undead: 'Bone Fence' }, icon: 'fortify', cost: 6, work: 60, hp: 80, armor: 6, shape: 'rect', w: 3, d: 0.5, vision: 0, grave: 6 },
-  farm:     { name: { kingdom: 'Farm', undead: 'Farm' }, icon: 'farm', cost: 25, work: 140, hp: 90, armor: 3, shape: 'rect', w: 4.2, d: 3.4, vision: 5, income: 2, slots: 4 },
-  mine:     { name: { kingdom: 'Mine', undead: 'Mine' }, icon: 'node', cost: 30, work: 160, hp: 100, armor: 6, shape: 'circle', r: 1.1, vision: 7, income: 6, site: true },
+  monolith: { name: { kingdom: 'Monolith', undead: 'Monolith' }, icon: 'heal', cost: 20, work: 120, hp: 140, armor: 4, shape: 'circle', r: 0.6, vision: 7, grave: 6, heal: { radius: 4, hp: 8 } },
+  wall:     { name: { kingdom: 'Palisade', undead: 'Bone Fence' }, icon: 'fortify', cost: 6, work: 60, hp: 160, armor: 6, shape: 'rect', w: 3, d: 0.5, vision: 0, grave: 6 },
+  farm:     { name: { kingdom: 'Farm', undead: 'Farm' }, icon: 'farm', cost: 25, work: 140, hp: 180, armor: 3, shape: 'rect', w: 4.2, d: 3.4, vision: 5, income: 2, slots: 4 },
+  mine:     { name: { kingdom: 'Mine', undead: 'Mine' }, icon: 'node', cost: 30, work: 160, hp: 200, armor: 6, shape: 'circle', r: 1.1, vision: 7, income: 6, site: true },
   // tech buildings (research only; they need the HQ's tier 2: BUILDING_GATES in js/data/tech.js)
-  forge:    { name: { kingdom: 'Blacksmith', undead: 'Blacksmith' }, icon: 'attack', cost: 40, work: 200, hp: 120, armor: 7, shape: 'rect', w: 3.5, d: 2.5, vision: 5, research: true },
-  chapel:   { name: { kingdom: 'Chapel', undead: 'Chapel' }, icon: 'rally', cost: 35, work: 160, hp: 100, armor: 6, shape: 'circle', r: 1.0, vision: 6, research: true },
-  pit:      { name: { kingdom: 'Charnel Pit', undead: 'Charnel Pit' }, icon: 'attack', cost: 30, work: 160, hp: 100, armor: 6, shape: 'rect', w: 3, d: 2.5, vision: 5, grave: 6, research: true },
-  sanctum:  { name: { kingdom: 'Dark Sanctum', undead: 'Dark Sanctum' }, icon: 'mage', cost: 30, work: 160, hp: 90, armor: 5, shape: 'circle', r: 1.0, vision: 7, grave: 6, research: true },
-  well:     { name: { kingdom: 'Soul Well', undead: 'Soul Well' }, icon: 'souls', cost: 20, work: 160, hp: 90, armor: 5, shape: 'circle', r: 1.1, vision: 7, income: 2, site: true, souls: true, grave: 10 },
+  forge:    { name: { kingdom: 'Blacksmith', undead: 'Blacksmith' }, icon: 'attack', cost: 40, work: 200, hp: 240, armor: 7, shape: 'rect', w: 3.5, d: 2.5, vision: 5, research: true },
+  chapel:   { name: { kingdom: 'Chapel', undead: 'Chapel' }, icon: 'rally', cost: 35, work: 160, hp: 200, armor: 6, shape: 'circle', r: 1.0, vision: 6, research: true },
+  pit:      { name: { kingdom: 'Charnel Pit', undead: 'Charnel Pit' }, icon: 'attack', cost: 30, work: 160, hp: 200, armor: 6, shape: 'rect', w: 3, d: 2.5, vision: 5, grave: 6, research: true },
+  sanctum:  { name: { kingdom: 'Dark Sanctum', undead: 'Dark Sanctum' }, icon: 'mage', cost: 30, work: 160, hp: 180, armor: 5, shape: 'circle', r: 1.0, vision: 7, grave: 6, research: true },
+  well:     { name: { kingdom: 'Soul Well', undead: 'Soul Well' }, icon: 'souls', cost: 20, work: 160, hp: 180, armor: 5, shape: 'circle', r: 1.1, vision: 7, income: 2, site: true, souls: true, grave: 10 },
 };
 export const ecoOf = faction => FACTIONS[faction].eco;
 export const trainCost = (faction, role) => FACTIONS[faction].train[role] || 0;

@@ -11,6 +11,7 @@ export function terrainFactor(terrain, x, z) {
   let f = 1;
   for (const t of terrain) {
     if (t.kind === 'forest' && dist(x, z, t.x, t.z) <= t.r) f = Math.min(f, RULES.forestSlow);
+    else if (t.kind === 'ruin' && inRect(x, z, t, 0.4)) f = Math.min(f, RULES.ruinSlow);   // climbing through rubble
     else if (t.kind === 'river' && inRect(x, z, t)) {
       const ford = (t.fords || []).some(fd => Math.abs(z - fd.z) <= fd.d / 2);
       if (!ford) f = Math.min(f, 0.5);
@@ -20,9 +21,10 @@ export function terrainFactor(terrain, x, z) {
 }
 
 // blocks sight and shots
-export function blocks(t) { return t.kind === 'ruin' || t.kind === 'rock' || t.kind === 'building'; }
+// (ruins are walk-in heavy cover: they slow movement but block neither movement, sight nor shots)
+export function blocks(t) { return t.kind === 'rock' || t.kind === 'building'; }
 // blocks movement (lakes too: you can see and shoot across water, but not walk through it)
-export function blocksMove(t) { return t.kind === 'ruin' || t.kind === 'rock' || t.kind === 'building' || t.kind === 'lake'; }
+export function blocksMove(t) { return t.kind === 'rock' || t.kind === 'building' || t.kind === 'lake'; }
 // the table size: from the 'board' piece in a terrain list (or the default board)
 const boards = new WeakMap();
 export function boardOf(terrain) {
@@ -54,6 +56,9 @@ export class Nav {
 
   constructor(terrain, radius) {
     const { w: W, h: H } = boardOf(terrain);
+    // the same clearance as movement uses (resolveMoves: radius x 0.85), so every spot a squad can stand
+    // on is a node the pathfinder knows (else squads in tight spots get no path and walk into walls)
+    radius *= 0.85;
     this.terrain = terrain; this.r = radius;
     this.cols = Math.round(W / CELL); this.rows = Math.round(H / CELL);
     const N = this.cols * this.rows;
@@ -111,10 +116,11 @@ export class Nav {
     const heap = new Heap();
     g[start] = 0; heap.push(start, h(start));
     const nb = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, Math.SQRT2], [1, -1, Math.SQRT2], [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2]];
-    let found = false, it = 0;
+    let found = false, it = 0, bestK = start, bestH = h(start);
     while (heap.size && it++ < 40000) {
       const k = heap.pop();
       if (k === goal) { found = true; break; }
+      const hk = h(k); if (hk < bestH) { bestH = hk; bestK = k; }
       if (closed[k]) continue;
       closed[k] = 1;
       const i = k % C, j = (k - i) / C;
@@ -128,11 +134,13 @@ export class Nav {
         if (ng < g[kk]) { g[kk] = ng; came[kk] = k; heap.push(kk, ng + h(kk)); }
       }
     }
-    if (!found) return [goalPt];
+    // no way to the goal: go as close as it can get instead of walking straight into a wall
+    const end = found ? goal : bestK;
+    if (!found && end === start) return [];
     const cells = [];
-    for (let k = goal; k !== -1 && k !== start; k = came[k]) cells.push(this.center(k));
+    for (let k = end; k !== -1 && k !== start; k = came[k]) cells.push(this.center(k));
     cells.reverse();
-    if (cells.length) cells[cells.length - 1] = goalPt; else cells.push(goalPt);
+    if (found) { if (cells.length) cells[cells.length - 1] = goalPt; else cells.push(goalPt); }
     const out = [];
     let cx = ax, cz = az, idx = 0;
     while (idx < cells.length) {

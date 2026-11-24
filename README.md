@@ -18,7 +18,11 @@ It is a static site with no build step and no server, so it runs on GitHub Pages
   spread almost at once around their buildings (like blight or creep). Forests are big woodland with soft edges.
 * Area attacks (volleys, lobs, most skills) are aimed skillshots that hit whatever is in their shape
   when they land, so faster tiers can dodge. Melee squads **Strike** one target instead: if it steps
-  out of reach they lunge after it (a short, speed-based dash) and hit a little harder. Armies grow up to 30 squads (more on big maps).
+  out of reach they lunge after it (a short, speed-based dash) and hit a little harder.
+* **Cover, Dawn of War style.** Squads standing in ruins or right behind a Palisade / Bone Fence are in
+  heavy cover (ranged hits halved, melee ×0.75); forests give light cover. Squads on Guard step into
+  cover by themselves and shooters pick firing spots in cover. Units and buildings are tough (fights
+  take a few rounds). Armies grow up to 30 squads (more on big maps).
 * **Two economies.** The Kingdom earns **gold** from its Keep, mines and farms worked by up to 4
   peasants each. The Undead earn **souls** mainly from every model that dies on their graveyards;
   the Crypt (1) and Soul Wells (2) only trickle.

@@ -9,7 +9,7 @@ import { TECH, GATES } from '../data/tech.js';
 import { MATCHUPS } from './matchups.js';
 import { emptyPlan, defOf, apFor } from '../sim/state.js';
 import { placeError, BUILDINGS, trainCost, footprint, builderCount, armySize, bdef, buildQueue, siteTaken, seenBy, graveCircles, hasTech, techError, gateOf, tkOf, researching } from '../sim/base.js';
-import { builderPlan } from '../sim/builders.js';
+import { builderPlan, approachSpot } from '../sim/builders.js';
 import { dist } from '../sim/geom.js';
 import { learnedMult } from './learning.js';
 
@@ -58,10 +58,13 @@ export function economy(K, P, skill, posture, mem, orders) {
 
   // ---- placement helpers (candidates around own buildings, scored by `prefer`) ----
   const rises = () => mine.filter(b => b.build > 0).length + queued.length;
+  // builders already on a site keep working on it; a new site only starts with a builder to spare
+  // (one site under way per builder), else the order would pull a builder off its site for nothing
+  const onSite = q => q.task && q.task.kind !== 'gather' && mine.some(b => b.id === q.task.bid && (b.build > 0 || b.hp < bdef(b).hp));
   const place = (type, prefer) => {
-    const free = builders.filter(x => !busy.has(x.id));
+    const free = builders.filter(x => !busy.has(x.id) && !onSite(x));
     if (rising && rises() >= RULES.maxRising) return false;
-    if (!rising && !free.length) return false;
+    if (!rising && (!free.length || rises() >= builders.length)) return false;
     const cand = [];
     if (BUILDINGS[type].site) {
       const sites = (s.shrines || []).filter(sh => !siteTaken(s, sh, queued) && seenBy(s, p, sh.x, sh.z)).sort((a, b) => dist(a.x, a.z, hq.x, hq.z) - dist(b.x, b.z, hq.x, hq.z));
@@ -74,6 +77,8 @@ export function economy(K, P, skill, posture, mem, orders) {
     for (const c of cand.slice(0, 60)) for (const rot of [0, 1]) {
       if (placeError(s, p, type, c.x, c.z, rot, queued)) continue;
       const f = { type, x: c.x, z: c.z, rot, owner: p, ...footprint(type, c.x, c.z, rot) };
+      // keep a free side to work from (no sites squeezed in between buildings)
+      if (!rising && type !== 'wall' && !approachSpot(s, f, hq.x, hq.z, 1.1)) continue;
       if (rising) { queued.push(f); out.builds.push({ type, x: c.x, z: c.z, rot }); return true; }
       const q = free.sort((a, b) => dist(a.x, a.z, c.x, c.z) - dist(b.x, b.z, c.x, c.z))[0];
       const bp = builderPlan(s, q, f, apFor(q));

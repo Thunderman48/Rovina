@@ -8,15 +8,30 @@
 //  retreat : fall back to the nearest own Mine / Soul Well (else the HQ) and guard there
 import { RULES, isMelee, isShooter } from '../data/units.js';
 import { defOf, radiusOf, emptyPlan, apFor } from './state.js';
-import { obstacles, navKey, hitRadius } from './base.js';
-import { builderIdleTarget } from './builders.js';
+import { obstacles, navKey, hitRadius, edgeGap, footOf } from './base.js';
+import { builderIdleTarget, closestOn } from './builders.js';
 import { autoSkills } from './skills.js';
 import { knownEnemyHq, observers, canSee } from './vision.js';
 import { HQ_X, mirrorOn } from '../data/maps.js';
 import { Nav, pathAP, walkAP } from './nav.js';
 import { dist } from './geom.js';
+import { coverOf, coverSpots } from './cover.js';
 
 const GUARD_RANGE = 8;
+
+// step into cover (Dawn of War style): the best free cover spot within R of the squad that passes `ok`,
+// unless it already stands in cover against `from` (the nearest enemy). Returns the AP left.
+function coverMove(s, q, plan, left, R, from, ok = () => true) {
+  if (left < 5 || coverOf(s, q, from?.x, from?.z)) return left;
+  const spot = coverSpots(s, q, q.x, q.z, R, from).find(ok);
+  if (!spot) return left;
+  const nav = Nav.for(obstacles(s), radiusOf(q), navKey(s));
+  const pts = nav.path(q.x, q.z, spot.x, spot.z);
+  if (!pts.length) return left;
+  const ap = Math.min(left, Math.ceil(pathAP(s.terrain, q.x, q.z, pts, defOf(q).tier)) + 1);
+  plan.actions.push({ kind: 'move', pts, ap });
+  return left - ap;
+}
 
 function fillDefends(plan, left) {
   const n = Math.min(RULES.maxDefends - plan.defends, Math.floor(left / RULES.defendCost));
@@ -26,7 +41,7 @@ function fillDefends(plan, left) {
 export function nearestEnemy(s, q, enemies, maxGap = 1e9) {
   let best = null, bd = 1e9;
   for (const e of enemies) {
-    const gap = dist(q.x, q.z, e.x, e.z) - (e.r ?? radiusOf(e)) - radiusOf(q);
+    const gap = edgeGap(e, q.x, q.z) - radiusOf(q);
     if (gap <= maxGap && gap < bd) { bd = gap; best = e; }
   }
   return best;
@@ -36,14 +51,17 @@ export function nearestEnemy(s, q, enemies, maxGap = 1e9) {
 // lead: optional {x,z} offset to aim where it is expected to be.
 export function meleePlan(s, q, e, plan, left, lead = null) {
   const def = defOf(q);
-  const r = radiusOf(q), re = e.r ?? radiusOf(e);
+  const r = radiusOf(q);
   const strike = def.attack.ap;
-  const want = r + re + def.attack.reach * 0.55; // stop well inside reach
-  const d = dist(q.x, q.z, e.x, e.z);
+  // walk to the target's edge: a squad's base, or the nearest point of a building's real footprint
+  const foot = e.foot || (e.type ? e : null);
+  const to = foot ? closestOn(foot, q.x, q.z) : e;
+  const want = r + (foot ? 0 : e.r ?? radiusOf(e)) + def.attack.reach * 0.55; // stop well inside reach
+  const d = dist(q.x, q.z, to.x, to.z);
   let fromX = q.x, fromZ = q.z;
   if (d > want) {
     const nav = Nav.for(obstacles(s), r, navKey(s));
-    const pts = nav.path(q.x, q.z, e.x, e.z);
+    const pts = nav.path(q.x, q.z, to.x, to.z);
     // stop `want` short of the target
     const full = pathAP(s.terrain, q.x, q.z, pts, def.tier);
     const cut = trimPath(q.x, q.z, pts, want);
@@ -110,11 +128,16 @@ export function buildStancePlan(s, q, enemies) {
     const sk = skills(t, left); left = sk.left;
     if (sk.charged) { fillDefends(plan, left); return plan; }
     if (isShooter(def)) {
-      const range = def.attack.range, d = dist(q.x, q.z, t.x, t.z) - (t.r ?? radiusOf(t));
+      const range = def.attack.range, d = edgeGap(t, q.x, q.z);
       if (d > range - 0.3) {
         // walk into range first (stopping inside it), then shoot with what is left
         const nav = Nav.for(obstacles(s), radiusOf(q), navKey(s));
-        const pts = trimPath(q.x, q.z, nav.path(q.x, q.z, t.x, t.z), range * 0.8 + (t.r ?? radiusOf(t)));
+        const foot = t.foot || (t.type ? t : null), to = foot ? closestOn(foot, q.x, q.z) : t;
+        let pts = trimPath(q.x, q.z, nav.path(q.x, q.z, to.x, to.z), range * 0.8 + (foot ? 0 : t.r ?? radiusOf(t)));
+        // prefer a firing spot in cover near where it would stop (still in range of the target)
+        const end = pts[pts.length - 1];
+        const spot = end && coverSpots(s, q, end.x, end.z, 2.5, t).find(sp => edgeGap(t, sp.x, sp.z) <= range - 0.5);
+        if (spot) { const p2 = nav.path(q.x, q.z, spot.x, spot.z); if (p2.length) pts = p2; }
         if (pts.length) plan.actions.push({ kind: 'move', pts, ap: left });
         return plan;
       }
@@ -131,7 +154,7 @@ export function buildStancePlan(s, q, enemies) {
   if (st === 'advance') {
     // every enemy it knows of is a target, squads and buildings alike (the HQ too): the nearest wins
     const known = Object.values(s.intel?.[q.owner]?.known || {}).filter(b => b.hp > 0)
-      .map(b => ({ id: b.id, owner: b.owner, x: b.x, z: b.z, r: hitRadius(b), building: true }));
+      .map(b => ({ id: b.id, owner: b.owner, x: b.x, z: b.z, r: hitRadius(b), foot: footOf(b), building: true }));
     const t = nearestEnemy(s, q, enemies.concat(known), RULES.advanceEngage);
     if (t) return attack(t);
     if (q.goal) {
@@ -168,19 +191,24 @@ export function buildStancePlan(s, q, enemies) {
 // guard (and hold): fight what comes close; shooters volley what is in range or watch the nearest
 function guardPlan(s, q, enemies, plan, left, skills = (t, l) => ({ left: l, charged: null })) {
   const def = defOf(q), st = q.stance;
-  if (st === 'hold' || !enemies.length) { fillDefends(plan, left); return plan; }
+  if (st === 'hold') { fillDefends(plan, left); return plan; }
+  const near = enemies.length ? nearestEnemy(s, q, enemies) : null;
+  if (!enemies.length) { left = coverMove(s, q, plan, left, RULES.coverSeek, null); fillDefends(plan, left); return plan; }
   if (isShooter(def)) {
     const range = def.attack.range;
     const t = nearestEnemy(s, q, enemies, range);
     if (t) {
+      // a cover spot nearby that still has the target in range: step into it first
+      if (!nearestEnemy(s, q, enemies, RULES.engageGap)) left = coverMove(s, q, plan, left, 2, t, sp => dist(sp.x, sp.z, t.x, t.z) - (t.r ?? radiusOf(t)) <= range - 0.5);
       left = skills(t, left).left;
       while (left >= def.attack.ap) { plan.actions.push({ kind: def.attack.kind, x: t.x, z: t.z }); left -= def.attack.ap; }
       fillDefends(plan, left);
       return plan;
     }
-    const e = nearestEnemy(s, q, enemies);
-    // guard: watch the nearest enemy's approach
-    plan.overwatch = { x: e.x, z: e.z }; left -= RULES.overwatchCost;
+    const e = near;
+    // guard: take cover nearby, then watch the nearest enemy's approach
+    left = coverMove(s, q, plan, left, RULES.coverSeek, e);
+    if (left >= RULES.overwatchCost) { plan.overwatch = { x: e.x, z: e.z }; left -= RULES.overwatchCost; }
     fillDefends(plan, left);
     return plan;
   }
@@ -189,6 +217,7 @@ function guardPlan(s, q, enemies, plan, left, skills = (t, l) => ({ left: l, cha
   if (t && def.parry && nearestEnemy(s, q, enemies, RULES.engageGap)) { plan.parry = true; left -= RULES.parryCost; }
   if (t) { const sk = skills(t, left); left = sk.left; if (sk.charged) { fillDefends(plan, left); return plan; } }
   if (t) left = meleePlan(s, q, t, plan, left);
+  else left = coverMove(s, q, plan, left, RULES.coverSeek, near);   // nobody close: wait in cover
   fillDefends(plan, left);
   return plan;
 }

@@ -7,7 +7,7 @@ import { Nav, pathAP, pointBlocked } from './nav.js';
 import { dist, norm } from './geom.js';
 
 // closest point of a footprint ({x,z,r} or {x,z,w,d}) to (x,z)
-function closestOn(f, x, z) {
+export function closestOn(f, x, z) {
   if (f.r !== undefined) { const d = norm(x - f.x, z - f.z); return d.l < 1e-6 ? { x: f.x + f.r, z: f.z } : { x: f.x + d.x * f.r, z: f.z + d.z * f.r }; }
   return { x: Math.max(f.x - f.w / 2, Math.min(f.x + f.w / 2, x)), z: Math.max(f.z - f.d / 2, Math.min(f.z + f.d / 2, z)) };
 }
@@ -20,8 +20,10 @@ export function approachSpot(s, f, fromX, fromZ, rq, selfId = null) {
   if (d.l < 1e-6) d = norm(fromX - f.x, fromZ - f.z);
   if (d.l < 1e-6) d = { x: 1, z: 0, l: 1 };
   const base = Math.atan2(d.z, d.x);
-  const gap = rq + 0.3;
-  for (let k = 0; k < 16; k++) {
+  const me = s.squads.find(o => o.id === selfId);
+  // try the usual gap first, then tighter ones (still within work reach) for sites squeezed between
+  // buildings; squads of the same side may share a spot (friends pass through each other), enemies not
+  for (const gap of [rq + 0.3, rq * 0.9, rq + 0.8]) for (const friends of [false, true]) for (let k = 0; k < 16; k++) {
     const a = base + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * Math.PI / 8;
     const px = f.x + Math.cos(a) * 50, pz = f.z + Math.sin(a) * 50;
     const e = closestOn(f, px, pz);
@@ -29,7 +31,7 @@ export function approachSpot(s, f, fromX, fromZ, rq, selfId = null) {
     const x = e.x + v.x * gap, z = e.z + v.z * gap;
     if (x < rq || z < rq || x > s.board.w - rq || z > s.board.h - rq) continue;
     if (pointBlocked(obs, x, z, rq * 0.85)) continue;
-    if (s.squads.some(o => o.hp > 0 && o.id !== selfId && dist(o.x, o.z, x, z) < rq + radiusOf(o) - 0.1)) continue;
+    if (s.squads.some(o => o.hp > 0 && o.id !== selfId && (!friends || !me || o.owner !== me.owner) && dist(o.x, o.z, x, z) < rq + radiusOf(o) - 0.1)) continue;
     return { x, z };
   }
   return null;
@@ -68,9 +70,11 @@ export function builderIdleTarget(s, q) {
   // building and repairing carry on; a gatherer is free to take a new site
   const busy = o => { const t = taskTarget(s, o); return t && o.task.kind !== 'gather' ? t : null; };
   const own = busy(q);
-  if (own) return own;
-  const sites = (s.buildings || []).filter(b => b.owner === q.owner && b.hp > 0 && b.build > 0);
-  if (!sites.length) return taskTarget(s, q) || gatherTarget(s, q);
+  if (own && (edgeDist(own, q.x, q.z) - radiusOf(q) <= RULES.workReach || approachSpot(s, own, q.x, q.z, radiusOf(q), q.id))) return own;
+  // only sites a builder can get to (one squeezed between buildings with no free side is skipped)
+  const reach = b => edgeDist(b, q.x, q.z) - radiusOf(q) <= RULES.workReach || approachSpot(s, b, q.x, q.z, radiusOf(q), q.id);
+  const sites = (s.buildings || []).filter(b => b.owner === q.owner && b.hp > 0 && b.build > 0 && reach(b));
+  if (!sites.length) { const t = taskTarget(s, q); return (t && reach(t) ? t : null) || gatherTarget(s, q); }
   const crew = new Map(sites.map(b => [b.id, 0]));
   const mates = s.squads.filter(o => o.owner === q.owner && o.hp > 0 && o.role === 'builder').sort((a, c) => +a.id.slice(1) - +c.id.slice(1));
   for (const o of mates) { const t = busy(o); if (t && crew.has(t.id)) crew.set(t.id, crew.get(t.id) + 1); }

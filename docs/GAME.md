@@ -105,7 +105,11 @@ A round, in order:
 **Speed:** a squad walks `tier × RULES.moveFactor` = tier × 0.012″ per AP on open ground
 (tier 4 = 4.8″, tier 5 = 6.0″, tier 6 = 7.2″ per 100 AP). **Act-earlier upgrades change when a squad
 acts, not how fast it walks** (speed uses the unit's base tier). Terrain multiplies speed: **forest ×0.75** (`RULES.forestSlow`),
-**stream (not at a ford) ×0.5**. Ruins, rocks, buildings and lakes block movement.
+**ruin ×0.75** (`RULES.ruinSlow`, within 0.4″ of the ruin), **stream (not at a ford) ×0.5**. Rocks,
+buildings and lakes block movement; **ruins are walk-in cover** (§5.10).
+- **Pathfinding** (`Nav`, `js/sim/nav.js`): a 0.5″ grid with the same clearance as movement (squad radius ×
+  0.85), so every spot a squad can stand on is a node. With no way to the goal it walks to the reachable
+  spot closest to it (it no longer walks straight into a wall).
 
 ---
 
@@ -163,6 +167,9 @@ its side sees right now (positions at round start). Leftover AP becomes defends 
 Squads start on **Advance** (builders on Guard; summoned skeletons on Advance). Stance changes are
 free; `orders.stances[id]` is one of `guard`, `hold`, `advance`, `retreat`.
 
+**Taking cover (§5.10):** on Guard (and Advance once at its goal), a squad with nothing to fight within
+reach steps into the best free cover within 3″; shooters prefer firing spots in cover. Hold never moves.
+
 - **Advance** (the default):
   1. **Targets, all equal:** every enemy squad the side sees **and every enemy building it knows of**
      (intel, §12; the HQ included) is a target, with no preference by kind. If the **nearest** one's
@@ -212,18 +219,22 @@ For a hit with raw damage `D` on a squad with armour `A`:
 
 ```
 damage = max(1, round( D × cover × wall × 20 / (20 + A) × (defended ? 0.5 : 1) ))
-  cover  = 0.5 if the hit is a volley / pierce / tower shot and the target is in or behind a forest, else 1
+  cover  = the target's cover where it stands when the hit lands (§5.10): heavy ×0.5 ranged / ×0.75 melee,
+           light ×0.75 ranged, else 1
   wall   = 0.3 if the target braced Lock Shields / Grave Wall and the attacker is in its front 120°, else 1
   defended: the target spends one of its defends (if it has any left) on this hit
 ```
-(`RULES.armorK` = 20, `RULES.defendMult` = 0.5, `RULES.coverMult` = 0.5.)
+(`RULES.armorK` = 20, `RULES.defendMult` = 0.5; cover in `RULES.heavyCoverRanged` / `heavyCoverMelee` /
+`lightCoverRanged`.)
 
 - **Raw damage of an attack = damage per model × models alive at release × damage multiplier**
   (multiplier 1, or 1.25 after a Rally).
 - **Models:** a squad's models = `ceil(hp / hpPer)`. Damage removes models from the back; a wounded
   squad hits for less.
 - **Buildings:** `damage = max(1, round(D × 2.5 × 20 / (20 + building armour)))` (siege ×2.5);
-  no defends, no cover, no parry.
+  no defends, no cover, no parry. **Buildings are hit by their real footprint** (rectangle or circle,
+  `edgeDist`): reach, lines (`segRect`), circles and arcs all measure to the footprint edge, so a squad
+  must touch a wall's or Barracks' actual side to strike it.
 - **Hits in the same AP are applied together.** Hits are grouped by target; each target takes its hits
   **strongest first**, so the strongest hit is the one that uses up a defend or a parry.
 - **Defends** per round = the unit's base `defends` + bought defends (+1 from Rally). Each hit
@@ -258,17 +269,17 @@ point (`sanitizePlan`).
 
 ### 5.3 Volley (crossbows, bone archers)
 At release: a straight line from the squad toward the aim, length = `range`, width = `width`. It hits
-the **first** target (enemy squad or building) the line meets, unless **ruins, rocks or a building**
-cut the line first (lakes do not). If the first thing on the line is the shooter's own building,
-nothing is hit. **Cover:** ×0.5 if the target stands in a forest or the line crosses one.
+the **first enemy** target (squad or building) the line meets, unless a **rock** cuts the line first
+(lakes and ruins do not). **The shooter's own buildings never stop or weaken its shots** (the line passes
+them); an **enemy** building on the line takes the shot. **Cover** (§5.10) applies to the target.
 
 ### 5.4 Circles: lob, Bone Blast, Arrow Storm
 Aimed at a point, clamped to the skill's `range`. At release, every enemy squad / building whose
 centre is within `radius + 0.6 × target radius` of the point is hit. Ignores walls (arcs over).
 
 ### 5.5 Piercing Bolt
-A line like a volley (`range`, `width`) that hits **every** target along it until a ruin / rock /
-building cuts it. Cover applies per target.
+A line like a volley (`range`, `width`) that hits **every** enemy target along it until a rock cuts it.
+Cover applies per target.
 
 ### 5.6 Charge (Outriders, Wraiths)
 Wind-up `wind` = 8 AP (lance lowered, lane telegraphed), then the squad **rushes** along the lane at
@@ -293,7 +304,7 @@ The action always costs its full AP.
 
 **The Lich (Undead hero; a mage, see Mana below; was called the Necromancer):** tier **3** (slow,
 3.6″ per round), 90 HP, armour 5, 1 defend. Basic attack: a **magic bolt** (a volley line: 25 AP, 10 damage, range 10″,
-width 0.6″; walls block it, forests give cover).
+width 0.6″; rocks block it, cover applies).
 - **Summon Warband** (`summon`, 20 AP, **40 mana**): aim within 4″. **When the cast releases**, **2
   summoned Skeleton Warband squads** rise around the aim point (exactly the Skeleton Warband: same
   models, HP, armour, tier 3, attack and look; since 2026-11-18 `FACTIONS.undead.units.summon` is a copy
@@ -376,6 +387,30 @@ such enemy (a normal volley toward it, needing a clear line; a lobbing unit lobs
 
 ---
 
+### 5.10 Cover (Dawn of War style; `js/sim/cover.js`)
+Squads take less damage while they **stand in cover**. Cover is checked **when each hit lands**, where the
+target stands then (`coverAt`).
+
+| Cover | When | Ranged hits | Melee hits |
+|---|---|---|---|
+| **Heavy** | the squad's centre is within its radius × 0.6 of a **ruin**; or it stands within 0.6″ of a **Palisade / Bone Fence** (any owner) and the attacker is on the **far side** of the wall's long axis | ×0.5 (`heavyCoverRanged`) | ×0.75 (`heavyCoverMelee`) |
+| **Light** | the squad's centre is inside a **forest** | ×0.75 (`lightCoverRanged`) | ×1 |
+
+- **Ranged hits:** volley (and overwatch, tower / HQ fire), pierce, lob, storm, blast, thunder. **Melee hits:** strike, charge, parting blows, ripostes, Mighty Swing, Sweep, Leap Strike's landing. Corpse Explosion and the Plague get no cover. Buildings never get cover.
+- **Ruins are walk-in cover:** they slow movement (×0.75) but no longer block movement, sight or shots.
+- **Rocks and lakes stay solid.** Rocks still block shots and sight.
+- **Squads take cover by themselves** (`buildStancePlan`, §4). Any of the following picks the best free cover spot (`coverSpots`: heavy before light, then nearest).
+  - **Guard / Advance at its goal:** a squad with no enemy to fight within reach steps into cover within **`RULES.coverSeek` = 3″**.
+  - **Shooters:**
+    - with a target in range: step to a cover spot within 2″ that keeps the target in range;
+    - walking into range: end at a cover spot within 2.5″ of where they would stop, if it is in range.
+  - **Hold** never moves.
+- **Cover spots:**
+  - along each ruin (every 0.8″);
+  - in each forest (its centre and a ring at 0.55 × its radius);
+  - beside each Palisade / Bone Fence, on both long sides (every 1″; the side away from the enemy counts).
+- **The planner** shows the cover at a move's end (a green ring and "heavy / light cover", against the nearest visible enemy). Nameplates get a shield badge (1 light, 2 heavy). The log notes "(heavy cover)" / "(light cover)" on hits.
+
 ## 6. Movement and collisions (`js/sim/nav.js`, `resolveMoves` in `resolve.js`)
 
 - **Paths:** A* on a 0.5″ grid per squad radius (obstacles inflated by the radius; slow terrain costs
@@ -407,25 +442,25 @@ Ossuary) and Necromancers (Mausoleum; trained at the Crypt only). Everything els
 
 | Role | Name | Models | HP/model | HP | Armour | Tier | Move "/rnd | Vision | Defends | Radius | Attack | AP | Dmg/model | Full squad/hit | Reach / range | Hits per 100 AP | Flags | Train cost | Train rnds |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| hero | The Chosen | 1 | 130 | 130 | 9 | 5 | 6 | 12 | 2 | 0.65 | strike | 25 | 18 | 20.7 | reach 1.6" + lunge 1.8" (one target) | 4 | - | - | - |
-| tank | Shieldwall | 3 | 34 | 102 | 12 | 4 | 4.8 | 9 | 2 | 1.227 | strike | 30 | 4 | 13.8 | reach 1.3" + lunge 1.44" (one target) | 3 | - | 30 | 3 |
-| fighter | Men-at-arms | 4 | 20 | 80 | 7 | 5 | 6 | 9 | 1 | 1.34 | strike | 25 | 5 | 23 | reach 1.5" + lunge 1.8" (one target) | 4 | parry | 24 | 2 |
-| ranged | Crossbows | 4 | 15 | 60 | 3 | 5 | 6 | 11 | 1 | 1.34 | volley | 30 | 4 | 16 | range 14", width 0.7" | 3 | - | 26 | 2 |
-| fast | Outriders | 3 | 24 | 72 | 5 | 6 | 7.2 | 11 | 1 | 1.347 | strike | 45 | 13 | 44.85 | reach 1.7" + lunge 2.16" (one target) | 2 | - | 30 | 2 |
-| builder | Peasants | 2 | 14 | 28 | 2 | 5 | 6 | 8 | 0 | 1.094 | strike | 25 | 2 | 4.6 | reach 1.2" + lunge 1.8" (one target) | 4 | - | 10 | 1 |
+| hero | The Chosen | 1 | 260 | 260 | 9 | 5 | 6 | 12 | 2 | 0.65 | strike | 25 | 18 | 20.7 | reach 1.6" + lunge 1.8" (one target) | 4 | - | - | - |
+| tank | Shieldwall | 3 | 68 | 204 | 12 | 4 | 4.8 | 9 | 2 | 1.227 | strike | 30 | 4 | 13.8 | reach 1.3" + lunge 1.44" (one target) | 3 | - | 30 | 3 |
+| fighter | Men-at-arms | 4 | 40 | 160 | 7 | 5 | 6 | 9 | 1 | 1.34 | strike | 25 | 5 | 23 | reach 1.5" + lunge 1.8" (one target) | 4 | parry | 24 | 2 |
+| ranged | Crossbows | 4 | 30 | 120 | 3 | 5 | 6 | 11 | 1 | 1.34 | volley | 30 | 4 | 16 | range 14", width 0.7" | 3 | - | 26 | 2 |
+| fast | Outriders | 3 | 48 | 144 | 5 | 6 | 7.2 | 11 | 1 | 1.347 | strike | 45 | 13 | 44.85 | reach 1.7" + lunge 2.16" (one target) | 2 | - | 30 | 2 |
+| builder | Peasants | 2 | 28 | 56 | 2 | 5 | 6 | 8 | 0 | 1.094 | strike | 25 | 2 | 4.6 | reach 1.2" + lunge 1.8" (one target) | 4 | - | 10 | 1 |
 
 **Undead Legion** (`FACTIONS.undead.units`)
 
 | Role | Name | Models | HP/model | HP | Armour | Tier | Move "/rnd | Vision | Defends | Radius | Attack | AP | Dmg/model | Full squad/hit | Reach / range | Hits per 100 AP | Flags | Train cost | Train rnds |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| hero | Lich | 1 | 90 | 90 | 5 | 3 | 3.6 | 12 | 1 | 0.65 | volley | 25 | 10 | 10 | range 10", width 0.6" | 4 | mage: mana 60/100, +25/rnd | - | - |
-| tank | Grave Guard | 3 | 21 | 63 | 9 | 4 | 4.8 | 9 | 2 | 1.227 | strike | 30 | 3.2 | 11.04 | reach 1.3" + lunge 1.44" (one target) | 3 | - | 16 | 3 |
-| fighter | Skeleton Warriors | 5 | 9 | 45 | 3 | 5 | 6 | 9 | 1 | 1.439 | strike | 25 | 2.4 | 13.8 | reach 1.5" + lunge 1.8" (one target) | 4 | parry | 9 | 2 |
-| swarm | Skeleton Warband | 6 | 4 | 24 | 0 | 3 | 3.6 | 9 | 0 | 1.5290000000000001 | strike | 25 | 2.1 | 14.49 | reach 1.4" + lunge 1.08" (one target) | 4 | - | 14 | 1 |
-| ranged | Bone Archers | 4 | 10 | 40 | 1 | 5 | 6 | 11 | 1 | 1.34 | volley | 30 | 2.4 | 9.6 | range 14", width 0.9" | 3 | - | 13 | 2 |
-| fast | Wraiths | 3 | 14 | 42 | 3 | 6 | 7.2 | 11 | 1 | 1.347 | strike | 45 | 9 | 31.05 | reach 1.7" + lunge 2.16" (one target) | 2 | ghost | 16 | 2 |
-| mage | Necromancers | 2 | 10 | 20 | 1 | 4 | 4.8 | 10 | 1 | 1.094 | volley | 25 | 4 | 8 | range 9", width 0.5" | 4 | mage: mana 40/60, +15/rnd | 22 | 2 |
-| summon | Skeleton Warband | 6 | 4 | 24 | 0 | 3 | 3.6 | 9 | 0 | 1.5290000000000001 | strike | 25 | 2.1 | 14.49 | reach 1.4" + lunge 1.08" (one target) | 4 | summoned (lasts 3 rnds, not trainable) | - | - |
+| hero | Lich | 1 | 180 | 180 | 5 | 3 | 3.6 | 12 | 1 | 0.65 | volley | 25 | 10 | 10 | range 10", width 0.6" | 4 | mage: mana 60/100, +25/rnd | - | - |
+| tank | Grave Guard | 3 | 42 | 126 | 9 | 4 | 4.8 | 9 | 2 | 1.227 | strike | 30 | 3.2 | 11.04 | reach 1.3" + lunge 1.44" (one target) | 3 | - | 16 | 3 |
+| fighter | Skeleton Warriors | 5 | 18 | 90 | 3 | 5 | 6 | 9 | 1 | 1.439 | strike | 25 | 2.4 | 13.8 | reach 1.5" + lunge 1.8" (one target) | 4 | parry | 9 | 2 |
+| swarm | Skeleton Warband | 6 | 8 | 48 | 0 | 3 | 3.6 | 9 | 0 | 1.5290000000000001 | strike | 25 | 2.1 | 14.49 | reach 1.4" + lunge 1.08" (one target) | 4 | - | 14 | 1 |
+| ranged | Bone Archers | 4 | 20 | 80 | 1 | 5 | 6 | 11 | 1 | 1.34 | volley | 30 | 2.4 | 9.6 | range 14", width 0.9" | 3 | - | 13 | 2 |
+| fast | Wraiths | 3 | 28 | 84 | 3 | 6 | 7.2 | 11 | 1 | 1.347 | strike | 45 | 9 | 31.05 | reach 1.7" + lunge 2.16" (one target) | 2 | ghost | 16 | 2 |
+| mage | Necromancers | 2 | 20 | 40 | 1 | 4 | 4.8 | 10 | 1 | 1.094 | volley | 25 | 4 | 8 | range 9", width 0.5" | 4 | mage: mana 40/60, +15/rnd | 22 | 2 |
+| summon | Skeleton Warband | 6 | 8 | 48 | 0 | 3 | 3.6 | 9 | 0 | 1.5290000000000001 | strike | 25 | 2.1 | 14.49 | reach 1.4" + lunge 1.08" (one target) | 4 | summoned (lasts 3 rnds, not trainable) | - | - |
 
 <!-- /GEN:units -->
 
@@ -495,25 +530,25 @@ Damage per round = hits per 100 AP x damageAfter(dmg per model x models (x strik
 
 | Attacker \ Target | Lich | Grave Guard | Skeleton Warriors | Skeleton Warband | Bone Archers | Wraiths | Necromancers | Skeleton Warband |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| The Chosen | 6 (1.5 r) | 5 (1.3 r) | 3 (0.8 r) | 2 (0.5 r) | 2 (0.5 r) | 3 (0.8 r) | 1 (0.3 r) | 2 (0.5 r) |
-| Shieldwall | 9 (3 r) | 7 (2.3 r) | 4 (1.3 r) | 2 (0.7 r) | 4 (1.3 r) | 4 (1.3 r) | 2 (0.7 r) | 2 (0.7 r) |
-| Men-at-arms | 5 (1.3 r) | 4 (1 r) | 3 (0.8 r) | 2 (0.5 r) | 2 (0.5 r) | 3 (0.8 r) | 1 (0.3 r) | 2 (0.5 r) |
-| Crossbows | 7 (2.3 r) | 6 (2 r) | 4 (1.3 r) | 2 (0.7 r) | 3 (1 r) | 3 (1 r) | 2 (0.7 r) | 2 (0.7 r) |
-| Outriders | 3 (1.5 r) | 3 (1.5 r) | 2 (1 r) | 1 (0.5 r) | 1 (0.5 r) | 2 (1 r) | 1 (0.5 r) | 1 (0.5 r) |
-| Peasants | 23 (5.8 r) | 21 (5.3 r) | 12 (3 r) | 5 (1.3 r) | 10 (2.5 r) | 11 (2.8 r) | 5 (1.3 r) | 5 (1.3 r) |
+| The Chosen | 11 (2.8 r) | 9 (2.3 r) | 5 (1.3 r) | 3 (0.8 r) | 4 (1 r) | 5 (1.3 r) | 2 (0.5 r) | 3 (0.8 r) |
+| Shieldwall | 17 (5.7 r) | 13 (4.3 r) | 8 (2.7 r) | 4 (1.3 r) | 7 (2.3 r) | 7 (2.3 r) | 4 (1.3 r) | 4 (1.3 r) |
+| Men-at-arms | 10 (2.5 r) | 8 (2 r) | 5 (1.3 r) | 3 (0.8 r) | 4 (1 r) | 5 (1.3 r) | 2 (0.5 r) | 3 (0.8 r) |
+| Crossbows | 14 (4.7 r) | 12 (4 r) | 7 (2.3 r) | 3 (1 r) | 6 (2 r) | 6 (2 r) | 3 (1 r) | 3 (1 r) |
+| Outriders | 5 (2.5 r) | 5 (2.5 r) | 3 (1.5 r) | 2 (1 r) | 2 (1 r) | 3 (1.5 r) | 1 (0.5 r) | 2 (1 r) |
+| Peasants | 45 (11.3 r) | 42 (10.5 r) | 23 (5.8 r) | 10 (2.5 r) | 20 (5 r) | 21 (5.3 r) | 10 (2.5 r) | 10 (2.5 r) |
 
 **Attacks needed: Undead Legion (rows, full squad, no losses) vs Kingdom (columns, full HP, no defends)** (rounds = attacks / hits per 100 AP)
 
 | Attacker \ Target | The Chosen | Shieldwall | Men-at-arms | Crossbows | Outriders | Peasants |
 | --- | --- | --- | --- | --- | --- | --- |
-| Lich | 19 (4.8 r) | 17 (4.3 r) | 12 (3 r) | 7 (1.8 r) | 9 (2.3 r) | 4 (1 r) |
-| Grave Guard | 17 (5.7 r) | 15 (5 r) | 10 (3.3 r) | 6 (2 r) | 8 (2.7 r) | 3 (1 r) |
-| Skeleton Warriors | 13 (3.3 r) | 12 (3 r) | 8 (2 r) | 5 (1.3 r) | 7 (1.8 r) | 3 (0.8 r) |
-| Skeleton Warband | 13 (3.3 r) | 12 (3 r) | 8 (2 r) | 5 (1.3 r) | 6 (1.5 r) | 3 (0.8 r) |
-| Bone Archers | 19 (6.3 r) | 17 (5.7 r) | 12 (4 r) | 8 (2.7 r) | 9 (3 r) | 4 (1.3 r) |
-| Wraiths | 7 (3.5 r) | 6 (3 r) | 4 (2 r) | 3 (1.5 r) | 3 (1.5 r) | 1 (0.5 r) |
-| Necromancers | 22 (5.5 r) | 21 (5.3 r) | 14 (3.5 r) | 9 (2.3 r) | 12 (3 r) | 4 (1 r) |
-| Skeleton Warband | 13 (3.3 r) | 12 (3 r) | 8 (2 r) | 5 (1.3 r) | 6 (1.5 r) | 3 (0.8 r) |
+| Lich | 38 (9.5 r) | 34 (8.5 r) | 23 (5.8 r) | 14 (3.5 r) | 18 (4.5 r) | 7 (1.8 r) |
+| Grave Guard | 33 (11 r) | 30 (10 r) | 20 (6.7 r) | 12 (4 r) | 16 (5.3 r) | 6 (2 r) |
+| Skeleton Warriors | 26 (6.5 r) | 23 (5.8 r) | 16 (4 r) | 10 (2.5 r) | 14 (3.5 r) | 5 (1.3 r) |
+| Skeleton Warband | 26 (6.5 r) | 23 (5.8 r) | 15 (3.8 r) | 10 (2.5 r) | 12 (3 r) | 5 (1.3 r) |
+| Bone Archers | 38 (12.7 r) | 34 (11.3 r) | 23 (7.7 r) | 15 (5 r) | 18 (6 r) | 7 (2.3 r) |
+| Wraiths | 13 (6.5 r) | 11 (5.5 r) | 7 (3.5 r) | 5 (2.5 r) | 6 (3 r) | 2 (1 r) |
+| Necromancers | 44 (11 r) | 41 (10.3 r) | 27 (6.8 r) | 18 (4.5 r) | 24 (6 r) | 8 (2 r) |
+| Skeleton Warband | 26 (6.5 r) | 23 (5.8 r) | 15 (3.8 r) | 10 (2.5 r) | 12 (3 r) | 5 (1.3 r) |
 
 <!-- /GEN:derived -->
 
@@ -677,19 +712,19 @@ item waits.
 <!-- GEN:buildings -->
 | Type | Names (Kingdom / Undead) | Cost | Work (builder AP) | Builder-rounds | Undead rise rounds | HP | Site HP | Armour | Footprint | Vision | Fire (after the tiers) | Income/rnd | Special | Built by |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `hq` | Keep / Crypt | 0 | 0 | 0 | - | 220 | 66 | 8 | 4 x 4 | 10 | 3 x 4 = 12 raw, range 8" | - | trains kingdom: builder/fighter, undead: swarm/mage | kingdom, undead |
-| `barracks` | Barracks / Ossuary | 30 | 240 | 2.4 | 3 | 150 | 45 | 8 | 3.5 x 2.5 | 6 | - | - | trains tank/fighter/swarm/ranged/fast | kingdom, undead |
-| `tower` | Watchtower / Bone Spire | 25 | 200 | 2 | 3 | 110 | 33 | 6 | circle r 0.9 | 13 | 4 x 4 = 16 raw, range 11" | - | - | kingdom, undead |
-| `banner` | Banner / Obelisk | 20 | 120 | 1.2 | - | 60 | 18 | 4 | circle r 0.55 | 6 | - | - | +1 CP | kingdom |
-| `monolith` | Monolith / Monolith | 20 | 120 | 1.2 | 2 | 70 | 21 | 4 | circle r 0.6 | 7 | - | - | - | undead |
-| `wall` | Palisade / Bone Fence | 6 | 60 | 0.6 | 1 | 80 | 24 | 6 | 3 x 0.5 | 0 | - | - | - | kingdom, undead |
-| `farm` | Farm / Farm | 25 | 140 | 1.4 | - | 90 | 27 | 3 | 4.2 x 3.4 | 5 | - | 2 | 4 gatherers | kingdom |
-| `mine` | Mine / Mine | 30 | 160 | 1.6 | - | 100 | 30 | 6 | circle r 1.1 | 7 | - | 6 | resource site only | kingdom |
-| `forge` | Blacksmith / Blacksmith | 40 | 200 | 2 | - | 120 | 36 | 7 | 3.5 x 2.5 | 5 | - | - | - | kingdom |
-| `chapel` | Chapel / Chapel | 35 | 160 | 1.6 | - | 100 | 30 | 6 | circle r 1 | 6 | - | - | - | kingdom |
-| `pit` | Charnel Pit / Charnel Pit | 30 | 160 | 1.6 | 2 | 100 | 30 | 6 | 3 x 2.5 | 5 | - | - | - | undead |
-| `sanctum` | Dark Sanctum / Dark Sanctum | 30 | 160 | 1.6 | 2 | 90 | 27 | 5 | circle r 1 | 7 | - | - | - | undead |
-| `well` | Soul Well / Soul Well | 20 | 160 | 1.6 | 2 | 90 | 27 | 5 | circle r 1.1 | 7 | - | 2 | resource site only; soul collector (undefined") | undead |
+| `hq` | Keep / Crypt | 0 | 0 | 0 | - | 440 | 132 | 8 | 4 x 4 | 10 | 3 x 4 = 12 raw, range 8" | - | trains kingdom: builder/fighter, undead: swarm/mage | kingdom, undead |
+| `barracks` | Barracks / Ossuary | 30 | 240 | 2.4 | 3 | 300 | 90 | 8 | 3.5 x 2.5 | 6 | - | - | trains tank/fighter/swarm/ranged/fast | kingdom, undead |
+| `tower` | Watchtower / Bone Spire | 25 | 200 | 2 | 3 | 220 | 66 | 6 | circle r 0.9 | 13 | 4 x 4 = 16 raw, range 11" | - | - | kingdom, undead |
+| `banner` | Banner / Obelisk | 20 | 120 | 1.2 | - | 120 | 36 | 4 | circle r 0.55 | 6 | - | - | +1 CP | kingdom |
+| `monolith` | Monolith / Monolith | 20 | 120 | 1.2 | 2 | 140 | 42 | 4 | circle r 0.6 | 7 | - | - | - | undead |
+| `wall` | Palisade / Bone Fence | 6 | 60 | 0.6 | 1 | 160 | 48 | 6 | 3 x 0.5 | 0 | - | - | - | kingdom, undead |
+| `farm` | Farm / Farm | 25 | 140 | 1.4 | - | 180 | 54 | 3 | 4.2 x 3.4 | 5 | - | 2 | 4 gatherers | kingdom |
+| `mine` | Mine / Mine | 30 | 160 | 1.6 | - | 200 | 60 | 6 | circle r 1.1 | 7 | - | 6 | resource site only | kingdom |
+| `forge` | Blacksmith / Blacksmith | 40 | 200 | 2 | - | 240 | 72 | 7 | 3.5 x 2.5 | 5 | - | - | - | kingdom |
+| `chapel` | Chapel / Chapel | 35 | 160 | 1.6 | - | 200 | 60 | 6 | circle r 1 | 6 | - | - | - | kingdom |
+| `pit` | Charnel Pit / Charnel Pit | 30 | 160 | 1.6 | 2 | 200 | 60 | 6 | 3 x 2.5 | 5 | - | - | - | undead |
+| `sanctum` | Dark Sanctum / Dark Sanctum | 30 | 160 | 1.6 | 2 | 180 | 54 | 5 | circle r 1 | 7 | - | - | - | undead |
+| `well` | Soul Well / Soul Well | 20 | 160 | 1.6 | 2 | 180 | 54 | 5 | circle r 1.1 | 7 | - | 2 | resource site only; soul collector (undefined") | undead |
 
 Repair (Kingdom builders): builder AP x (max HP / work) HP per AP. Undead buildings rise by 80 work a round (at most 2 at once) and mend 5 % of max HP a round. Siege damage taken: damageAfter(raw x 2.5, armour) (no defends).
 <!-- /GEN:buildings -->
@@ -704,7 +739,11 @@ Repair (Kingdom builders): builder AP x (max HP / work) HP per AP. Undead buildi
   ground (§10.4): "Undead buildings must stand on your graves".
 - **Mine / Soul Well:** only on a **free resource site** (within 0.6″; the UI snaps to it), anywhere on
   the table.
-- Not overlapping terrain (+0.2″; not in a stream), other buildings (+0.3″) or squads (+0.1″).
+- Not overlapping terrain (+0.2″; not in a stream), other buildings (+0.3″) or **enemy** squads (+0.1″):
+  "An enemy squad is standing there".
+- **Your own squads make way:** when a site starts (`startQueues`), every own squad overlapping its
+  footprint moves to the nearest free spot outside it (`pushOut` in `js/sim/base.js`, rings 0.5″ apart
+  around the building; a `pushed` event, logged as "makes way for …").
 - Max 2 Banners (Kingdom only; no farm limit). The building must be in the side's faction list.
 
 ### 11.3 Construction (builders)
@@ -757,6 +796,11 @@ Hold) picks, in order:
 3. else its remembered gather task, else the nearest own gather building with a free slot (farms 4,
    mines 2).
 
+**Reachability:** a builder only takes a task or site it can reach: it must already be within work reach,
+or `approachSpot` must find a free spot by the footprint. That spot is tried at gap radius + 0.3″, then
+0.9 × radius, then radius + 0.8″, first clear of every squad, then sharing a spot with friends. A builder
+whose walk finds no path drops the task (`workFail`) instead of trying it again every round.
+
 ### 11.5 Barracks / training buildings
 The Keep trains builders (peasants); the **Crypt trains the Skeleton Warband swarm** (`FACTIONS.<f>.hqTrains`);
 Barracks / Ossuary train tank, fighter, ranged, fast (the Ossuary also the swarm).
@@ -767,7 +811,7 @@ time each, with up to 5 more queued (§10.3).
 ### 11.6 Tower and HQ fire (after all tiers)
 Each finished Watchtower / Bone Spire / HQ picks the **nearest enemy squad** whose edge is within its
 range and that it can see (same sight rules as §12, its own footprint excluded), and fires one shot:
-raw damage = `fire.dmg × 4` (HQ 3 × 4 = 12, tower 4 × 4 = 16); forest cover and the target's defends
+raw damage = `fire.dmg × 4` (HQ 3 × 4 = 12, tower 4 × 4 = 16); the target's cover (ranged) and defends
 apply. One shot per building per round.
 
 ---
@@ -812,8 +856,8 @@ War commanders and C&C Generals powers for the exclusive picks.
 
 | id | Name | Tier | At | Cost | Rounds | Needs | Doctrine | Effect |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `castle` | Castle | 2 | Keep | 60 | 3 | a Barracks | - | Tier 2: the Keep becomes a Castle (HP 300, stronger fire). Unlocks Shieldwall and Outriders, the Blacksmith, the Chapel and a doctrine. |
-| `citadel` | Citadel | 3 | Keep | 100 | 4 | Castle, a Blacksmith or Chapel | - | Tier 3: the Citadel (HP 400, fire 5, +1 command point). Unlocks the strongest research and the last doctrine. |
+| `castle` | Castle | 2 | Keep | 60 | 3 | a Barracks | - | Tier 2: the Keep becomes a Castle (HP 600, stronger fire). Unlocks Shieldwall and Outriders, the Blacksmith, the Chapel and a doctrine. |
+| `citadel` | Citadel | 3 | Keep | 100 | 4 | Castle, a Blacksmith or Chapel | - | Tier 3: the Citadel (HP 800, fire 5, +1 command point). Unlocks the strongest research and the last doctrine. |
 | `plough` | Heavy Plough | 1 | Keep | 20 | 1 | - | - | Farmers work faster: 7 AP per gold instead of 8. |
 | `rotation` | Crop Rotation | 2 | Keep | 40 | 2 | Heavy Plough, Castle | - | Every farm earns +1 gold a round by itself. |
 | `shafts` | Deep Shafts | 2 | Keep | 35 | 2 | Castle | - | Mines earn +3 gold a round. |
@@ -823,9 +867,9 @@ War commanders and C&C Generals powers for the exclusive picks.
 | `plate1` | Plate Armour I | 2 | Blacksmith | 30 | 2 | - | - | Soldiers +2 armour. |
 | `plate2` | Plate Armour II | 3 | Blacksmith | 50 | 3 | Plate Armour I, Citadel | - | Soldiers +2 more armour. |
 | `bodkin` | Bodkin Bolts | 2 | Blacksmith | 35 | 2 | Steel Weapons I | - | Crossbows shoot 2″ further; Piercing Bolt +2 damage. |
-| `legend` | Heroic Legend | 2 | Chapel | 40 | 2 | - | - | The Chosen +40 HP; Leap Strike reaches 2″ further. |
+| `legend` | Heroic Legend | 2 | Chapel | 40 | 2 | - | - | The Chosen +80 HP; Leap Strike reaches 2″ further. |
 | `valour` | Valour | 2 | Chapel | 35 | 2 | - | - | Rally reaches 2″ further and gives +2 more armour. |
-| `hospital` | Field Hospital | 2 | Chapel | 40 | 2 | Valour | - | Your squads within 4″ of a Chapel heal 3 HP per model a round. |
+| `hospital` | Field Hospital | 2 | Chapel | 40 | 2 | Valour | - | Your squads within 4″ of a Chapel heal 6 HP per model a round. |
 | `chosen` | Return of the Chosen | 3 | Chapel | 45 | 3 | Heroic Legend, Citadel | - | A fallen hero comes back after 2 rounds of holding its spot instead of 3. |
 | `knightly` | Knightly Order | 2 | Keep | 40 | 2 | Castle | tier 2 pick | Doctrine: Outriders charge 40 % harder and get +2 armour. |
 | `yeomanry` | Free Yeomanry | 2 | Keep | 40 | 2 | Castle | tier 2 pick | Doctrine: Crossbows reload faster (volley 25 AP); peasants +3 armour and hit harder. |
@@ -836,12 +880,12 @@ War commanders and C&C Generals powers for the exclusive picks.
 
 | id | Name | Tier | At | Cost | Rounds | Needs | Doctrine | Effect |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `mausoleum` | Mausoleum | 2 | Crypt | 40 | 2 | a Ossuary | - | Tier 2: the Crypt becomes a Mausoleum (HP 300, graves 12″). Unlocks Grave Guard and Wraiths (Ossuary), Necromancers (Crypt), the Charnel Pit, the Dark Sanctum and a doctrine. |
-| `necropolis` | Necropolis | 3 | Crypt | 70 | 4 | Mausoleum, a Charnel Pit or Dark Sanctum | - | Tier 3: the Necropolis (HP 380, graves 14″). Unlocks the strongest research and the last doctrine. |
+| `mausoleum` | Mausoleum | 2 | Crypt | 40 | 2 | a Ossuary | - | Tier 2: the Crypt becomes a Mausoleum (HP 600, graves 12″). Unlocks Grave Guard and Wraiths (Ossuary), Necromancers (Crypt), the Charnel Pit, the Dark Sanctum and a doctrine. |
+| `necropolis` | Necropolis | 3 | Crypt | 70 | 4 | Mausoleum, a Charnel Pit or Dark Sanctum | - | Tier 3: the Necropolis (HP 760, graves 14″). Unlocks the strongest research and the last doctrine. |
 | `restless` | Restless Earth | 1 | Crypt | 15 | 1 | - | - | Graves spread 25 % more where things die. |
 | `harvest` | Soul Harvest | 2 | Crypt | 30 | 2 | Mausoleum | - | Every model dying on your graves gives +1 soul. |
 | `blight` | Spreading Blight | 2 | Crypt | 25 | 2 | Restless Earth | - | Every Undead building spreads its graves 2″ further. |
-| `massgraves` | Mass Graves | 3 | Crypt | 45 | 3 | Soul Harvest, Necropolis | - | Monoliths heal 2 more HP per model and spread graves 3″ further. |
+| `massgraves` | Mass Graves | 3 | Crypt | 45 | 3 | Soul Harvest, Necropolis | - | Monoliths heal 4 more HP per model and spread graves 3″ further. |
 | `bones1` | Sharpened Bones I | 2 | Charnel Pit | 20 | 2 | - | - | Skeletons deal 15 % more damage (Warband, Warriors, Archers, summons). |
 | `bones2` | Sharpened Bones II | 3 | Charnel Pit | 35 | 3 | Sharpened Bones I, Necropolis | - | Skeletons deal another 15 % more damage. |
 | `plating1` | Bone Plating I | 2 | Charnel Pit | 20 | 2 | - | - | Skeletons +1 armour. |
@@ -852,7 +896,7 @@ War commanders and C&C Generals powers for the exclusive picks.
 | `greater` | Greater Summoning | 2 | Dark Sanctum | 35 | 2 | Necromancy | - | Summoned skeletons last 4 rounds instead of 3. |
 | `chain` | Chain Storm | 2 | Dark Sanctum | 35 | 2 | - | - | Dark Thunder jumps once more (the Lich and Necromancers). |
 | `phylactery` | Phylactery | 3 | Dark Sanctum | 45 | 3 | Greater Summoning, Necropolis | - | The Lich comes back after 2 rounds instead of 3, and has +25 mana. |
-| `bonetide` | Bone Tide | 2 | Crypt | 30 | 2 | Mausoleum | tier 2 pick | Doctrine: Warbands and Warriors +1 HP per model; Warriors train in 1 round. |
+| `bonetide` | Bone Tide | 2 | Crypt | 30 | 2 | Mausoleum | tier 2 pick | Doctrine: Warbands and Warriors +2 HP per model; Warriors train in 1 round. |
 | `darkarts` | Dark Arts | 2 | Crypt | 30 | 2 | Mausoleum | tier 2 pick | Doctrine: the Lich and Necromancers regain 10 more mana a round; Dark Thunder hits 30 % harder. |
 | `horde` | Endless Horde | 3 | Crypt | 60 | 3 | Necropolis | tier 3 pick | Doctrine: Summon Warband raises one more squad (the Lich 3, Necromancers 2). |
 | `plague` | Plague of Graves | 3 | Crypt | 60 | 3 | Necropolis | tier 3 pick | Doctrine: enemy squads standing on your graves lose 1 HP per model at the end of every round. |
@@ -864,7 +908,7 @@ War commanders and C&C Generals powers for the exclusive picks.
 - A side sees an enemy squad if **any** of its squads (vision = unit vision) or buildings (vision =
   building vision; sites 3″) can see it:
   - within vision range (centre to centre);
-  - the line is not cut by a ruin, rock or building;
+  - the line is not cut by a rock or building (ruins don't block sight);
   - the line does not pass through more than **2″ of forest**;
   - a target **inside a forest** is only seen from within **4″**.
 - **Stance plans and the AI** only use enemies the side can see (at round start); the AI also
@@ -1135,7 +1179,7 @@ Squads are given tasks in this order; each squad gets one:
   - **Skills:** parry when engaged (if it has one), then `autoSkills` (charges, leaps, spells, summons, as for stance squads).
   - **Shooters:**
     - **Kite (Hard / Brutal):** with a melee enemy within 2.6″ and not locked in, step 3″ away first (up to 35 AP).
-    - **Close in:** when beyond 0.95 × range or the line is blocked, walk up to 45 AP to 0.8 × range (0.45 × when blocked).
+    - **Close in:** when beyond 0.95 × range or the line is blocked, walk up to 45 AP to 0.8 × range (0.45 × when blocked); if a cover spot within 2.5″ of that end still has the target in range, it ends there instead (§5.10).
     - **Shoot:** volley with the rest.
   - **Melee:** `meleePlan`: Strikes at the focus-fire target (by id, so they lunge if it steps away, §5.2).
   - **Aim lead** (Normal and up): + 0.5 × the target's last movement.
@@ -1143,6 +1187,8 @@ Squads are given tasks in this order; each squad gets one:
 
 ### 14.8 Economy and production: the queue manager (`economy.js`)
 **Builders:**
+- A builder already working on a site (or repairing) keeps at it. A new building is placed only with a free builder to spare (one site under way per builder).
+- A new building needs a free side to work from (`approachSpot` from the HQ's direction); walls excepted. This avoids sites squeezed in between buildings.
 - Unfinished sites and buildings below 70 % HP with no builder assigned get the nearest free builder.
 - Buildings are placed on candidate spots around its own buildings, by a preference per type:
   - forward for towers and Monoliths;
@@ -1407,7 +1453,7 @@ Balance report 2026-11-24 · 8 seeds x 2 orders per map x 2 (new AI on each side
 | Kingdom farms | `BUILDINGS.farm` (`w`, `d` = land used, `slots` = farmers, `income`), `FACTIONS.kingdom.eco.gather.farm` (AP per gold), `FACTIONS.kingdom.train.builder` | late-game gold; land trade-off |
 | Mage / mana | `units.<role>.mana` (`max`, `start`, `regen`), each skill's `mana`; `isMage` in `js/data/units.js` | how often the Lich and Necromancers cast |
 | Necromancers (troop) | `FACTIONS.undead.units.mage` (2 × 10 HP, bolt `VOLLEY(25, 4, 9)`, mana 60 / 40 / +15, `THUNDER(15, 20, 6, 10, 2, 3, 0.7)`, `SUMMON(20, 35, 4, 1)`), `train.mage` (22), `RULES.trainRounds.mage` (2) | high tier: cost may change |
-| Monolith | `BUILDINGS.monolith` (`cost` 20, `work` 120, `grave` 6, `heal: { radius 4, hp 4 }` per model per round); in `FACTIONS.undead.buildings` | how fast the Undead push graves forward and recover between fights |
+| Monolith | `BUILDINGS.monolith` (`cost` 20, `work` 120, `grave` 6, `heal: { radius 4, hp 8 }` per model per round); in `FACTIONS.undead.buildings` | how fast the Undead push graves forward and recover between fights |
 | Undead tier rule | `FACTIONS.undead.lowTier` (`swarm`, `fighter`, `ranged`) | low tier: only stats change, never `train` costs; high tier: costs may change either way, but only after asking the owner |
 | Lich spells | `SUMMON(ap, mana, range, count)`, `THUNDER(ap, mana, dmg, range, jumps, jump, decay)`, `EXPLODE(ap, mana, range, radius, base, perModel)`; summoned squads: `FACTIONS.undead.units.summon` is derived from `units.swarm` right after `FACTIONS` (change the Warband and summons change with it); `RULES.summonTtl` | |
 | The Chosen | `LEAP(ap, range, cd, dmg, radius, name)`, `RALLY(ap, radius, cd, armor, dmgMult)`, `MIGHTY(ap, dmg, reach, cosHalf, stun, cd)` | stun length = `stun` AP |
@@ -1415,7 +1461,10 @@ Balance report 2026-11-24 · 8 seeds x 2 orders per map x 2 (new AI on each side
 | Graveyards and souls | `BUILDINGS.<type>.grave` (reach: well 10, hq 10, others 6, Monolith 6), `RULES.graveStart` (0.5 at placement; full by the end of the round), `graveHqStart` (10), `graveBlob` (0.8″: radius of the grave area a death adds at the nearest edge, × √models, merging, no maximum; `spreadGraves` in `js/sim/base.js`), `soulPerModel`, `soulPerHero`; `FACTIONS.undead.eco.hq` (1), `BUILDINGS.well.income` (2) | the whole Undead economy: how fast it snowballs |
 | Hero revive | `RULES.reviveRadius` (3″), `reviveRounds` (3), `reviveHp` (0.5) | how costly losing the hero is |
 | The swarm | `FACTIONS.undead.units.swarm` (`pair`, stats), `train.swarm`, `RULES.trainRounds.swarm` | the Undead horde's size; `tier` (3 since 2026-11-17, was 6 then 4: 3.6″ a round, so the swarm can't rush) and `attack.dmg` (2.1) set how fast and hard it hits early |
-| Forests | `RULES.forestSlow` (0.75); sight rules `FOREST_DEPTH` / `FOREST_CLOSE` in `js/sim/vision.js`; `coverMult` | |
+| Forests | `RULES.forestSlow` (0.75); sight rules `FOREST_DEPTH` / `FOREST_CLOSE` in `js/sim/vision.js`; light cover `RULES.lightCoverRanged` | |
+| Cover (Dawn of War style) | `RULES.heavyCoverRanged` (0.5), `heavyCoverMelee` (0.75), `lightCoverRanged` (0.75), `ruinSlow` (0.75), `coverSeek` (3″); `js/sim/cover.js` (`WALL_GAP` 0.6″, ruin reach radius × 0.6, hit kinds `RANGED_HITS` / `MELEE_HITS_COVER`, cover spot spacing) | how much ruins, walls and forests protect, and how keenly squads seek them (§5.10) |
+| Durability | every unit's `hpPer` and every `BUILDINGS.<type>.hp` in `js/data/units.js` (doubled 2026-11-24); tier HP and heals in `js/data/tech.js` | how long fights and sieges take |
+| Stuck diagnostic | `node tools/stuck.mjs [--games 2] [--maps a,b] [--rounds 60] [--verbose]` | reports squads whose walk made no progress, with the cause |
 | Stances | `RULES.advanceEngage` (10″: Advance fights the nearest squad / building within this), `RULES.goalReach` (1.5″), `RULES.retreatReach` (3″); `GUARD_RANGE` 8″ in `js/sim/stances.js` | how eager stance squads are |
 | Production queues | `RULES.queueMax` (squads waiting per training building, 5), `RULES.queueMaxBuild` (base build queue, 5); start order and wait rules in `startQueues` (`js/sim/base.js`) | longer queues = fewer decisions per round; the "one unfinished site per builder" rule limits how fast a base grows |
 | Builder site pick | `builderIdleTarget` in `js/sim/builders.js` | idle builders take any unfinished site (fewest builders, then nearest); gatherers leave for new sites. A distance limit there would keep builders (Undead especially) off long, exposed walks |
@@ -1454,7 +1503,11 @@ Balance report 2026-11-24 · 8 seeds x 2 orders per map x 2 (new AI on each side
 | `riposteMult` | `0.5` | riposte strength (x own attack) |
 | `overwatchCost` | `40` | AP for prepared overwatch |
 | `overwatchCos` | `0.5` | overwatch cone: cos of the half angle (0.5 = 60 deg each side) |
-| `coverMult` | `0.5` | damage x this through / into a forest (volleys, pierce, tower fire) |
+| `heavyCoverRanged` | `0.5` | ranged hits on a squad in heavy cover (in a ruin, or behind a Palisade / Bone Fence from its far side) x this |
+| `heavyCoverMelee` | `0.75` | melee hits on a squad in heavy cover x this |
+| `lightCoverRanged` | `0.75` | ranged hits on a squad in light cover (in a forest) x this |
+| `ruinSlow` | `0.75` | movement x this inside a ruin |
+| `coverSeek` | `3` | squads on Guard / Advance step into cover within this many inches |
 | `forestSlow` | `0.75` | movement x this inside a forest |
 | `siegeMult` | `2.5` | damage x this against buildings |
 | `strikeMult` | `1.15` | a melee Strike (target attack) deals x this its listed damage |
@@ -1587,6 +1640,8 @@ Whenever rules, numbers, the AI or maps change:
 | Monolith: a grave-spreading, healing building | Warcraft III Undead (Ziggurat-style blight spreaders), healing structures such as Warcraft III fountains of health, Dawn of War IV-style Necron power-matrix pylons (the owner's reference for spreading ground) | a building that extends your ground and supports units around it | built on your graves like other Undead buildings; heals instead of giving command points |
 | Necromancers as a caster troop under a caster hero | Warcraft III Necromancers / Liches and other caster units with mana | cheap-ish casters with a small spellbook and their own mana | weaker copies of the hero's spells (one-squad summon, short chain) |
 | Forests as large woodland that thins at the edges | the forests of most RTS maps (Age of Empires woods, Company of Heroes hedges and woods) | woodland reads as terrain with cover and slower movement | trees thin out across a soft edge; lone trees outside are only decoration |
+| Light and heavy cover that squads walk into; cover from walls by direction | Dawn of War (light / heavy cover: craters, ruins, sandbags; units take cover positions), Company of Heroes (directional cover behind walls) | protection depends on where a squad stands, so position matters | heavy ×0.5 ranged / ×0.75 melee, light ×0.75 ranged; stance squads take cover within 3″ |
+| Longer-lived units and buildings | Dawn of War (high HP pools, long fights with retreat and reinforcement) | fights last long enough to react: retreat, reinforce, flank | ×2 HP (a bit less than Dawn of War's pace) |
 | Target attacks (melee Strike) vs area attacks | single-target attacks vs splash / area attacks in StarCraft and Warcraft III; units chasing their attack target in most RTS games; "attack a unit" melee in tabletop wargames | melee commits to one enemy and follows it a little; areas hit whatever is inside | a short, speed-based lunge (30 AP) at release instead of free chasing; +15 % for giving up the area |
 | AI architecture: layered managers (strategy → economy / production → military → tactics) | UAlbertaBot (Churchill), 0 A.D.'s Petra bot (headquarters, queue, attack and defense managers), the Halo Wars 2 commander AI | each layer only tells the next what it needs | one pass per round from the side's own view (§14) |
 | Queue manager with priorities and saving | Petra's production queues and accounts; Age of Empires II AI scripting (build / train rules, strategic numbers) | every need is a request; important ones hold their cost back | one item per building a round; reserves only in the opening (§14.8) |

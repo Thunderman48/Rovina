@@ -5,6 +5,7 @@ import { createGame, defOf, radiusOf, apFor } from './sim/state.js';
 import { planCost, actionCost } from './sim/orders.js';
 import { resolveRound, arcHits, losCut, inCover, clampAim, engagedWith } from './sim/resolve.js';
 import { segCircle } from './sim/geom.js';
+import { coverOf, coverMult, coverAt } from './sim/cover.js';
 import { aiOrders, aiMemory, aiPersonality } from './ai/ai.js';
 import { BRUTAL_INCOME } from './ai/personalities.js';
 import { visibleTo, canSee } from './sim/vision.js';
@@ -27,7 +28,7 @@ import { SettingsUI } from './ui/settings.js';
 import { sfx, unlockAudio, soundOn, setSound, setVolume } from './audio/sfx.js';
 import { TEAM, TEAM_HEX, setTeams } from './ui/teams.js';
 import { BUILDINGS } from './data/units.js';
-import { hitRadius, gatherRate, placeError } from './sim/base.js';
+import { hitRadius, gatherRate, placeError, edgeDist } from './sim/base.js';
 import { BuildingView } from './render/buildings.js';
 import { FogLayer } from './render/fog.js';
 import { FogMap } from './ui/fogmap.js';
@@ -610,9 +611,9 @@ class Game {
   strikePick(q, x, z) {
     const c = [];
     for (const e of this.state.squads) if (e.hp > 0 && e.owner !== q.owner && this.canSeeEnemy(e.id)) c.push({ id: e.id, x: e.x, z: e.z, r: radiusOf(e), name: defOf(e).name });
-    for (const b of this.state.buildings || []) if (b.hp > 0 && b.owner !== q.owner && (this.knownB.has(b.id) || this.canSeeEnemy(b.id))) c.push({ id: b.id, x: b.x, z: b.z, r: hitRadius(b), name: this.bname(b) });
+    for (const b of this.state.buildings || []) if (b.hp > 0 && b.owner !== q.owner && (this.knownB.has(b.id) || this.canSeeEnemy(b.id))) c.push({ id: b.id, x: b.x, z: b.z, r: hitRadius(b), foot: b, name: this.bname(b) });
     let best = null, bd = 2;
-    for (const e of c) { const d = Math.hypot(e.x - x, e.z - z) - e.r; if (d <= bd) { bd = d; best = e; } }
+    for (const e of c) { const d = e.foot ? edgeDist(e.foot, x, z) : Math.hypot(e.x - x, e.z - z) - e.r; if (d <= bd) { bd = d; best = e; } }
     return best;
   }
 
@@ -688,7 +689,11 @@ class Game {
       L.add(chevrons(pv.line, 0x111111, 0.8));
       const end = ring(radiusOf(q), 0.1, pv.short ? COL.bad : 0xffffff, 0.95, 0.07); end.position.x = pv.end.x; end.position.z = pv.end.z; L.add(end);
       if (pv.short) { const fz = ring(0.3, 0.06, COL.bad, 0.8); fz.position.x = p.x; fz.position.z = p.z; L.add(fz); }
-      return { html: `${pv.inches.toFixed(1)}″<small>${pv.ap} AP${pv.disengage ? ' · +30 disengage, parting blow' : ''}${pv.short ? ' · out of reach' : ''}</small>`, bad: pv.short, warn: pv.disengage };
+      // cover at the end spot (against the nearest visible enemy), shown on the end ring
+      const ne = enemies.slice().sort((a, b) => Math.hypot(a.x - pv.end.x, a.z - pv.end.z) - Math.hypot(b.x - pv.end.x, b.z - pv.end.z))[0];
+      const cov = coverAt(this.state, pv.end.x, pv.end.z, radiusOf(q), ne?.x, ne?.z);
+      if (cov) { const cr = ring(radiusOf(q) + 0.25, 0.08, cov === 'heavy' ? 0x34c759 : 0x9be36b, 0.9, 0.06); cr.position.x = pv.end.x; cr.position.z = pv.end.z; L.add(cr); }
+      return { html: `${pv.inches.toFixed(1)}″<small>${pv.ap} AP${cov ? ` · ${cov} cover` : ''}${pv.disengage ? ' · +30 disengage, parting blow' : ''}${pv.short ? ' · out of reach' : ''}</small>`, bad: pv.short, warn: pv.disengage };
     }
     if (kind === 'overwatch') {
       L.add(arcShape(pr.x, pr.z, ux, uz, def.attack.range, RULES.overwatchCos, COL.watch, 0.35));
@@ -767,7 +772,7 @@ class Game {
       const lr = ring(radiusOf(q) + at.reach + lunge, 0.04, COL.swing, 0.3, 0.05, 72); lr.position.x = pr.x; lr.position.z = pr.z; L.add(lr);
       const tg = this.strikePick(q, p.x, p.z);
       if (!tg) return { html: `Strike ${Math.round(dmg * RULES.strikeMult)}<small>drop it on an enemy</small>`, bad: true };
-      const gap = Math.hypot(tg.x - pr.x, tg.z - pr.z) - radiusOf(q) - tg.r;
+      const gap = (tg.foot ? edgeDist(tg.foot, pr.x, pr.z) : Math.hypot(tg.x - pr.x, tg.z - pr.z) - tg.r) - radiusOf(q);
       const l = Math.hypot(tg.x - pr.x, tg.z - pr.z) || 1;
       L.add(lineShape(pr.x, pr.z, (tg.x - pr.x) / l, (tg.z - pr.z) / l, l, 0.14, COL.swing, 0.7));
       const m = ring(tg.r + 0.2, 0.12, COL.bad, 1, 0.08); m.position.x = tg.x; m.position.z = tg.z; L.add(m);
@@ -789,8 +794,8 @@ class Game {
     let best = null, bt = cut;
     for (const e of enemies) { const t = segCircle(pr.x, pr.z, bx, bz, e.x, e.z, radiusOf(e) + at.width / 2); if (t >= 0 && t < bt) { bt = t; best = e; } }
     if (best) mark(best);
-    const cover = best && inCover(this.state.terrain, pr.x, pr.z, best.x, best.z);
-    return { html: `Volley ${cover ? Math.round(dmg * RULES.coverMult) : dmg}<small>${best ? (cover ? 'target in cover: half damage' : 'clear shot if it stays') : cut < 1 ? 'blocked by a wall' : 'nobody there now'}</small>`, bad: !best && cut < 1, warn: cover };
+    const cover = best ? coverOf(this.state, best, pr.x, pr.z) : null, cm = coverMult(cover, 'volley');
+    return { html: `Volley ${Math.round(dmg * cm)}<small>${best ? (cover ? `target in ${cover} cover: ×${cm} damage` : 'clear shot if it stays') : cut < 1 ? 'blocked by a rock' : 'nobody there now'}</small>`, bad: !best && cut < 1, warn: cover };
   }
 
   dragMove(cx, cy) {
@@ -1026,8 +1031,9 @@ class Game {
       const bt = planning && d.role === 'builder' ? this.btasks?.get(d.id) : null;
       const mage = !!def.mana, mana = mage ? (planning && d.owner === this.me ? this.planner.manaLeft(d) : d.mana ?? 0) : 0;
       const stun = d.stun || 0, ttl = d.ttl || 0;
+      const cov = planning ? coverOf(this.state, d) : null;   // cover where it stands (Dawn of War style)
       const autoOff = planning && d.owner === this.me && skillsOf(def).length > 0 && !this.planner.autoOf(d);
-      const key = `${mana}|${stun}|${ttl}|${autoOff}|${bt ? bt.mode + bt.name : ''}|${tier}|${d.models}|${d.hp}|${sel}|${!!plan}|${d.dying !== undefined}|${defs}|${ups}|${stance}|${zoomedOut}|${parry}|${watch}|${engaged}|${cd}|${d.lastSeen}`;
+      const key = `${cov}|${mana}|${stun}|${ttl}|${autoOff}|${bt ? bt.mode + bt.name : ''}|${tier}|${d.models}|${d.hp}|${sel}|${!!plan}|${d.dying !== undefined}|${defs}|${ups}|${stance}|${zoomedOut}|${parry}|${watch}|${engaged}|${cd}|${d.lastSeen}`;
       if (el.dataset.key !== key && d.lastSeen !== undefined) {
         el.dataset.key = key;
         el.style.setProperty('--team', TEAM[d.owner]);
@@ -1045,6 +1051,7 @@ class Game {
         if (parry) st.push(`<span class="st" title="Parry ready">${icon('parry', 12)}</span>`);
         if (watch) st.push(`<span class="st" title="Overwatch">${icon('overwatch', 12)}</span>`);
         if (engaged) st.push(`<span class="st" title="Engaged in melee">${icon('engaged', 12)}</span>`);
+        if (cov) st.push(`<span class="st cov ${cov}" title="${cov === 'heavy' ? 'Heavy cover: ranged hits ×' + RULES.heavyCoverRanged + ', melee ×' + RULES.heavyCoverMelee : 'Light cover: ranged hits ×' + RULES.lightCoverRanged}">${icon('fortify', 12)}${cov === 'heavy' ? '2' : '1'}</span>`);
         if (stun) st.push(`<span class="st stun" title="Stunned: its actions wait ${stun} AP">✶${stun}</span>`);
         if (ttl) st.push(`<span class="st sum" title="Summoned: crumbles after ${ttl} more round${ttl > 1 ? 's' : ''}">☠${ttl}</span>`);
         if (autoOff) st.push(`<span class="st" title="Auto skills off">⦸</span>`);
@@ -1115,13 +1122,14 @@ class Game {
       else if (e.type === 'queueDrop' && e.owner === this.me) lines.push({ T: e.T, html: `Build queue: ${esc(BUILDINGS[e.btype].name[this.faction(e.owner)])} dropped (${esc(e.why)})` });
       else if (e.type === 'spawn' && e.owner === this.me) lines.push({ T: e.T, html: e.summon ? `<b class="t${e.owner}">A summoned Skeleton Warband</b> rises from the ground` : `<b class="t${e.owner}">New ${esc(FACTIONS[this.faction(e.owner)].units[e.role].name)}</b> join your army` });
       else if (e.type === 'bdown') lines.push({ T: e.T, html: `${name(e.id)} is destroyed` });
+      else if (e.type === 'pushed' && tl.squads.find(x => x.id === e.id)?.owner === this.me) lines.push({ T: e.T, html: `${name(e.id)} makes way for ${name(e.bid)}` });
       else if (e.type === 'shrine') lines.push({ T: e.T, html: e.owner === this.me ? 'You claim a resource site' : e.owner < 0 ? 'A resource site is freed' : 'The enemy claims a resource site' });
       else if (e.type === 'income' && e.owner === this.me) lines.push({ T: e.T, html: `Income <span class="gain">+${e.amount}</span> ${this.ecoName()} (now ${e.supply})` });
       else if (e.type === 'souls' && e.owner === this.me) lines.push({ T: e.T, html: `The fallen give <span class="gain">+${e.amount}</span> souls` });
       else if (e.type === 'work' && (tl.squads.find(q => q.id === e.id)?.owner === this.me)) lines.push({ T: e.T, html: `${name(e.id)} ${e.repair ? 'start repairing' : 'get to work on'} ${name(e.bid)}` });
       else if (e.type === 'workFail' && (tl.squads.find(q => q.id === e.id)?.owner === this.me)) lines.push({ T: e.T, html: `${name(e.id)} can't reach the site` });
       else if (e.type === 'repaired' && (bld(e.id)?.owner === this.me)) lines.push({ T: e.T, html: `${name(e.id)} is fully repaired` });
-      else if (e.type === 'hit') lines.push({ T: e.T, html: `${name(e.src)} ${verb[e.kind] || 'hits'} ${name(e.dst)} <span class="dmg">−${e.dmg}</span>${e.walled ? ' (shield wall)' : ''}${e.cover ? ' (cover)' : ''}${e.defended ? ' (defended)' : ''}${e.lost ? ` · ${e.lost} model${e.lost > 1 ? 's' : ''} fall` : ''}` });
+      else if (e.type === 'hit') lines.push({ T: e.T, html: `${name(e.src)} ${verb[e.kind] || 'hits'} ${name(e.dst)} <span class="dmg">−${e.dmg}</span>${e.walled ? ' (shield wall)' : ''}${e.cover ? ` (${e.cover} cover)` : ''}${e.defended ? ' (defended)' : ''}${e.lost ? ` · ${e.lost} model${e.lost > 1 ? 's' : ''} fall` : ''}` });
       else if (e.type === 'down') lines.push({ T: e.T, html: `${name(e.id)} is destroyed` });
       else if (e.type === 'parry') lines.push({ T: e.T, html: `${name(e.id)} parries ${name(e.src)}` });
       else if (e.type === 'disengage') lines.push({ T: e.T, html: `${name(e.id)} disengages from the fight` });
@@ -1423,7 +1431,8 @@ const HELP = {
 <li><b>Defend</b>: each defend halves one hit. <b>Parry</b> (fighters): blocks the next melee hit and strikes back. <b>Overwatch</b> (shooters): fires once at the first enemy that moves inside the cone, in any tier. <b>Act earlier</b> moves a squad up a tier.</li>
 <li>Squads are several miniatures: damage removes models, and a squad hits for <b>damage per model × models left</b>.</li>
 <li><b>Engagement:</b> squads touching an enemy melee squad are engaged (red ring). Stepping away costs <b>30 AP</b> and gives that enemy a free <b>parting blow</b>. Wraiths ignore engagement and drift through squads.</li>
-<li><b>Terrain:</b> forests and the stream slow movement (cross at the fords); ruins and rocks block movement and volleys. Your own squads can pass through each other.</li>
+<li><b>Cover</b> (like Dawn of War): squads <b>inside a ruin</b>, or right <b>behind a Palisade / Bone Fence</b> (from attacks on its far side), are in <b>heavy cover</b>: ranged hits ×${RULES.heavyCoverRanged}, melee ×${RULES.heavyCoverMelee}. Squads <b>inside a forest</b> are in <b>light cover</b>: ranged hits ×${RULES.lightCoverRanged}. A shield badge on the nameplate shows it (1 light, 2 heavy). Squads on Guard or Advance step into cover within ${RULES.coverSeek}″ by themselves, and shooters pick firing spots in cover.</li>
+<li><b>Terrain:</b> forests, ruins and the stream slow movement (cross at the fords); rocks and lakes block movement, rocks block volleys and sight. Your own squads can pass through each other.</li>
 <li><b>Buildings</b> can be hit by any attack and take extra damage. Towers and HQs shoot the nearest enemy they see after every round.</li>
 </ul>`,
   economy: () => `

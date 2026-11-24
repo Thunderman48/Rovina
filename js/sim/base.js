@@ -88,6 +88,14 @@ export function edgeDist(b, x, z) {
   const dx = Math.max(0, Math.abs(x - b.x) - b.w / 2), dz = Math.max(0, Math.abs(z - b.z) - b.d / 2);
   return Math.sqrt(dx * dx + dz * dz);
 }
+// distance from (x,z) to an attack target's edge: a squad's round base, a real building's footprint, or a
+// light building copy (stance / AI targets) that carries its footprint as `foot`
+export function edgeGap(e, x, z) {
+  const f = e.foot || (e.type ? e : null);
+  if (f) return edgeDist(f, x, z);
+  return dist(x, z, e.x, e.z) - (e.r ?? squadRadius(unitDef(e.faction, e.role, e.tk), e.models));
+}
+export const footOf = b => b.r !== undefined ? { x: b.x, z: b.z, r: b.r } : { x: b.x, z: b.z, w: b.w, d: b.d };
 export function addBuilding(s, owner, type, x, z, rot = 0, built = true) {
   const b = { id: 'b' + (s.nextBid = (s.nextBid || 0) + 1), owner, type, rot, ...footprint(type, x, z, rot) };
   if (tkOf(s, owner)) b.tk = tkOf(s, owner);
@@ -160,10 +168,34 @@ export function placeError(s, p, type, x, z, rot = 0, extra = [], squads = true)
     if (overlaps(f, tf, 0.2)) return 'Blocked by terrain';
   }
   for (const b of live) if (overlaps(f, b, 0.3)) return 'Too close to another building';
-  if (squads) for (const q of s.squads) if (q.hp > 0 && overlaps(f, { x: q.x, z: q.z, r: squadRadius(unitDef(q.faction, q.role, q.tk), q.models) }, 0.1)) return 'A squad is standing there';
+  // only enemy squads block: your own squads make way when the site starts (pushOut)
+  if (squads) for (const q of s.squads) if (q.hp > 0 && q.owner !== p && overlaps(f, { x: q.x, z: q.z, r: squadRadius(unitDef(q.faction, q.role, q.tk), q.models) }, 0.1)) return 'An enemy squad is standing there';
   const count = t => live.filter(b => b.owner === p && b.type === t).length;
   if (type === 'banner' && count('banner') >= RULES.maxBannerCp) return `At most ${RULES.maxBannerCp} ${d.name[s.players[p].faction].toLowerCase()}s`;
   return '';
+}
+// own squads standing on a new building's footprint move to the nearest free spot outside it
+export function pushOut(s, b, ev = () => {}) {
+  const O = obstacles(s);
+  const rOf = q => squadRadius(unitDef(q.faction, q.role, q.tk), q.models);
+  for (const q of s.squads) {
+    if (q.hp <= 0 || q.owner !== b.owner) continue;
+    const r = rOf(q);
+    if (!overlaps(b, { x: q.x, z: q.z, r }, 0.05)) continue;
+    const free = (x, z) => !pointBlocked(O, x, z, r * 0.85) && !s.squads.some(o => o !== q && o.hp > 0 && dist(o.x, o.z, x, z) < r + rOf(o) - 0.1);
+    const from = { x: q.x, z: q.z };
+    let best = null, bd = 1e9;
+    for (let ring = 0; ring < 10 && !best; ring++) for (let k = 0; k < 24; k++) {
+      const a = k / 24 * Math.PI * 2, R = (b.r !== undefined ? b.r : Math.hypot(b.w, b.d) / 2) + r + 0.2 + ring * 0.5;
+      const x = b.x + Math.cos(a) * R, z = b.z + Math.sin(a) * R;
+      if (overlaps(b, { x, z, r }, 0.05) || !free(x, z)) continue;
+      const d = dist(x, z, q.x, q.z);
+      if (d < bd) { bd = d; best = { x, z }; }
+    }
+    if (!best) continue;
+    q.x = Math.round(best.x * 100) / 100; q.z = Math.round(best.z * 100) / 100;
+    ev({ type: 'pushed', id: q.id, bid: b.id, fx: from.x, fz: from.z, x: q.x, z: q.z });
+  }
 }
 export function bannerCount(s, p) { return (s.buildings || []).filter(b => b.owner === p && b.type === 'banner' && b.hp > 0).length; }
 export function bonusCp(s, p) {
@@ -346,6 +378,7 @@ export function startQueues(s, p, opts = {}) {
     if (apply) {
       s.supply[p] -= d.cost;
       const b = addBuilding(s, p, it.type, it.x, it.z, it.rot, !d.work);
+      pushOut(s, b, ev);   // own squads standing on the spot make way
       if (FACTIONS[fac].graves && d.grave) b.grave = Math.round(d.grave * RULES.graveStart * 1000) / 1000;   // graves spread at once
       ev({ type: 'construct', id: b.id, btype: b.type, owner: p, x: b.x, z: b.z, rot: b.rot, hp: b.hp, build: b.build, done: !b.build, qid: it.qid });
     } else extra.push(qfoot(it, p));
