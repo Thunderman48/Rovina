@@ -1151,69 +1151,73 @@ state. Income multiplier is 1 for both.
 ## 16. Balance status
 
 <!-- BALANCE -->
-_Latest run: 2026-11-24, after the Monolith went back to an ordinary Undead building (on graves, from
-the build menu; no Raise Monolith skill). `node tools/balance.mjs --games 8` (8 seeds × both army
-orders = 16 AI-vs-AI games per map, both AIs Normal, a game still going after 100 rounds counts as
-unfinished)._
+_Latest run: 2026-11-24, after the tech tree (HQ tiers that lock elite squads, research, doctrines) and
+the AI fix that researches only while its army holds up. `node tools/balance.mjs --games 8` (8 seeds ×
+both army orders = 16 AI-vs-AI games per map, both AIs Normal, a game still going after 100 rounds
+counts as unfinished)._
 
 | Map | Kingdom wins | Undead wins | Unfinished | Rounds (avg / median / min / max) | How games ended |
 |---|---|---|---|---|---|
-| Crossing | 3 (19 %) | 13 (81 %) | 0 | 44.2 / 42 / 12 / 85 | HQ destroyed 16 |
-| Twin Rivers | 11 (69 %) | 5 (31 %) | 0 | 39.1 / 32 / 13 / 93 | HQ 16 |
-| Highland Ruins | 9 (64 %) | 5 (36 %) | 2 | 37.6 / 15 / 12 / 77 | HQ 14, unfinished 2 |
-| Great Field | 13 (87 %) | 2 (13 %) | 1 | 36.4 / 19 / 14 / 92 | HQ 15, unfinished 1 |
-| **All** | **36 (59 %)** | **25 (41 %)** | **3 of 64** | | |
+| Crossing | 11 (69 %) | 5 (31 %) | 0 | 34.4 / 32 / 13 / 72 | HQ destroyed 16 |
+| Twin Rivers | 15 (94 %) | 1 (6 %) | 0 | 29.5 / 27 / 13 / 80 | HQ 16 |
+| Highland Ruins | 14 (88 %) | 2 (13 %) | 0 | 28.8 / 15 / 12 / 94 | HQ 16 |
+| Great Field | 15 (100 %) | 0 (0 %) | 1 | 25.3 / 22 / 14 / 64 | HQ 15, unfinished 1 |
+| **All** | **55 (87 %)** | **8 (13 %)** | **1 of 64** | | |
 
-**What the numbers say (2026-11-24):**
-- **Monoliths as buildings help the Undead a little** (38 / 23 → 36 / 25): the AI now builds 4–6 a game
-  on its graves toward the front (heal + graves), against 2–3 casts with the skill. Souls from deaths
-  804–994 a game.
-- Still split by map: the Undead win Crossing (81 %), the Kingdom the big maps (64–87 %), Great Field
-  most of all; the Undead find the enemy HQ in only 2–6 of 16 games on the big maps.
-- **Next tuning ideas** (no Undead unit cost changes without asking the owner): better Undead scouting
-  on the big maps; the Kingdom AI not attacking into Undead graves on Crossing; a smaller `graveBlob`
-  if the grave creep on Crossing is too strong.
+**What the numbers say (2026-11-24): the tech tree, as the AIs play it, strongly favours the Kingdom
+(36 / 25 before it → 55 / 8).** Tests with 3 seeds per map (6 games a map):
+- **No locks and no AI research:** exactly the pre-tech result (Kingdom 11 / Undead 11), so the rules
+  code itself changes nothing until tech is used.
+- **Locks on, no AI research at all** (neither side ever reaches Tier 2): Kingdom 19 / Undead 3. The
+  Undead AI leans on its elite squads (Necromancers, Grave Guard, Wraiths: about 10 trained a game
+  before), the Kingdom AI hardly on Shieldwall / Outriders, so locking elites hurts the Undead far more.
+- **No locks, AI research on:** Kingdom 20 / Undead 4; the AI's research spending (and the first
+  version saving for its tiers) also costs the Undead more than the Kingdom.
+- Tried and **not kept** (no clear gain, more stalled games): a cheaper, faster Mausoleum (25 souls, 2
+  rounds, no Ossuary needed), the Undead AI taking it from round 4, holding the HQ free instead of saving.
+- **Open, for the owner to decide:** which elite squads the Undead lock behind Tier 2 (for example
+  Necromancers at Tier 1), and how cheap / early the Mausoleum is; then a fresh AI research order.
 
 <details><summary>Full report (per faction: buildings finished, squads trained, income, gathering, souls, HQ found, per unit type damage dealt / taken / models lost / squads lost)</summary>
 
 ```
 Balance report 2026-11-24 · 8 seeds x 2 orders per map · AI normal · stop at round 100
 
-## crossing: 16 games · Kingdom 3 (19% of decided) · Undead 13 (81%) · draws 0 · unfinished 0
-   rounds (decided): avg 44.2, median 42, min 12, max 85 · ends: {"hq destroyed":16}
-   kingdom: built/game {"barracks":1.6,"farm":2.1,"banner":1.9,"mine":1.2,"tower":1.3,"wall":1.9} · trained/game {"fighter":7.4,"builder":12.9,"tank":0.8,"ranged":1.4,"fast":1.1}
-      income/game 490.0 · gathered/game 264.1 · souls/game 0.0 · found enemy HQ in 11/16 games, avg round 8.7
-      per unit type (per game): builder dealt 0.5 taken 423.4 models lost 25.7 squads lost 12.8 trained 12.9 | fast dealt 208.6 taken 78.2 models lost 3.0 squads lost 1.0 trained 1.1 | fighter dealt 1362.8 taken 609.3 models lost 29.1 squads lost 7.1 trained 7.4 | hero dealt 559.9 taken 123.9 models lost 0.8 squads lost 0.8 trained 0.0 | ranged dealt 141.6 taken 81.1 models lost 5.0 squads lost 1.3 trained 1.4 | tank dealt 71.9 taken 80.9 models lost 2.3 squads lost 0.7 trained 0.8
-   undead: built/game {"wall":3.3,"well":2.7,"barracks":3.1,"tower":1.7,"monolith":6.4} · trained/game {"swarm":51,"summon":18.4,"mage":5.7,"tank":2.3,"fighter":3.7,"ranged":2.3,"fast":0.9}
-      income/game 168.8 · gathered/game 0.0 · souls/game 967.1 · found enemy HQ in 13/16 games, avg round 23.3
-      per unit type (per game): fast dealt 86.3 taken 26.1 models lost 1.6 squads lost 0.4 trained 0.9 | fighter dealt 214.0 taken 115.8 models lost 11.1 squads lost 1.8 trained 3.7 | hero dealt 263.0 taken 90.0 models lost 0.8 squads lost 0.8 trained 0.0 | mage dealt 672.9 taken 61.0 models lost 4.4 squads lost 2.1 trained 5.7 | ranged dealt 328.6 taken 27.4 models lost 2.3 squads lost 0.5 trained 2.3 | summon dealt 165.3 taken 198.6 models lost 37.3 squads lost 5.6 trained 18.4 | swarm dealt 553.5 taken 1326.3 models lost 246.3 squads lost 38.6 trained 51.0 | tank dealt 158.0 taken 104.7 models lost 4.4 squads lost 1.1 trained 2.3
+## crossing: 16 games · Kingdom 11 (69% of decided) · Undead 5 (31%) · draws 0 · unfinished 0
+   rounds (decided): avg 34.4, median 32, min 13, max 72 · ends: {"hq destroyed":16}
+   kingdom: built/game {"barracks":1.3,"farm":1.6,"banner":1.7,"mine":1.2,"tower":0.8,"wall":0.9} · trained/game {"fighter":5.2,"builder":8.3,"ranged":2.2,"tank":0.5,"fast":0.1}
+      income/game 385.6 · gathered/game 177.6 · souls/game 0.0 · found enemy HQ in 14/16 games, avg round 11.1
+      per unit type (per game): builder dealt 0.4 taken 227.0 models lost 13.8 squads lost 6.7 trained 8.3 | fast dealt 2.6 taken 4.6 models lost 0.2 squads lost 0.1 trained 0.1 | fighter dealt 1051.1 taken 376.4 models lost 17.6 squads lost 3.9 trained 5.2 | hero dealt 622.1 taken 106.9 models lost 0.6 squads lost 0.6 trained 0.0 | ranged dealt 202.3 taken 91.3 models lost 5.6 squads lost 1.3 trained 2.2 | tank dealt 24.9 taken 39.4 models lost 1.1 squads lost 0.4 trained 0.5
+   undead: built/game {"wall":3.2,"well":2.5,"barracks":2.1,"tower":1.5,"pit":0.6,"monolith":3.8,"sanctum":0.3} · trained/game {"swarm":36,"summon":9.6,"fighter":2.7,"tank":1.3,"mage":2.5,"fast":0.7,"ranged":0.6}
+      income/game 129.1 · gathered/game 0.0 · souls/game 725.7 · found enemy HQ in 10/16 games, avg round 19.5
+      per unit type (per game): fast dealt 72.7 taken 26.7 models lost 1.4 squads lost 0.4 trained 0.7 | fighter dealt 164.8 taken 102.7 models lost 9.9 squads lost 1.7 trained 2.7 | hero dealt 187.9 taken 81.8 models lost 0.8 squads lost 0.8 trained 0.0 | mage dealt 162.4 taken 31.7 models lost 2.4 squads lost 1.2 trained 2.5 | ranged dealt 104.9 taken 7.3 models lost 0.5 squads lost 0.1 trained 0.6 | summon dealt 87.4 taken 144.0 models lost 25.8 squads lost 3.9 trained 9.6 | swarm dealt 328.9 taken 1006.5 models lost 180.8 squads lost 29.4 trained 36.0 | tank dealt 68.9 taken 75.0 models lost 3.1 squads lost 0.9 trained 1.3
 
-## twinrivers: 16 games · Kingdom 11 (69% of decided) · Undead 5 (31%) · draws 0 · unfinished 0
-   rounds (decided): avg 39.1, median 32, min 13, max 93 · ends: {"hq destroyed":16}
-   kingdom: built/game {"barracks":1.6,"farm":2.1,"banner":1.6,"mine":1.5,"tower":1.3,"wall":0.6} · trained/game {"fighter":10.5,"builder":11.2,"tank":1.4,"ranged":2.6,"fast":2.1}
-      income/game 536.4 · gathered/game 249.3 · souls/game 0.0 · found enemy HQ in 16/16 games, avg round 11.1
-      per unit type (per game): builder dealt 0.1 taken 276.8 models lost 16.9 squads lost 8.4 trained 11.2 | fast dealt 215.7 taken 134.4 models lost 5.3 squads lost 1.8 trained 2.1 | fighter dealt 1324.4 taken 686.8 models lost 32.4 squads lost 7.8 trained 10.5 | hero dealt 476.1 taken 79.8 models lost 0.5 squads lost 0.5 trained 0.0 | ranged dealt 303.4 taken 103.4 models lost 6.5 squads lost 1.6 trained 2.6 | tank dealt 87.0 taken 111.1 models lost 3.1 squads lost 1.0 trained 1.4
-   undead: built/game {"wall":2.9,"well":1.9,"barracks":2.3,"monolith":5.3,"tower":1.6} · trained/game {"swarm":40.1,"summon":11.8,"mage":4.4,"tank":2.1,"fighter":5.1,"ranged":2.5,"fast":0.8}
-      income/game 149.8 · gathered/game 0.0 · souls/game 804.0 · found enemy HQ in 5/16 games, avg round 65.8
-      per unit type (per game): fast dealt 75.3 taken 40.4 models lost 2.5 squads lost 0.8 trained 0.8 | fighter dealt 198.5 taken 187.4 models lost 18.7 squads lost 3.2 trained 5.1 | hero dealt 48.4 taken 55.1 models lost 0.5 squads lost 0.5 trained 0.0 | mage dealt 557.3 taken 72.1 models lost 4.9 squads lost 2.4 trained 4.4 | ranged dealt 705.0 taken 47.2 models lost 3.8 squads lost 0.8 trained 2.5 | summon dealt 109.1 taken 186.8 models lost 34.2 squads lost 5.0 trained 11.8 | swarm dealt 187.9 taken 1111.3 models lost 206.9 squads lost 33.4 trained 40.1 | tank dealt 69.7 taken 102.8 models lost 4.6 squads lost 1.4 trained 2.1
+## twinrivers: 16 games · Kingdom 15 (94% of decided) · Undead 1 (6%) · draws 0 · unfinished 0
+   rounds (decided): avg 29.5, median 27, min 13, max 80 · ends: {"hq destroyed":16}
+   kingdom: built/game {"barracks":1.6,"farm":1.8,"banner":1.5,"mine":1.6,"tower":0.9,"chapel":0.2,"forge":0.1,"wall":0.1} · trained/game {"fighter":5.3,"builder":4.9,"ranged":1.5,"tank":0.3,"fast":0.3}
+      income/game 406.3 · gathered/game 164.5 · souls/game 0.0 · found enemy HQ in 16/16 games, avg round 11.6
+      per unit type (per game): builder dealt 0.1 taken 35.7 models lost 2.2 squads lost 1.1 trained 4.9 | fast dealt 47.3 taken 19.1 models lost 0.8 squads lost 0.3 trained 0.3 | fighter dealt 890.3 taken 247.6 models lost 11.1 squads lost 2.3 trained 5.3 | hero dealt 433.1 taken 76.4 models lost 0.5 squads lost 0.5 trained 0.0 | ranged dealt 254.1 taken 29.5 models lost 1.7 squads lost 0.4 trained 1.5 | tank dealt 19.2 taken 13.6 models lost 0.3 squads lost 0.1 trained 0.3
+   undead: built/game {"wall":2.7,"well":1.8,"barracks":1.8,"monolith":2.4,"tower":0.6,"pit":0.4,"sanctum":0.3} · trained/game {"swarm":23.6,"summon":5.5,"fighter":2.8,"mage":1.6,"tank":0.9,"ranged":0.6}
+      income/game 97.4 · gathered/game 0.0 · souls/game 471.9 · found enemy HQ in 2/16 games, avg round 48.0
+      per unit type (per game): fighter dealt 59.8 taken 114.2 models lost 10.8 squads lost 2.0 trained 2.8 | hero dealt 54.4 taken 60.3 models lost 0.6 squads lost 0.6 trained 0.0 | mage dealt 66.3 taken 24.1 models lost 1.8 squads lost 0.9 trained 1.6 | ranged dealt 104.3 taken 11.7 models lost 1.1 squads lost 0.2 trained 0.6 | summon dealt 68.2 taken 91.1 models lost 16.1 squads lost 2.5 trained 5.5 | swarm dealt 95.4 taken 731.9 models lost 128.2 squads lost 20.9 trained 23.6 | tank dealt 14.8 taken 45.3 models lost 1.9 squads lost 0.6 trained 0.9
 
-## highland: 16 games · Kingdom 9 (64% of decided) · Undead 5 (36%) · draws 0 · unfinished 2
-   rounds (decided): avg 37.6, median 15, min 12, max 77 · ends: {"hq destroyed":14,"unfinished":2}
-   kingdom: built/game {"barracks":1.8,"farm":2,"banner":1.6,"tower":1.1,"mine":1.4,"wall":0.9} · trained/game {"fighter":11.9,"builder":10.9,"tank":2.2,"ranged":3.6,"fast":3.1}
-      income/game 630.8 · gathered/game 359.9 · souls/game 0.0 · found enemy HQ in 15/16 games, avg round 9.5
-      per unit type (per game): builder dealt 0.1 taken 288.7 models lost 17.7 squads lost 8.8 trained 10.9 | fast dealt 453.6 taken 202.1 models lost 8.1 squads lost 2.7 trained 3.1 | fighter dealt 1438.7 taken 826.3 models lost 39.6 squads lost 9.8 trained 11.9 | hero dealt 503.8 taken 76.7 models lost 0.5 squads lost 0.5 trained 0.0 | ranged dealt 678.5 taken 136.9 models lost 8.4 squads lost 1.9 trained 3.6 | tank dealt 122.6 taken 199.9 models lost 5.6 squads lost 1.9 trained 2.2
-   undead: built/game {"wall":5.9,"well":2.8,"barracks":2.4,"tower":1.9,"monolith":5.9} · trained/game {"swarm":46.1,"summon":14.7,"mage":5.6,"tank":2.6,"fighter":5.9,"ranged":3.1,"fast":1.7}
-      income/game 153.2 · gathered/game 0.0 · souls/game 994.1 · found enemy HQ in 6/16 games, avg round 41.3
-      per unit type (per game): fast dealt 85.9 taken 71.1 models lost 4.3 squads lost 1.4 trained 1.7 | fighter dealt 220.1 taken 215.2 models lost 21.6 squads lost 4.0 trained 5.9 | hero dealt 69.4 taken 57.9 models lost 0.5 squads lost 0.5 trained 0.0 | mage dealt 693.9 taken 113.6 models lost 7.4 squads lost 3.6 trained 5.6 | ranged dealt 798.9 taken 72.9 models lost 5.9 squads lost 1.4 trained 3.1 | summon dealt 114.2 taken 192.9 models lost 36.6 squads lost 5.6 trained 14.7 | swarm dealt 319.3 taken 1271.6 models lost 234.1 squads lost 38.3 trained 46.1 | tank dealt 115.5 taken 134.2 models lost 6.1 squads lost 1.9 trained 2.6
+## highland: 16 games · Kingdom 14 (88% of decided) · Undead 2 (13%) · draws 0 · unfinished 0
+   rounds (decided): avg 28.8, median 15, min 12, max 94 · ends: {"hq destroyed":16}
+   kingdom: built/game {"barracks":1.5,"farm":1.4,"banner":1.5,"tower":0.6,"mine":1.4,"wall":0.4,"forge":0.1} · trained/game {"fighter":5.6,"builder":6.7,"ranged":2.8,"tank":0.3,"fast":0.1}
+      income/game 356.6 · gathered/game 179.9 · souls/game 0.0 · found enemy HQ in 15/16 games, avg round 9.5
+      per unit type (per game): builder dealt 0.3 taken 117.9 models lost 7.0 squads lost 3.5 trained 6.7 | fast dealt 6.6 taken 8.0 models lost 0.4 squads lost 0.1 trained 0.1 | fighter dealt 807.2 taken 355.6 models lost 16.8 squads lost 3.8 trained 5.6 | hero dealt 588.9 taken 54.6 models lost 0.2 squads lost 0.2 trained 0.0 | ranged dealt 170.4 taken 114.1 models lost 6.9 squads lost 1.8 trained 2.8 | tank dealt 12.9 taken 9.5 models lost 0.3 squads lost 0.1 trained 0.3
+   undead: built/game {"wall":4.7,"well":2,"barracks":1.7,"tower":1,"pit":0.4,"monolith":2.6,"sanctum":0.2} · trained/game {"swarm":26.1,"summon":7.3,"fighter":2.5,"mage":2.1,"tank":1.3,"fast":0.7,"ranged":1.1}
+      income/game 97.0 · gathered/game 0.0 · souls/game 580.9 · found enemy HQ in 2/16 games, avg round 84.5
+      per unit type (per game): fast dealt 138.1 taken 23.9 models lost 1.5 squads lost 0.4 trained 0.7 | fighter dealt 116.1 taken 82.8 models lost 7.4 squads lost 1.4 trained 2.5 | hero dealt 27.4 taken 43.0 models lost 0.4 squads lost 0.4 trained 0.0 | mage dealt 154.6 taken 29.8 models lost 2.4 squads lost 1.2 trained 2.1 | ranged dealt 253.3 taken 25.6 models lost 2.3 squads lost 0.6 trained 1.1 | summon dealt 78.6 taken 100.9 models lost 17.4 squads lost 2.3 trained 7.3 | swarm dealt 167.1 taken 734.8 models lost 129.3 squads lost 21.2 trained 26.1 | tank dealt 33.9 taken 53.8 models lost 2.4 squads lost 0.8 trained 1.3
 
-## greatfield: 16 games · Kingdom 13 (87% of decided) · Undead 2 (13%) · draws 0 · unfinished 1
-   rounds (decided): avg 36.4, median 19, min 14, max 92 · ends: {"hq destroyed":15,"unfinished":1}
-   kingdom: built/game {"barracks":1.8,"farm":1.8,"banner":1.4,"mine":1.1,"tower":1.1,"wall":0.3} · trained/game {"fighter":13.1,"builder":7,"tank":1.3,"ranged":5.8,"fast":2.2}
-      income/game 617.8 · gathered/game 412.5 · souls/game 0.0 · found enemy HQ in 15/16 games, avg round 17.5
-      per unit type (per game): builder dealt 0.1 taken 101.9 models lost 6.1 squads lost 3.0 trained 7.0 | fast dealt 346.7 taken 130.8 models lost 5.0 squads lost 1.6 trained 2.2 | fighter dealt 1492.1 taken 656.5 models lost 30.3 squads lost 7.0 trained 13.1 | hero dealt 326.5 taken 54.6 models lost 0.4 squads lost 0.4 trained 0.0 | ranged dealt 972.5 taken 150.4 models lost 9.1 squads lost 2.2 trained 5.8 | tank dealt 47.1 taken 89.9 models lost 2.5 squads lost 0.8 trained 1.3
-   undead: built/game {"wall":4.5,"well":1.8,"barracks":2.1,"tower":0.9,"monolith":4.3} · trained/game {"swarm":45.6,"summon":8,"mage":6.3,"tank":2.8,"fighter":3.6,"ranged":2.1,"fast":2.4}
-      income/game 147.8 · gathered/game 0.0 · souls/game 913.3 · found enemy HQ in 2/16 games, avg round 66.5
-      per unit type (per game): fast dealt 66.6 taken 102.9 models lost 6.4 squads lost 2.1 trained 2.4 | fighter dealt 68.2 taken 152.9 models lost 15.3 squads lost 2.9 trained 3.6 | hero dealt 27.0 taken 37.8 models lost 0.4 squads lost 0.4 trained 0.0 | mage dealt 427.8 taken 135.0 models lost 10.2 squads lost 5.1 trained 6.3 | ranged dealt 397.9 taken 65.3 models lost 5.3 squads lost 1.3 trained 2.1 | summon dealt 42.8 taken 131.6 models lost 24.2 squads lost 3.7 trained 8.0 | swarm dealt 247.0 taken 1339.4 models lost 242.5 squads lost 39.8 trained 45.6 | tank dealt 70.4 taken 165.6 models lost 7.3 squads lost 2.4 trained 2.8
+## greatfield: 16 games · Kingdom 15 (100% of decided) · Undead 0 (0%) · draws 0 · unfinished 1
+   rounds (decided): avg 25.3, median 22, min 14, max 64 · ends: {"hq destroyed":15,"unfinished":1}
+   kingdom: built/game {"barracks":1.8,"farm":1.6,"banner":1.3,"mine":1.3,"tower":0.8,"forge":0.3,"chapel":0.2} · trained/game {"fighter":5.6,"builder":4.2,"ranged":3.4,"tank":0.6,"fast":0.4}
+      income/game 460.8 · gathered/game 325.6 · souls/game 0.0 · found enemy HQ in 16/16 games, avg round 12.8
+      per unit type (per game): builder dealt 0.0 taken 4.9 models lost 0.3 squads lost 0.1 trained 4.2 | fast dealt 90.6 taken 10.5 models lost 0.4 squads lost 0.3 trained 0.4 | fighter dealt 765.8 taken 168.9 models lost 8.4 squads lost 2.3 trained 5.6 | hero dealt 378.9 taken 46.6 models lost 0.3 squads lost 0.3 trained 0.0 | ranged dealt 410.6 taken 59.2 models lost 4.1 squads lost 1.4 trained 3.4 | tank dealt 51.6 taken 11.7 models lost 0.3 squads lost 0.1 trained 0.6
+   undead: built/game {"wall":3.6,"well":1.9,"barracks":1.4,"tower":0.7,"monolith":1.9,"pit":0.3,"sanctum":0.1} · trained/game {"swarm":24.3,"fighter":1.9,"summon":1.8,"mage":1.8,"tank":1.2,"fast":1.2,"ranged":0.4}
+      income/game 100.9 · gathered/game 0.0 · souls/game 475.7 · found enemy HQ in 1/16 games, avg round 24.0
+      per unit type (per game): fast dealt 20.3 taken 39.9 models lost 2.4 squads lost 0.8 trained 1.2 | fighter dealt 23.1 taken 66.2 models lost 6.3 squads lost 1.3 trained 1.9 | hero dealt 13.5 taken 33.7 models lost 0.3 squads lost 0.3 trained 0.0 | mage dealt 62.7 taken 34.9 models lost 2.8 squads lost 1.4 trained 1.8 | ranged dealt 8.3 taken 11.4 models lost 1.0 squads lost 0.3 trained 0.4 | summon dealt 11.0 taken 43.4 models lost 7.4 squads lost 1.1 trained 1.8 | swarm dealt 80.6 taken 720.8 models lost 123.4 squads lost 19.8 trained 24.3 | tank dealt 14.0 taken 62.5 models lost 2.8 squads lost 0.9 trained 1.2
 ```
 </details>
 <!-- /BALANCE -->
@@ -1223,8 +1227,8 @@ Balance report 2026-11-24 · 8 seeds x 2 orders per map · AI normal · stop at 
   towers help the defender; builders repair the HQ between waves). Longer build / training times
   (2026-11-14) made this much rarer.
 - The AI sometimes never scouts the enemy HQ on the big maps (fast squads die before they get there).
-- In the latest run (2026-11-24, Monolith as a building) the Undead win Crossing 13 / 3 and lose the big
-  maps 13–36 % (see §16). The AI's Undead still train mostly the swarm.
+- In the latest run (2026-11-24, tech tree) the AIs' Kingdom wins 87 %: the elite-unit locks and the AI's
+  research hurt the Undead AI much more than the Kingdom AI (see §16). The AI's Undead still train mostly the swarm.
 - Skeleton Warbands are now the Undead's top damage dealers (by numbers); Wraiths are rarely trained.
 - With 30-squad armies the nameplates crowd the screen (part of the phone / tablet layout to-do).
 
@@ -1356,6 +1360,7 @@ Balance report 2026-11-24 · 8 seeds x 2 orders per map · AI normal · stop at 
 | 2026-11-17 | **Skeleton Warband tier 4 → 3** (4.8″ → 3.6″ a round); **deaths spread graves at the nearest edge** (a small area `graveBlob` 0.8″ × √models where they died, merging, no maximum) instead of widening the whole graveyard | Kingdom / Undead of 64: 41 / 21 (2 unfinished) → **35 / 27** (2 unfinished): Crossing 6 / 10 → 2 / 14, Twin Rivers 13 / 3 → 11 / 4, Highland 10 / 5 → 10 / 5, Great Field 12 / 3 → 12 / 4 |
 | 2026-11-18 | **Summoned skeletons = Skeleton Warbands with a timed life** (were 3 × 11 HP, armour 3, tier 5, 3 damage; now 6 × 4 HP, armour 0, tier 3, 2.1 damage, derived from the swarm); **Corpse Explosion** 8 + 6 → 8 + 3 per model (a full summon still 26) | Kingdom / Undead of 64: 35 / 27 (2 unfinished) → **38 / 23** (3 unfinished): Crossing 2 / 14 → 2 / 13, Twin Rivers 11 / 4 → 11 / 4, Highland 10 / 5 → 13 / 3, Great Field 12 / 4 → 12 / 3 |
 | 2026-11-24 | **The Monolith is an ordinary Undead building again**: in the build menu, must stand on the side's graves, takes a rising slot (was briefly a Lich / Necromancers skill that could raise it off graves); keeps its 6″ graves and heal; AI: Bone Fences for expansion, a forward Monolith on its graves from round 5 | Kingdom / Undead of 64: 38 / 23 (3 unfinished) → **36 / 25** (3 unfinished): Crossing 2 / 13 → 3 / 13, Twin Rivers 11 / 4 → 11 / 5, Highland 13 / 3 → 9 / 5, Great Field 12 / 3 → 13 / 2 |
+| 2026-11-24 | **Tech tree** (§11.7): HQ tiers (Tier 2 locks elite squads and tech buildings), research at the HQ and 2 tech buildings per faction, doctrines; AI tiers up and researches while its army holds up | Kingdom / Undead of 64: 36 / 25 (3 unfinished) → first version 63 / 1 → **55 / 8** (1 unfinished) after the AI fix; Crossing 11 / 5, Twin Rivers 15 / 1, Highland 14 / 2, Great Field 15 / 0 |
 
 ---
 
