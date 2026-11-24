@@ -247,7 +247,10 @@ function economy(s, p, known, orders, level = 'normal') {
   const rising = !!FACTIONS[fac].rises;
   // saving for the HQ's next tier: from round 8 (tier 2) / 18 (tier 3) other spending keeps that much back
   const tier2 = gold ? 'castle' : 'mausoleum', t3 = gold ? 'citadel' : 'necropolis';
-  const saveFor = mine.some(b => b.type === 'barracks' && !b.build) && s.round >= 8 && !hasTech(s, p, tier2) && !researching(s, p, tier2) ? tier2
+  // tech only while the army holds up: research, tech buildings and saving all stop when it is small
+  const myArmy = s.squads.filter(q => q.owner === p && inArmy(q)).length;
+  const healthy = myArmy >= Math.max(5, known.length * 0.75);
+  const saveFor = !healthy ? '' : mine.some(b => b.type === 'barracks' && !b.build) && s.round >= 10 && !hasTech(s, p, tier2) && !researching(s, p, tier2) ? tier2
     : s.round >= 18 && hasTech(s, p, tier2) && !hasTech(s, p, t3) && !researching(s, p, t3) && !techError(s, p, t3, null, [], [], true) ? t3 : '';
   const saving = saveFor ? TECH[saveFor].cost : 0;
   const place = (type, prefer) => {
@@ -331,8 +334,8 @@ function economy(s, p, known, orders, level = 'normal') {
       (count('barracks') && count('barracks') < Math.min(4, 1 + Math.floor(supply / 60)) && s.round >= 5 && place('barracks', (x, z) => -Math.abs(z - hq.z) * 0.4 - Math.abs(fwd * (x - hq.x) - 3))) ||
       (FACTIONS[fac].buildings.includes('banner') && count('banner') < RULES.maxBannerCp && s.round >= 5 && supply >= BUILDINGS.banner.cost + 20 && place('banner', (x, z) => -dist(x, z, hq.x, hq.z))) ||
       // tech buildings once the HQ reached tier 2: the first right away, the second a few rounds later
-      (hasTech(s, p, tier2) && !count(tech1) && supply >= BUILDINGS[tech1].cost + 10 && place(tech1, side)) ||
-      (hasTech(s, p, tier2) && count(tech1) && !count(tech2) && s.round >= 12 && supply >= BUILDINGS[tech2].cost + 20 && place(tech2, side)) ||
+      (healthy && hasTech(s, p, tier2) && !count(tech1) && supply >= BUILDINGS[tech1].cost + 10 && place(tech1, side)) ||
+      (healthy && hasTech(s, p, tier2) && count(tech1) && !count(tech2) && s.round >= 12 && supply >= BUILDINGS[tech2].cost + 20 && place(tech2, side)) ||
       // undead: a Monolith (heal + graves) on its graves toward the front, one more every 8 rounds
       (rising && s.round >= 5 && count('monolith') < 1 + Math.floor(s.round / 8) && supply >= BUILDINGS.monolith.cost + 25 && place('monolith', (x, z) => -dist(x, z, rangeTarget.x, rangeTarget.z))) ||
       (count('tower') < 2 && s.round >= 6 && supply >= BUILDINGS.tower.cost + 30 && place('tower', forward));
@@ -342,8 +345,9 @@ function economy(s, p, known, orders, level = 'normal') {
   // research: one item at a time per HQ / tech building, from a priority list, when there is money to
   // spare and the army isn't badly outnumbered (the HQ tier first; doctrines by the army mix / seed)
   const researched = new Set(), busyB = new Set();
-  const myArmy = s.squads.filter(q => q.owner === p && inArmy(q)).length;
-  if (myArmy >= known.length * 0.5) {
+  // not in the opening (the HQ keeps training), and the HQ only once a Barracks / Ossuary also trains
+  const hasBar = mine.some(b => b.type === 'barracks' && !b.build);
+  if (s.round >= 6 && healthy) {
     const myRoles0 = s.squads.filter(q => q.owner === p).map(q => q.role), cnt = r => myRoles0.filter(x => x === r).length;
     const d2 = gold ? (cnt('ranged') >= cnt('fast') ? 'yeomanry' : 'knightly') : (cnt('swarm') + cnt('fighter') > 4 * Math.max(1, cnt('mage')) ? 'bonetide' : 'darkarts');
     const d3 = gold ? ((s.seed + p) % 2 ? 'crusade' : 'fortress') : ((s.seed + p) % 2 ? 'horde' : 'plague');
@@ -351,7 +355,7 @@ function economy(s, p, known, orders, level = 'normal') {
       ? { hq: ['plough', 'castle', d2, 'shafts', 'rotation', 'citadel', d3, 'guild'], forge: ['steel1', 'plate1', 'bodkin', 'steel2', 'plate2'], chapel: ['valour', 'legend', 'hospital', 'chosen'] }
       : { hq: ['restless', 'mausoleum', d2, 'harvest', 'blight', 'necropolis', d3, 'massgraves'], pit: ['bones1', 'plating1', 'shroud', 'swarm3', 'bones2', 'plating2'], sanctum: ['chain', 'necromancy', 'greater', 'phylactery'] };
     const reserve = level === 'easy' ? 45 : 20;
-    for (const b of mine.filter(b => !b.build && !b.train && !(b.queue || []).length && PRIO[b.type])) {
+    for (const b of mine.filter(b => !b.build && !b.train && !(b.queue || []).length && PRIO[b.type] && (b.type !== 'hq' || hasBar))) {
       // the HQ waits until round 5 for its tier upgrade and keeps training early on
       const id = PRIO[b.type].find(id => !techError(s, p, id, b, [], [...researched], true) && !researched.has(id));
       if (!id || supply < TECH[id].cost + (TECH[id].hqTier ? 0 : reserve) || (TECH[id].hqTier && s.round < (TECH[id].hqTier === 2 ? 5 : 14))) continue;
