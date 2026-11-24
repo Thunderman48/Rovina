@@ -3,7 +3,11 @@ import { RULES, FACTIONS, BUILDINGS, trainCost, skillOf, pairOf } from '../js/da
 import { createGame, addSquad, defOf, radiusOf, emptyOrders, emptyPlan } from '../js/sim/state.js';
 import { resolveRound, damageAfter, engagedWith, losCut } from '../js/sim/resolve.js';
 import { cpUsage, validateOrders } from '../js/sim/orders.js';
-import { aiOrders, aiMemory } from '../js/ai/ai.js';
+import { aiOrders, aiMemory, aiPersonality } from '../js/ai/ai.js';
+import { legacyOrders, legacyMemory } from '../js/ai/legacy.js';
+import { PERSONALITIES, SKILL, BRUTAL_INCOME, pickPersonality } from '../js/ai/personalities.js';
+import { fightRatio } from '../js/ai/combat.js';
+import { MATCHUPS } from '../js/ai/matchups.js';
 import { canSee, visibleTo } from '../js/sim/vision.js';
 import { placeError, addBuilding, incomeOf, obstacles, startQueues, armySize, spreadGraves, finishTech, techError, gateOf, validateQueue, bdef, bname, tkOf, ruleOf, bonusCp } from '../js/sim/base.js';
 import { TECH } from '../js/data/tech.js';
@@ -1262,19 +1266,125 @@ test('online sync on the biggest map', () => {
   }
 });
 
-test('AI waves: on a big map the AI gathers, then its wave reaches a passive player\'s base', () => {
+test('AI attack plan: on a big map the AI gathers, then its attack reaches a passive player\'s base', () => {
   let s = createGame(3, ['kingdom', 'undead'], 'greatfield'); const mem = aiMemory();
   const phases = new Set(); let closest = 1e9;
   const hq0 = () => s.buildings.find(b => b.owner === 0 && b.type === 'hq');
   for (let r = 0; r < 30 && s.winner === null; r++) {
     const ai = aiOrders(s, 1, mem);
-    phases.add(mem.wave.phase);
+    phases.add(mem.atk.state);
     const passive = { squads: {}, stances: Object.fromEntries(s.squads.filter(q => q.owner === 0).map(q => [q.id, 'hold'])) };   // squads start on Advance now
     s = resolveRound(s, [passive, ai]).state;
     const h = hq0(); if (h) for (const q of s.squads.filter(q => q.owner === 1 && q.role !== 'builder')) closest = Math.min(closest, Math.hypot(q.x - h.x, q.z - h.z));
   }
   ok(phases.has('gather') && phases.has('attack'), 'gathers and attacks: ' + [...phases]);
   ok(closest < 14 || s.winner === 1, 'the wave reached the base (closest ' + closest.toFixed(1) + ')');
+});
+
+console.log('M6 the AI');
+
+const aiGame = (seed, fac, map, rounds, opts = [{}, {}]) => {
+  let s = createGame(seed, fac, map); const mem = [aiMemory(), aiMemory()];
+  const seen = [new Set(), new Set()];
+  while (s.winner === null && s.round < rounds) {
+    s = resolveRound(s, [aiOrders(s, 0, mem[0], opts[0]), aiOrders(s, 1, mem[1], opts[1])]).state;
+    for (const p of [0, 1]) seen[p].add(mem[p].atk.state);
+  }
+  return { s, mem, seen };
+};
+
+test('AI: deterministic (same seed and memory -> the same orders)', () => {
+  const run = () => { let s = createGame(11, ['kingdom', 'undead'], 'twinrivers'); const mem = [aiMemory(), aiMemory()], out = [];
+    for (let r = 0; r < 10; r++) { const o = [aiOrders(s, 0, mem[0]), aiOrders(s, 1, mem[1])]; out.push(JSON.stringify(o)); s = resolveRound(s, o).state; }
+    return out.join('\n'); };
+  eq(run(), run());
+});
+
+test('AI: fog of war (moving enemy squads it cannot see does not change its orders)', () => {
+  const { s, mem } = aiGame(4, ['kingdom', 'undead'], 'crossing', 14);
+  for (const p of [0, 1]) {
+    const vis = visibleTo(s, p), s2 = JSON.parse(JSON.stringify(s));
+    let moved = 0;
+    for (const q of s2.squads) if (q.owner !== p && q.hp > 0 && !vis.has(q.id)) {
+      const x = q.x, z = q.z; q.x += 0.7; q.hp = Math.max(1, q.hp - 3);
+      if (visibleTo(s2, p).has(q.id)) { q.x = x; q.z = z; } else moved++;
+    }
+    const a = aiOrders(s, p, JSON.parse(JSON.stringify(mem[p]))), b = aiOrders(s2, p, JSON.parse(JSON.stringify(mem[p])));
+    eq(JSON.stringify(b), JSON.stringify(a), 'side ' + p + ' (' + moved + ' hidden squads moved)');
+  }
+});
+
+test('AI: never orders more squads by hand than its command points allow', () => {
+  let s = createGame(6, ['undead', 'kingdom'], 'highland'); const mem = [aiMemory(), aiMemory()];
+  for (let r = 0; r < 30 && s.winner === null; r++) {
+    const o = [aiOrders(s, 0, mem[0]), aiOrders(s, 1, mem[1])];
+    for (const p of [0, 1]) eq(cpUsage(s, p, o[p]).rejected.length, 0, 'round ' + s.round + ' side ' + p);
+    s = resolveRound(s, o).state;
+  }
+});
+
+test('AI: combat prediction favours the bigger and the better army', () => {
+  const s = arena([[0, 'fighter', 10, 10], [0, 'fighter', 10, 13], [0, 'fighter', 10, 16], [1, 'fighter', 30, 10], [1, 'swarm', 30, 13]]);
+  const A = s.squads.filter(q => q.owner === 0), B = s.squads.filter(q => q.owner === 1);
+  ok(fightRatio(A, B) > 1.2, 'three Men-at-arms beat a Warrior and a Warband: ' + fightRatio(A, B).toFixed(2));
+  ok(fightRatio(B, A) < 0.8, 'and the other way round');
+  ok(fightRatio(A.slice(0, 1), A.slice(0, 2)) < fightRatio(A.slice(0, 2), A.slice(0, 1)), 'more of the same is stronger');
+  // the matchup table (combat simulator) knows ranged squads beat slow melee in the open
+  ok(MATCHUPS['kingdom>undead'].ranged.fighter > 0.3, 'Crossbows beat Skeleton Warriors');
+  ok(MATCHUPS['undead>kingdom'].ranged.fighter > 0.3, 'Bone Archers beat Men-at-arms');
+});
+
+test('AI: difficulty is skill; only Brutal cheats (+30 % income)', () => {
+  ok(SKILL.easy.delay > 0 && !SKILL.easy.focus && SKILL.easy.mistake > 0, 'easy is slow and sloppy');
+  ok(SKILL.hard.focus && SKILL.hard.kite && !SKILL.hard.mistake, 'hard is sharp');
+  eq(JSON.stringify(SKILL.brutal), JSON.stringify(SKILL.hard), 'brutal plays like hard');
+  eq(BRUTAL_INCOME, 1.3);
+  ok(!/aiMult = \{ easy/.test(String(createGame)), 'no income change for easy / hard');
+});
+
+test('AI: personalities are a seeded pick (or the one asked for), three per faction', () => {
+  for (const f of ['kingdom', 'undead']) {
+    eq(PERSONALITIES[f].length, 3, f);
+    const ids = new Set();
+    for (let seed = 1; seed <= 30; seed++) ids.add(pickPersonality(f, seed, 1).id);
+    eq(ids.size, 3, f + ': every personality comes up');
+    eq(pickPersonality(f, 5, 1).id, pickPersonality(f, 5, 1).id, 'same seed, same pick');
+  }
+  const s = createGame(3, ['kingdom', 'undead']), mem = aiMemory();
+  eq(aiPersonality(s, 1, mem, { personality: 'necrarch' }).id, 'necrarch');
+  aiOrders(s, 1, mem);
+  eq(mem.personality.id, 'necrarch', 'kept in memory');
+});
+
+test('AI: every personality builds, researches and attacks', () => {
+  for (const f of ['kingdom', 'undead']) for (const P of PERSONALITIES[f]) {
+    const fac = f === 'kingdom' ? ['kingdom', 'undead'] : ['undead', 'kingdom'];
+    const { s, seen } = aiGame(2, fac, 'twinrivers', 45, [{ personality: P.id }, {}]);
+    const built = (s.buildings || []).filter(b => b.owner === 0).length;
+    ok(built >= 3 || s.winner !== null, P.id + ' builds (' + built + ')');
+    ok((s.tech[0] || []).length >= 1 || s.winner === 1, P.id + ' researches');
+    ok(seen[0].has('attack') || s.winner !== null, P.id + ' attacks: ' + [...seen[0]]);
+  }
+});
+
+test('AI: the new AI beats the legacy AI with both factions', () => {
+  let wins = 0, games = 0;
+  for (const seed of [1, 2]) for (const fac of [['kingdom', 'undead'], ['undead', 'kingdom']]) {
+    let s = createGame(seed, fac, 'crossing'); const mem = [aiMemory(), legacyMemory()];
+    while (s.winner === null && s.round < 100) s = resolveRound(s, [aiOrders(s, 0, mem[0]), legacyOrders(s, 1, mem[1])]).state;
+    games++; if (s.winner === 0) wins++;
+  }
+  ok(wins >= 3, 'new AI won ' + wins + ' of ' + games);
+});
+
+test('AI: thinking time stays small on the biggest map', () => {
+  let s = createGame(8, ['kingdom', 'undead'], 'greatfield'); const mem = [aiMemory(), aiMemory()];
+  let ms = 0, n = 0;
+  for (let r = 0; r < 35 && s.winner === null; r++) {
+    const t0 = performance.now(); const o = [aiOrders(s, 0, mem[0]), aiOrders(s, 1, mem[1])]; ms += performance.now() - t0; n += 2;
+    s = resolveRound(s, o).state;
+  }
+  ok(ms / n < 150, 'average ' + (ms / n).toFixed(1) + ' ms per AI turn');
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

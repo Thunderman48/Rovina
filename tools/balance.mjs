@@ -7,10 +7,13 @@
 //   node tools/balance.mjs --json > out.json     # machine-readable
 //
 // Options: --games N (seeds per map, default 8), --maps a,b|all, --level easy|normal|hard (both
-// AIs), --rounds N (stop and call it unfinished after N rounds, default 100), --seed S (first seed).
+// AIs), --rounds N (stop and call it unfinished after N rounds, default 100), --seed S (first seed),
+// --vs legacy (the new AI plays one side, the previous AI (js/ai/legacy.js) the other, both ways round:
+// reports the new AI's wins per faction), --personality id (the new AI always uses that personality).
 import { createGame, defOf } from '../js/sim/state.js';
 import { resolveRound } from '../js/sim/resolve.js';
 import { aiOrders, aiMemory } from '../js/ai/ai.js';
+import { legacyOrders, legacyMemory } from '../js/ai/legacy.js';
 import { knownEnemyHq } from '../js/sim/vision.js';
 import { MAP_ORDER } from '../js/data/maps.js';
 
@@ -19,22 +22,26 @@ const flag = k => process.argv.includes('--' + k);
 const GAMES = +arg('games', 8), ROUNDS = +arg('rounds', 100), LEVEL = arg('level', 'normal'), SEED0 = +arg('seed', 1);
 const maps = arg('maps', 'all') === 'all' ? MAP_ORDER : arg('maps').split(',');
 const FACS = ['kingdom', 'undead'];
+const VS = arg('vs', ''), PERS = arg('personality', '');
 const report = { date: new Date().toISOString().slice(0, 10), games: GAMES, rounds: ROUNDS, level: LEVEL, maps: {} };
 
 for (const map of maps) {
   const R = {
-    games: 0, wins: { kingdom: 0, undead: 0 }, unfinished: 0, draws: 0, rounds: [], ends: {},
+    games: 0, wins: { kingdom: 0, undead: 0 }, newAi: { kingdom: { games: 0, wins: 0 }, undead: { games: 0, wins: 0 } }, pers: {}, unfinished: 0, draws: 0, rounds: [], ends: {},
     fac: Object.fromEntries(FACS.map(f => [f, { built: {}, trained: {}, gathered: 0, souls: 0, income: 0, hqFound: [], units: {} }])),
   };
-  for (let seed = SEED0; seed < SEED0 + GAMES; seed++) for (const order of [['kingdom', 'undead'], ['undead', 'kingdom']]) {
+  for (let seed = SEED0; seed < SEED0 + GAMES; seed++) for (const order of [['kingdom', 'undead'], ['undead', 'kingdom']]) for (const newSide of VS === 'legacy' ? [0, 1] : [-1]) {
     let s = createGame(seed, order, map);
-    const mem = [aiMemory(), aiMemory()];
+    // which AI plays each side: the new AI everywhere, or (--vs legacy) the new AI on newSide only
+    const isNew = p => newSide < 0 || p === newSide;
+    const mem = [0, 1].map(p => isNew(p) ? aiMemory() : legacyMemory());
+    const play = (p) => isNew(p) ? aiOrders(s, p, mem[p], { level: LEVEL, personality: PERS || undefined }) : legacyOrders(s, p, mem[p], { level: LEVEL });
     const found = [0, 0];
     const role = {};
     const tally = (f, r) => (R.fac[f].units[r] ||= { dealt: 0, taken: 0, modelsLost: 0, squadsLost: 0, trained: 0 });
     for (const q of s.squads) role[q.id] = [order[q.owner], q.role];
     while (s.winner === null && s.round <= ROUNDS) {
-      const r = resolveRound(s, [aiOrders(s, 0, mem[0], { level: LEVEL }), aiOrders(s, 1, mem[1], { level: LEVEL })]);
+      const r = resolveRound(s, [play(0), play(1)]);
       for (const g of r.log.segments) for (const e of g.events) {
         if (e.type === 'spawn') { role[e.id] = [order[e.owner], e.role]; R.fac[order[e.owner]].trained[e.role] = (R.fac[order[e.owner]].trained[e.role] || 0) + 1; tally(order[e.owner], e.role).trained++; }
         else if (e.type === 'built') R.fac[order[e.owner]].built[e.btype] = (R.fac[order[e.owner]].built[e.btype] || 0) + 1;
@@ -57,6 +64,11 @@ for (const map of maps) {
     if (s.winner === null) R.unfinished++;
     else if (s.winner === -1) R.draws++;
     else { R.wins[order[s.winner]]++; R.rounds.push(s.round - 1); }
+    for (const p of [0, 1]) if (isNew(p)) {
+      const pid = mem[p].personality?.id || '?', w = s.winner === p ? 1 : 0;
+      if (newSide >= 0) { R.newAi[order[p]].games++; R.newAi[order[p]].wins += w; }
+      const P = (R.pers[pid] ||= { games: 0, wins: 0 }); P.games++; P.wins += w;
+    }
   }
   report.maps[map] = R;
 }
@@ -64,11 +76,13 @@ for (const map of maps) {
 if (flag('json')) { console.log(JSON.stringify(report, null, 1)); process.exit(0); }
 const pct = (a, b) => b ? Math.round(100 * a / b) + '%' : '-';
 const per = (v, n) => (v / n).toFixed(1);
-console.log(`Balance report ${report.date} · ${GAMES} seeds x 2 orders per map · AI ${LEVEL} · stop at round ${ROUNDS}\n`);
+console.log(`Balance report ${report.date} · ${GAMES} seeds x 2 orders per map${VS === 'legacy' ? ' x 2 (new AI on each side vs the legacy AI)' : ''} · AI ${LEVEL}${PERS ? ' · personality ' + PERS : ''} · stop at round ${ROUNDS}\n`);
 for (const [map, R] of Object.entries(report.maps)) {
   const fin = R.wins.kingdom + R.wins.undead;
   const sorted = R.rounds.slice().sort((a, b) => a - b);
   console.log(`## ${map}: ${R.games} games · Kingdom ${R.wins.kingdom} (${pct(R.wins.kingdom, fin)} of decided) · Undead ${R.wins.undead} (${pct(R.wins.undead, fin)}) · draws ${R.draws} · unfinished ${R.unfinished}`);
+  if (VS === 'legacy') console.log(`   new AI vs legacy: as kingdom ${R.newAi.kingdom.wins}/${R.newAi.kingdom.games} (${pct(R.newAi.kingdom.wins, R.newAi.kingdom.games)}) · as undead ${R.newAi.undead.wins}/${R.newAi.undead.games} (${pct(R.newAi.undead.wins, R.newAi.undead.games)})`);
+  console.log(`   personalities (new AI): ` + Object.entries(R.pers).map(([k, v]) => `${k} ${v.wins}/${v.games}`).join(', '));
   console.log(`   rounds (decided): avg ${sorted.length ? per(sorted.reduce((a, b) => a + b, 0), sorted.length) : '-'}, median ${sorted.length ? sorted[sorted.length >> 1] : '-'}, min ${sorted[0] ?? '-'}, max ${sorted[sorted.length - 1] ?? '-'} · ends: ${JSON.stringify(R.ends)}`);
   for (const f of FACS) {
     const F = R.fac[f], n = R.games;

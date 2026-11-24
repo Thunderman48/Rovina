@@ -5,7 +5,8 @@ import { createGame, defOf, radiusOf, apFor } from './sim/state.js';
 import { planCost, actionCost } from './sim/orders.js';
 import { resolveRound, arcHits, losCut, inCover, clampAim, engagedWith } from './sim/resolve.js';
 import { segCircle } from './sim/geom.js';
-import { aiOrders, aiMemory } from './ai/ai.js';
+import { aiOrders, aiMemory, aiPersonality } from './ai/ai.js';
+import { BRUTAL_INCOME } from './ai/personalities.js';
 import { visibleTo, canSee } from './sim/vision.js';
 import { View } from './render/view.js';
 import { buildTable } from './render/table.js';
@@ -193,9 +194,9 @@ class Game {
     this.match = opts.mode;
     this.me = opts.me;
     this.ai = 1 - this.me;            // the other side (the AI, or the online opponent)
-    // AI difficulty: the AI's income multiplier (and in aiOrders, its command points)
-    const lvl = opts.level || 'normal', aiMult = { easy: 0.8, normal: 1, hard: 1.25 }[lvl] || 1;
-    this.aiLevel = lvl;
+    // AI difficulty is skill (js/ai/personalities.js SKILL); only Brutal cheats, with extra income
+    const lvl = opts.level || 'normal', aiMult = lvl === 'brutal' ? BRUTAL_INCOME : 1;
+    this.aiLevel = lvl; this.aiPersonality = opts.personality;
     const incomeMult = [1, 1]; if (this.match === 'ai') incomeMult[1 - this.me] = aiMult;
     this.state = createGame(opts.seed ?? ((Math.random() * 1e9) | 0), opts.factions, opts.map || 'crossing', { incomeMult });
     if (this.tableMap !== this.state.map) { buildTable(this.view, this.state.terrain, this.state.map); this.tableMap = this.state.map; }
@@ -203,9 +204,12 @@ class Game {
     document.documentElement.style.setProperty('--me', TEAM[this.me]);
     $('crest').style.background = TEAM[this.me];
     this.memory = aiMemory();
+    if (this.match === 'ai') aiPersonality(this.state, this.ai, this.memory, { personality: opts.personality });
     this.timerMs = (opts.timer || 0) * 1000; this.deadline = null;
     this.hostOrders = this.hostOrders || {}; this.guestOrders = this.guestOrders || {};
-    $('t-mode').textContent = this.match === 'ai' ? 'vs AI' : 'Online';
+    const LV = { easy: 'Easy', normal: 'Normal', hard: 'Hard', brutal: 'Brutal' };
+    $('t-mode').textContent = this.match === 'ai' ? `vs AI · ${LV[lvl] || lvl} · ${this.memory.personality?.name || ''}` : 'Online';
+    $('t-mode').title = this.match === 'ai' ? (this.memory.personality?.blurb || '') : '';
     $('menu').classList.add('hidden');
     $('hud').classList.remove('hidden');
     for (const v of this.views.values()) v.destroy();
@@ -291,7 +295,7 @@ class Game {
     }
     const mine = this.planner.final();
     if (this.match !== 'ai') { this.onlineReady(mine); return; }
-    const theirs = aiOrders(this.state, this.ai, this.memory, { level: this.aiLevel });
+    const theirs = aiOrders(this.state, this.ai, this.memory, { level: this.aiLevel, personality: this.aiPersonality });
     const orders = []; orders[this.me] = mine; orders[this.ai] = theirs;
     const pre = this.state;
     const { state: post, log } = resolveRound(pre, orders);
@@ -1376,7 +1380,10 @@ const HELP = {
 <h3>Watching the battle</h3>
 <p>The round plays back slowly. Drag the timeline to scrub, change the speed, or tap a log line to jump to it. Press <b>Next round</b> when you're done.</p>
 <h3>Camera</h3>
-<p>Drag the table to pan, pinch or scroll to zoom, two-finger twist or right-drag to rotate.</p>`,
+<p>Drag the table to pan, pinch or scroll to zoom, two-finger twist or right-drag to rotate.</p>
+<h3>The AI opponent</h3>
+<p>The AI plays by the same rules as you: it only knows what its side has seen (fog of war), has the same command points, and orders its other squads with stances and target points. It scouts for your HQ, builds its economy, picks squads that counter what it has seen (and learns which of its squads trade well), gathers its army at a safe spot and attacks when it predicts it can win, pulls back from fights it is losing, and defends its base. Each AI has a <b>personality</b> (shown on the top bar; pick one in Battle setup or leave it Random): Kingdom Warlord, Steward or Smith-King; Undead Bone Tide, Necrarch or Blight Lord.</p>
+<p><b>Difficulty</b> is skill, not money: Easy reacts a round late, forgets quickly, doesn't focus fire and makes mistakes; Normal focus-fires and counters; Hard also kites with ranged squads and scouts constantly. <b>Brutal</b> plays like Hard and <b>cheats</b>: +30 % income.</p>`,
   combat: () => `
 <ul>
 <li>Every attack is a <b>skillshot</b>: it hits whatever is inside the shape when it lands. The shape charges up during its wind-up, so enemies can walk out of it, and yours can dodge.</li>

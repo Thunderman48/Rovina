@@ -1,6 +1,7 @@
 // Settings (one stored object, applied live) and the Battle setup screen. Mixed into Game.
 import { MAPS, MAP_ORDER } from '../data/maps.js';
 import { FACTIONS } from '../data/units.js';
+import { personalitiesOf } from '../ai/personalities.js';
 import { drawMapPreview } from './mappreview.js';
 import { soundOn, setSound, setMaster, sfx, unlockAudio } from '../audio/sfx.js';
 import { MINI_MODE } from '../render/minis.js';
@@ -105,7 +106,7 @@ export const SettingsUI = {
   // ---------------------------------------------------------------- battle setup (vs AI)
   openSetup() {
     let saved = {}; try { saved = JSON.parse(localStorage.getItem(SETUP_KEY) || '{}') || {}; } catch {}
-    this.setupSel = { faction: FACTIONS[saved.faction] ? saved.faction : 'kingdom', map: MAPS[saved.map] ? saved.map : 'crossing', level: ['easy', 'normal', 'hard'].includes(saved.level) ? saved.level : 'normal' };
+    this.setupSel = { faction: FACTIONS[saved.faction] ? saved.faction : 'kingdom', map: MAPS[saved.map] ? saved.map : 'crossing', level: ['easy', 'normal', 'hard', 'brutal'].includes(saved.level) ? saved.level : 'normal', pers: saved.pers || {} };
     $('menu').classList.add('hidden'); $('setup').classList.remove('hidden');
     this.renderSetup();
   },
@@ -113,7 +114,18 @@ export const SettingsUI = {
     const S = this.setupSel;
     $('su-armies').innerHTML = Object.keys(FACTIONS).map(f => `<button class="fac ${f}${S.faction === f ? ' on' : ''}" data-f="${f}"><b>${esc(FACTIONS[f].name)}</b><small>${f === 'kingdom' ? 'Sturdy all-rounders and The Chosen · builders, big farms and gold · good for beginners' : 'Cheap, weaker hordes, the Lich and Necromancer casters · buildings rise from blighted graves · souls from deaths on your graves'}</small></button>`).join('');
     $('su-maps').innerHTML = this.mapCards(S.map);
-    $('su-level').innerHTML = [['easy', 'Easy', 'The AI earns less and commands fewer squads'], ['normal', 'Normal', 'A fair fight'], ['hard', 'Hard', 'The AI earns more and commands more squads']].map(([k, n, d]) => `<button class="chip${S.level === k ? ' on' : ''}" data-l="${k}" title="${d}">${n}</button>`).join('');
+    const LEVELS = [['easy', 'Easy', 'Reacts a round late, forgets what it saw quickly, no focus fire, waits for a big edge before attacking, makes some mistakes.'],
+      ['normal', 'Normal', 'A fair fight: same income and command points as you; focus fire, counters what it sees.'],
+      ['hard', 'Hard', 'Same income and command points as you, but sharp: focus fire, kiting, constant scouting, takes any fight it can win, no mistakes.'],
+      ['brutal', 'Brutal', 'Plays like Hard and cheats: +30 % income.']];
+    $('su-level').innerHTML = LEVELS.map(([k, n, d]) => `<button class="chip${S.level === k ? ' on' : ''}${k === 'brutal' ? ' cheat' : ''}" data-l="${k}" title="${d}">${n}${k === 'brutal' ? ' · cheats' : ''}</button>`).join('');
+    $('su-level-note').textContent = LEVELS.find(l => l[0] === S.level)[2];
+    // the AI plays the other army: Random (a seeded pick each game, named on the top bar) or one of three
+    const other = S.faction === 'kingdom' ? 'undead' : 'kingdom', plist = personalitiesOf(other), pk = S.pers[other] || 'random';
+    $('su-pers').innerHTML = [['random', 'Random']].concat(plist.map(x => [x.id, x.name])).map(([k, n]) => `<button class="chip${pk === k ? ' on' : ''}" data-p="${k}">${esc(n)}</button>`).join('');
+    const pp = plist.find(x => x.id === pk);
+    $('su-pers-note').textContent = pp ? pp.blurb : `One of ${plist.map(x => x.name).join(', ')}, picked at random and shown on the top bar.`;
+    $('su-pers').querySelectorAll('[data-p]').forEach(el => el.onclick = () => { S.pers = { ...S.pers, [other]: el.dataset.p }; this.renderSetup(); });
     this.drawMapCards($('su-maps'));
     $('su-armies').querySelectorAll('[data-f]').forEach(el => el.onclick = () => { S.faction = el.dataset.f; this.renderSetup(); });
     $('su-maps').querySelectorAll('[data-map]').forEach(el => el.onclick = () => { S.map = el.dataset.map; this.renderSetup(); });
@@ -122,8 +134,8 @@ export const SettingsUI = {
     $('su-start').onclick = () => {
       try { localStorage.setItem(SETUP_KEY, JSON.stringify(S)); } catch {}
       $('setup').classList.add('hidden');
-      const other = S.faction === 'kingdom' ? 'undead' : 'kingdom';
-      this.start({ mode: 'ai', factions: [S.faction, other], me: 0, map: S.map, level: S.level });
+      const p = S.pers[other];
+      this.start({ mode: 'ai', factions: [S.faction, other], me: 0, map: S.map, level: S.level, personality: p && p !== 'random' ? p : undefined });
     };
   },
   mapCards(sel, compact = false) {
