@@ -458,7 +458,7 @@ export const BaseUI = {
       : list.length ? `${esc(this.qInfo(list[0]).name)}: ${esc(this.waitText(fc[0]))}.`
       : P.repeatOf(b) ? `${esc(units[P.repeatOf(b)].name)} (repeat): ${esc(this.waitText(fc[0]))}.`
       : roles.length ? `Tap a squad to queue it (up to ${RULES.queueMax}), or lock it onto one below. Each is paid when its training starts.` : 'Tap a research to queue it. It is paid when it starts, and the building does nothing else meanwhile.';
-    dock.innerHTML = `<div class="dk-head"><div><div class="nm">${esc(d.name[fac])}</div><div class="sub">${hpTxt} · ${icon(eco.icon, 12)} ${P.supplyLeft()} after this round's starts · army ${P.armyNext()}/${this.state.board.cap}</div></div><button class="ib x" data-tr="close">✕</button></div>
+    dock.innerHTML = `<div class="dk-head"><div><div class="nm">${esc(d.name[fac])}</div><div class="sub">${hpTxt} · ${icon(eco.icon, 12)} ${P.supplyLeft()} after this round's starts · pop ${P.armyNext()}/${this.state.board.cap}</div></div><button class="ib x" data-tr="close">✕</button></div>
       ${b.build ? '' : `<div class="bd-sec">Queue · ${list.length}/${RULES.queueMax} · tap to remove, drag to reorder</div><div class="pq-row in-dock">${this.queueRowHTML('t', b) || '<span class="pq-empty">Empty</span>'}</div>`}
       ${roles.length ? `<div class="dk-btns">${roles.map(role => {
         const u = units[role];

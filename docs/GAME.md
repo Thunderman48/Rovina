@@ -794,6 +794,8 @@ Two kinds of persistent queue, stored in the state and kept across rounds with n
    locked role as the next item: it starts it under the same rules (cap, builder cap, cost; it waits
    when it can't) without it ever leaving the queue, so the building keeps training that role every
    time it is free, with no new orders. Queued items always go first.
+   Each building keeps its own lock. The building panel's "pop N / cap" and "… after this round's starts"
+   (the planner's forecast) include this round's repeat starts, including locks set this round.
 3. The build queue is served before training, so a waiting building does not stop training (only its
    cost is reserved once it can start).
 

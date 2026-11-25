@@ -215,7 +215,8 @@ export function builderCount(s, p) { return s.squads.filter(q => q.owner === p &
 // squads counted against the army cap: builders (their own cap) and summoned squads don't count
 export const inArmy = q => !isBuilder(q) && !q.ttl;
 // population a role takes when trained (a pair / three of a swarm counts each squad)
-export const popCost = (fac, role, tk = '') => (unitDef(fac, role, tk).pop || 0) * pairOf(fac, role, tk);
+// (an unknown role costs 0, so a bad draft never throws inside a UI render)
+export const popCost = (fac, role, tk = '') => FACTIONS[fac]?.units[role] ? (unitDef(fac, role, tk).pop || 0) * pairOf(fac, role, tk) : 0;
 // the side's population: its army squads plus the squads in training (builders, heroes and summons are free)
 export function armySize(s, p) {
   const tk = tkOf(s, p), fac = s.players[p].faction;

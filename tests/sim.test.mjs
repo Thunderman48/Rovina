@@ -11,6 +11,7 @@ import { MATCHUPS } from '../js/ai/matchups.js';
 import { canSee, visibleTo } from '../js/sim/vision.js';
 import { popCost, soulDecayOf, incomeParts, edgeDist, placeError, addBuilding, incomeOf, obstacles, startQueues, armySize, spreadGraves, finishTech, techError, gateOf, validateQueue, bdef, bname, tkOf, ruleOf, bonusCp } from '../js/sim/base.js';
 import { TECH } from '../js/data/tech.js';
+import { Planner } from '../js/ui/planner.js';
 import { builderPlan } from '../js/sim/builders.js';
 import { coverOf, coverMult } from '../js/sim/cover.js';
 import { stuckReport } from '../tools/stuck.mjs';
@@ -1770,6 +1771,20 @@ test('movement is its own stat: Crossbows walk 4.8" and Wraiths 9" in 100 AP; ti
 
 test('every research item has an effect chip', () => {
   for (const [id, T] of Object.entries(TECH)) ok(T.chip && T.chip.length <= 20, id + ': ' + T.chip);
+});
+
+test('Keep training: locking a second building keeps the first lock (planner draft, pop forecast)', () => {
+  const s = arena([[0, 'fighter', 10, 10]]); s.supply[0] = 500;
+  const A = addBuilding(s, 0, 'barracks', 8, 4, 0, true), B = addBuilding(s, 0, 'barracks', 8, 26, 0, true);
+  const P = new Planner({ state: s, me: 0, changed() {} });
+  P.setRepeat(A, 'fighter'); P.setRepeat(B, 'ranged');
+  eq(JSON.stringify(P.draft.repeat), JSON.stringify({ [A.id]: 'fighter', [B.id]: 'ranged' }));
+  eq(P.armyNext(), armySize(s, 0) + 4, 'both repeat starts counted (2 + 2 pop), no throw');
+  eq(popCost('kingdom', undefined), 0); eq(popCost('kingdom', 'nope'), 0);
+  eq(P.supplyLeft(), 500 - trainCost('kingdom', 'fighter') - trainCost('kingdom', 'ranged'), 'the bank forecast pays both repeat starts');
+  const r = resolveRound(s, [{ squads: {}, stances: {}, ...P.final() }, orders()]).state;
+  const a = r.buildings.find(b => b.id === A.id), b = r.buildings.find(x => x.id === B.id);
+  eq(a.repeat + ',' + b.repeat, 'fighter,ranged'); eq(a.train?.role + ',' + b.train?.role, 'fighter,ranged');
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

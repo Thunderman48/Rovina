@@ -304,7 +304,10 @@ export class Planner {
     for (const b of this.s.buildings) if (this.draft.cancel.includes(b.id) && b.train) v += b.train.tech ? TECH[b.train.tech].cost : trainCost(this.fac, b.train.role);
     const fc = this.forecast();
     this.bqList().forEach((it, i) => { if (fc.builds[i]?.starts) v -= BUILDINGS[it.type].cost; });
-    for (const b of this.s.buildings) if (b.owner === this.g.me && b.queue) this.tqList(b).forEach((r, i) => { if (fc.trains[b.id]?.[i]?.starts) v -= itemCost(this.fac, r); });
+    for (const b of this.s.buildings) if (b.owner === this.g.me && b.queue) {
+      const l = fc.trains[b.id] || [], list = this.tqList(b);
+      l.forEach((x, i) => { const r = x.repeat ? this.repeatOf(b) : list[i]; if (x.starts && r) v -= itemCost(this.fac, r); });
+    }
     return v;
   }
   // squads training or starting this round (for the army count)
@@ -313,7 +316,7 @@ export class Planner {
     let n = armySize(this.s, this.g.me) - this.draft.cancel.filter(id => this.s.buildings.find(b => b.id === id)?.train?.role).length;
     for (const [bid, l] of Object.entries(fc.trains)) {
       const b = this.s.buildings.find(x => x.id === bid), list = b ? this.tqList(b) : [];
-      l.forEach((x, i) => { const r = x.repeat ? b.repeat : list[i]; if (x.starts && !isTechItem(r) && r !== 'builder') n += popCost(this.fac, r, tkOf(this.s, this.g.me)); });
+      l.forEach((x, i) => { const r = x.repeat ? this.repeatOf(b) : list[i]; if (x.starts && !isTechItem(r) && r !== 'builder') n += popCost(this.fac, r, tkOf(this.s, this.g.me)); });
     }
     return n;
   }
