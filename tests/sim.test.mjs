@@ -15,6 +15,7 @@ import { builderPlan } from '../js/sim/builders.js';
 import { coverOf, coverMult } from '../js/sim/cover.js';
 import { stuckReport } from '../tools/stuck.mjs';
 import { buildStancePlan } from '../js/sim/stances.js';
+import { autoSkills } from '../js/sim/skills.js';
 import { knownEnemyHq } from '../js/sim/vision.js';
 import { Nav, walkAP, pointBlocked } from '../js/sim/nav.js';
 import { MAPS, MAP_ORDER } from '../js/data/maps.js';
@@ -260,7 +261,8 @@ test('ruins are walk-in heavy cover: volleys pass them; a squad standing in one 
   const { log } = resolveRound(s, o);
   const hit = events(log).find(e => e.type === 'hit' && e.src === 'q1');
   eq(hit.dst, 'q2'); eq(hit.cover, 'heavy');
-  eq(hit.dmg, damageAfter(hit.raw * RULES.heavyCoverRanged, Math.max(0, defOf(s.squads[1]).armor - FACTIONS.kingdom.units.ranged.passive.armor), hit.defended), 'heavy cover (and Armour-piercing)');
+  const cb = FACTIONS.kingdom.units.ranged;
+  eq(hit.dmg, damageAfter(cb.attack.dmg * cb.models * RULES.heavyCoverRanged, Math.max(0, defOf(s.squads[1]).armor - cb.passive.armor), hit.defended), 'heavy cover (and Armour-piercing)');
   ok(!pointBlocked(obstacles(s), 22, 13.4, 1), 'a ruin does not block movement');
 });
 
@@ -1579,10 +1581,11 @@ test('passives: every unit type has one; Rend stacks cut damage and AP, then run
   eq(apFor(mf), Math.round(RULES.ap * (1 - 2 * 0.05)), 'less AP');
   r = resolveRound(r.state, [orders(), orders()]);
   ok(!r.state.squads.find(q => q.id === 'q2').rend, 'it lasts through its next round (with less AP), then runs out');
-  // max 5 stacks
-  const t = arena([[1, 'swarm', 20, 16], [0, 'fighter', 22.3, 16]]); t.squads[1].rend = { n: 5, dmg: 0.05, ap: 0.05, until: t.round + 1 };
+  // max 10 stacks
+  eq(FACTIONS.undead.units.swarm.passive.max, 10);
+  const t = arena([[1, 'swarm', 20, 16], [0, 'fighter', 22.3, 16]]); t.squads[1].rend = { n: 10, dmg: 0.05, ap: 0.05, until: t.round + 1 };
   const o2 = holdAll(t); o2[1].squads.q1 = plan([{ kind: 'strike', t: 'q2', x: 22.3, z: 16 }]);
-  eq(resolveRound(t, o2).state.squads.find(q => q.id === 'q2').rend.n, 5, 'capped at 5');
+  eq(resolveRound(t, o2).state.squads.find(q => q.id === 'q2').rend.n, 10, 'capped at 10');
 });
 
 test('passives: Soul Drain heals the Lich; Berserk hits harder when low; Bulwark blunts shots', () => {
@@ -1669,6 +1672,22 @@ test('stance shooters locked in melee strike back; auto skills skip ranged skill
   const s = arena([[1, 'ranged', 20, 16], [0, 'fighter', 22.6, 16]]);
   const plan1 = buildStancePlan(s, s.squads[0], s.squads.filter(q => q.owner === 0));
   ok(plan1.actions.some(a => a.kind === 'strike') && !plan1.actions.some(a => a.kind === 'volley' || a.kind === 'storm'), JSON.stringify(plan1.actions.map(a => a.kind)));
+});
+
+test('auto skills rotate: a skill used last round scores lower than another usable one', () => {
+  // the Chosen next to an enemy: Mighty Swing and Rally both apply; after a round with Mighty Swing it rallies first
+  const s = arena([[0, 'hero', 20, 16], [0, 'fighter', 20, 18.6], [1, 'fighter', 22.2, 16]]);
+  const hero = s.squads[0];
+  const pick = () => { const pl = emptyPlan(); autoSkills(s, hero, s.squads[2], s.squads.filter(q => q.owner === 1), s.squads.filter(q => q.owner === 0), pl, 100); return pl.actions.map(a => a.kind); };
+  const first = pick();
+  hero.lastSk = [first[0]];
+  const second = pick();
+  ok(first[0] !== second[0], 'first ' + first + ', then ' + second);
+});
+
+test('Crossbows a bit weaker, the Lich hits harder', () => {
+  eq(FACTIONS.kingdom.units.ranged.attack.dmg, 3.4); eq(skillOf(FACTIONS.kingdom.units.ranged, 'pierce').dmg, 4.5);
+  eq(FACTIONS.undead.units.hero.attack.dmg, 13); eq(skillOf(FACTIONS.undead.units.hero, 'thunder').dmg, 17);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

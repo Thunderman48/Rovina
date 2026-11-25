@@ -113,6 +113,9 @@ export function resolveRound(state0, ordersIn) {
     const def = defOf(q);
     const direct = orders[q.owner].squads[q.id];
     const plan = direct || buildStancePlan(s, q, snapshot.filter(e => e.owner !== q.owner && seenBy[q.owner].has(e.id)), snapshot);
+    // the skills it uses this round (auto skills prefer a different one next round)
+    const sks = (plan.actions || []).map(x => x.kind).filter(k => skillOf(def, k));
+    if (sks.length) q.lastSk = [...new Set(sks)]; else delete q.lastSk;
     rts.push({
       q, def, plan, direct: !!direct,
       actions: plan.actions.map(a => ({ ...a, cost: actionCost(q, a) })),

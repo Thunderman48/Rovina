@@ -141,7 +141,7 @@ export const FACTIONS = {
       hero:    { name: 'The Chosen', role: 'hero', models: 1, hpPer: 260, armor: 9, tier: 5, look: 'lord', vision: 12, defends: 2, attack: STRIKE(25, 18, 1.6), skills: [LEAP(20, 7, 2, 12, 1.6, 'Leap Strike'), RALLY(20, 5, 2, 4, 1), MIGHTY(30, 28, 2.6, 0.2, 25)] },
       tank:    { name: 'Shieldwall', role: 'tank', models: 3, hpPer: 68, armor: 12, tier: 4, look: 'shield', vision: 9, defends: 2, attack: STRIKE(30, 4, 1.3), skills: [WALL('Lock Shields')] },
       fighter: { name: 'Men-at-arms', role: 'fighter', parry: true, models: 4, hpPer: 40, armor: 7, tier: 5, look: 'sword', vision: 9, defends: 1, attack: STRIKE(25, 5, 1.5) },
-      ranged:  { name: 'Crossbows', role: 'ranged', models: 4, hpPer: 30, armor: 3, tier: 5, look: 'crossbow', vision: 11, defends: 1, attack: VOLLEY(30, 4, 14), melee: STRIKE(25, 2, 1.2), skills: [PIERCE(35, 5, 16)] },
+      ranged:  { name: 'Crossbows', role: 'ranged', models: 4, hpPer: 30, armor: 3, tier: 5, look: 'crossbow', vision: 11, defends: 1, attack: VOLLEY(30, 3.4, 14), melee: STRIKE(25, 2, 1.2), skills: [PIERCE(35, 4.5, 16)] },
       fast:    { name: 'Outriders', role: 'fast', models: 3, hpPer: 48, armor: 5, tier: 6, look: 'rider', vision: 11, defends: 1, attack: STRIKE(45, 13, 1.7), skills: [CHARGE(35, 9, 9)] },
       builder: { name: 'Peasants', role: 'builder', models: 2, hpPer: 28, armor: 2, tier: 5, look: 'peasant', vision: 8, defends: 0, attack: STRIKE(25, 2, 1.2) },
     },
@@ -155,8 +155,8 @@ export const FACTIONS = {
   undead: {
     name: 'Undead Legion', short: 'UND', colorCss: '#9b59d0',
     units: {
-      hero:    { name: 'Lich', role: 'hero', models: 1, hpPer: 180, armor: 5, tier: 3, look: 'necro', vision: 12, defends: 1, magic: true, attack: VOLLEY(25, 10, 10, 0.6), melee: STRIKE(25, 7, 1.4),
-                 mana: { max: 100, start: 60, regen: 25 }, skills: [SUMMON(20, 40, 4, 2), THUNDER(15, 25, 14, 11, 3, 3.5, 0.7), EXPLODE(10, 20, 9, 2.5, 8, 3)] },
+      hero:    { name: 'Lich', role: 'hero', models: 1, hpPer: 180, armor: 5, tier: 3, look: 'necro', vision: 12, defends: 1, magic: true, attack: VOLLEY(25, 13, 10, 0.6), melee: STRIKE(25, 8, 1.4),
+                 mana: { max: 100, start: 60, regen: 25 }, skills: [SUMMON(20, 40, 4, 2), THUNDER(15, 25, 17, 11, 3, 3.5, 0.7), EXPLODE(10, 20, 9, 2.5, 8, 3)] },
       tank:    { name: 'Grave Guard', role: 'tank', models: 3, hpPer: 42, armor: 9, tier: 4, look: 'graveguard', vision: 9, defends: 2, attack: STRIKE(30, 3.2, 1.3), skills: [WALL('Grave Wall')] },
       fighter: { name: 'Skeleton Warriors', role: 'fighter', parry: true, models: 5, hpPer: 18, armor: 3, tier: 5, look: 'skeleton', vision: 9, defends: 1, attack: STRIKE(25, 2.4, 1.5) },
       // the swarm: fragile, quick, cheap, trained two squads at a time (`pair`; a later upgrade: three)
@@ -205,7 +205,7 @@ const PASSIVES = {
     hero:    { kind: 'drain', name: 'Soul Drain', share: 0.25, desc: 'Heals 25 % of the damage its attacks and spells deal.' },
     tank:    { kind: 'gravebound', name: 'Grave-bound', armor: 3, desc: '+3 armour while standing on your graves.' },
     fighter: { kind: 'reassemble', name: 'Reassemble', hp: 2, desc: 'On your graves, regains 2 HP per model at the end of every round.' },
-    swarm:   { kind: 'rend', name: 'Rend', dmg: 0.05, ap: 0.05, max: 5, desc: 'Each hit: the target deals 5 % less damage and has 5 % less AP (stacks up to 5) until the end of its next round.' },
+    swarm:   { kind: 'rend', name: 'Rend', dmg: 0.05, ap: 0.05, max: 10, desc: 'Each hit: the target deals 5 % less damage and has 5 % less AP (stacks up to 10) until the end of its next round.' },
     ranged:  { kind: 'longshot', name: 'Long Shot', mult: 1.25, range: 8, desc: '+25 % damage against targets 8″ or more away.' },
     fast:    { kind: 'chill', name: 'Chilling Touch', desc: 'Each hit strips one of the target\'s remaining defends.' },
     mage:    { kind: 'siphon', name: 'Soul Siphon', mana: 5, radius: 6, desc: '+5 mana whenever an enemy model dies within 6″.' },
