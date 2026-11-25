@@ -153,6 +153,10 @@ export function placeError(s, p, type, x, z, rot = 0, extra = [], squads = true)
   // only on ground the side has seen; undead buildings only on their own graves (like blight / creep)
   if (type !== 'hq' && !seenBy(s, p, x, z)) return 'You haven\'t seen that spot yet';
   if (type !== 'hq' && FACTIONS[s.players[p].faction].graves && !graveAt(s, p, x, z)) return 'Undead buildings must stand on your graves';
+  // no building near an enemy building the side has seen (anti-rush; fog-fair: only what it knows)
+  if (type !== 'hq') for (const k of Object.values((s.intel && s.intel[p] && s.intel[p].known) || {})) {
+    if (k.owner !== p && k.hp > 0 && edgeDist(k, x, z) < RULES.enemyBuildGap) return `Too close to an enemy building (${RULES.enemyBuildGap}″)`;
+  }
   const live = (s.buildings || []).filter(b => b.hp > 0).concat(extra);
   if (d.site) {
     const sh = siteAt(s, x, z);
@@ -250,16 +254,27 @@ export function spreadGraves(s, p, c, x, z, n) {
 // does side p's faction raise buildings out of the ground (no builders)?
 export const rises = (s, p) => !!FACTIONS[s.players[p].faction].rises;
 // income per round for side p (finished buildings only)
-export function incomeOf(s, p) {
+// the flat income a side earns at the end of a round, by source (before the Brutal multiplier):
+// { hq, mine, well, farm, other } amounts and how many buildings pay into each
+export function incomeParts(s, p) {
   const eco = FACTIONS[s.players[p].faction].eco;
-  let v = 0;
+  const out = { hq: 0, mine: 0, well: 0, farm: 0, other: 0, count: { mine: 0, well: 0, farm: 0, other: 0 } };
   for (const b of s.buildings || []) {
     if (b.owner !== p || b.hp <= 0 || b.build) continue;
-    if (b.type === 'hq') v += eco.hq + ruleOf(s, p, 'hqIncome');
-    else v += (bdef(b).income || 0) + (b.type === 'farm' ? ruleOf(s, p, 'farmIncome') : b.type === 'mine' ? ruleOf(s, p, 'mineIncome') : 0);
+    if (b.type === 'hq') { out.hq += eco.hq + ruleOf(s, p, 'hqIncome'); continue; }
+    const v = (bdef(b).income || 0) + (b.type === 'farm' ? ruleOf(s, p, 'farmIncome') : b.type === 'mine' ? ruleOf(s, p, 'mineIncome') : 0);
+    if (!v) continue;
+    const k = b.type in out.count ? b.type : 'other';
+    out[k] += v; out.count[k]++;
   }
-  return Math.round(v * (s.players[p].incomeMult || 1));   // AI difficulty
+  return out;
 }
+export function incomeOf(s, p) {
+  const P = incomeParts(s, p);
+  return Math.round((P.hq + P.mine + P.well + P.farm + P.other) * (s.players[p].incomeMult || 1));   // Brutal AI
+}
+// souls lost to decay at the end of a round with `bank` souls banked (above RULES.soulKeep)
+export const soulDecayOf = bank => Math.max(0, Math.floor((bank - RULES.soulKeep) * RULES.soulDecay));
 // AP of builder work per 1 resource when gathering at building b (0 = can't gather there)
 export function gatherRate(s, b) {
   if (!b || b.hp <= 0 || b.build) return 0;

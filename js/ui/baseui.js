@@ -1,7 +1,7 @@
 // Base UI: building and resource-site views, builders' Build menu (ghost + Confirm),
 // training docks, building nameplates and the economy readout. Mixed into Game.
 import * as THREE from 'three';
-import { RULES, FACTIONS, BUILDINGS, trainCost, trainsOf } from '../data/units.js';
+import { RULES, FACTIONS, BUILDINGS, trainCost, trainsOf, gatherSlotsOf } from '../data/units.js';
 import { footprint, hitRadius, armySize, nearestFreeSite, siteTaken, bdef, incomeOf, gatherRate, startQueues, placeError, graveCircles, researchesAt, hasTech, techError } from '../sim/base.js';
 import { TECH } from '../data/tech.js';
 import { makeMini } from '../render/minis.js';
@@ -25,7 +25,7 @@ const FX = (type, fac) => {
     wall: 'Blocks movement and volleys.',
     farm: `A big field: +${d.income} gold every round, and up to ${d.slots} peasants farm it (1 gold per ${FACTIONS.kingdom.eco.gather.farm} AP each).`,
     mine: `Built on a resource site: +${d.income} gold every round.`,
-    well: `Built on a resource site: +${d.income} souls every round, and spreads graves ${d.grave}″ around it. Every model that dies on your graves (either side) gives ${RULES.soulPerModel} souls (a hero ${RULES.soulPerHero}).`,
+    well: `Built on a resource site: +${d.income} souls every round, and spreads graves ${d.grave}″ around it. Every model that dies on your graves (either side) gives ${RULES.soulPerModel} souls (a hero ${RULES.soulPerHero}); souls above ${RULES.soulKeep} decay.`,
     monolith: `Spreads graves ${d.grave}″ around it and heals your squads within ${d.heal?.radius}″ by ${d.heal?.hp} HP per model every round.`,
     forge: 'Researches weapons and armour for your soldiers (open the Tech tree to plan).',
     chapel: 'Researches The Chosen\'s legend, Valour for Rally, and a Field Hospital that heals squads near Chapels.',
@@ -33,7 +33,7 @@ const FX = (type, fac) => {
     sanctum: 'Researches Necromancy, Chain Storm, Greater Summoning and the Phylactery for your casters.',
   }[type];
 };
-const SHORT = { forge: 'Weapons & armour', chapel: 'Hero & healing', pit: 'Skeleton upgrades', sanctum: 'Caster upgrades', monolith: 'Graves · heals', barracks: 'Trains squads', tower: 'Sees far · shoots', banner: '+1 command point', wall: 'Blocks paths and shots', farm: `Big · ${BUILDINGS.farm.slots} farmers`, mine: `On a site · +${BUILDINGS.mine.income} gold`, well: `On a site · souls from deaths` };
+const SHORT = { forge: 'Weapons & armour', chapel: 'Hero & healing', pit: 'Skeleton upgrades', sanctum: 'Caster upgrades', monolith: 'Graves · heals', barracks: 'Trains squads', tower: 'Sees far · shoots', banner: '+1 command point', wall: 'Blocks paths and shots', farm: `Big · ${BUILDINGS.farm.slots} farmers`, mine: `On a site · +${BUILDINGS.mine.income} gold`, well: `On a site · +${BUILDINGS.well.income} souls` };
 
 export const BaseUI = {
   // ---------------------------------------------------------------- views
@@ -313,7 +313,7 @@ export const BaseUI = {
     const eco = this.eco();
     const left = this.phase === 'planning' ? this.planner.supplyLeft() : this.state.supply[this.me];
     const army = this.phase === 'planning' ? this.planner.armyNext() : armySize(this.state, this.me);
-    const tip = eco.res === 'gold' ? 'Gold: your keep, farms and mines earn it every round' : `Souls: your crypt and soul wells only trickle a few each round; every model that dies on your graves gives ${RULES.soulPerModel} (a hero ${RULES.soulPerHero})`;
+    const tip = (eco.res === 'gold' ? 'Gold: your Keep, Mines and Farms pay every round; peasants gather more' : `Souls: the Crypt and Soul Wells pay every round; every model that dies on your graves gives ${RULES.soulPerModel} (a hero ${RULES.soulPerHero}); souls above ${RULES.soulKeep} decay`) + '. Tap for the full breakdown.';
     return `<span class="ec ${eco.res}" title="${tip}">${icon(eco.icon, 16)}<b>${left}</b><small>+${this.income()}${eco.res === 'souls' ? ' +☠' : ''}</small></span>`
       + `<span class="ec" title="Army size / cap">${icon('army', 16)}<b>${army}</b><small>/${this.state.board.cap}</small></span>`;
   },
@@ -435,7 +435,13 @@ export const BaseUI = {
     if (!roles.length && !techs.length) {
       dock.classList.add('hidden'); info.classList.remove('hidden');
       const st = b.build ? ` · under construction: ${Math.round(d.work - b.build)}/${d.work} work` : '';
-      info.innerHTML = `<b>${b.owner === this.me ? 'Your' : 'Enemy'} ${esc(d.name[fac])}</b>${b.stale ? ' (last seen)' : ''} · ${hpTxt}${st}<br><span style="color:var(--muted)">${FX(b.type, fac)}${b.owner !== this.me ? ' Attack it with swings, volleys and skills: buildings take extra damage.' : ''}</span>${work}`;
+      // what it pays this round (and who works it): the economy panel has the whole picture
+      let pay = '';
+      if (b.owner === this.me && !b.build && (d.income || gatherRate(this.state, b))) {
+        const working = this.state.squads.filter(q => q.owner === this.me && q.hp > 0 && q.task?.kind === 'gather' && q.task.bid === b.id).length;
+        pay = ` · pays <b>+${d.income || 0}</b> a round` + (gatherRate(this.state, b) ? `, peasants working ${working}/${gatherSlotsOf(b.type)} (≈ +${working * Math.floor(RULES.ap / gatherRate(this.state, b))})` : '');
+      }
+      info.innerHTML = `<b>${b.owner === this.me ? 'Your' : 'Enemy'} ${esc(d.name[fac])}</b>${b.stale ? ' (last seen)' : ''} · ${hpTxt}${st}${pay}<br><span style="color:var(--muted)">${FX(b.type, fac)}${b.owner !== this.me ? ' Attack it with strikes, volleys and skills: buildings take extra damage.' : ''}</span>${work}`;
       info.querySelector('[data-x]')?.addEventListener('click', () => this.sendBuilder(b));
       return;
     }

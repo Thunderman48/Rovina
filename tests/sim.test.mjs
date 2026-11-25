@@ -1,6 +1,6 @@
 // Headless tests for the simulation. Run: node tests/sim.test.mjs
-import { RULES, FACTIONS, BUILDINGS, trainCost, skillOf, pairOf } from '../js/data/units.js';
-import { createGame, addSquad, defOf, radiusOf, emptyOrders, emptyPlan } from '../js/sim/state.js';
+import { RULES, FACTIONS, BUILDINGS, trainCost, skillOf, pairOf, squadRadius } from '../js/data/units.js';
+import { createGame, addSquad, defOf, radiusOf, emptyOrders, emptyPlan, apFor } from '../js/sim/state.js';
 import { resolveRound, damageAfter, engagedWith, losCut } from '../js/sim/resolve.js';
 import { cpUsage, validateOrders } from '../js/sim/orders.js';
 import { aiOrders, aiMemory, aiPersonality } from '../js/ai/ai.js';
@@ -9,7 +9,7 @@ import { PERSONALITIES, SKILL, BRUTAL_INCOME, pickPersonality } from '../js/ai/p
 import { fightRatio } from '../js/ai/combat.js';
 import { MATCHUPS } from '../js/ai/matchups.js';
 import { canSee, visibleTo } from '../js/sim/vision.js';
-import { edgeDist, placeError, addBuilding, incomeOf, obstacles, startQueues, armySize, spreadGraves, finishTech, techError, gateOf, validateQueue, bdef, bname, tkOf, ruleOf, bonusCp } from '../js/sim/base.js';
+import { soulDecayOf, incomeParts, edgeDist, placeError, addBuilding, incomeOf, obstacles, startQueues, armySize, spreadGraves, finishTech, techError, gateOf, validateQueue, bdef, bname, tkOf, ruleOf, bonusCp } from '../js/sim/base.js';
 import { TECH } from '../js/data/tech.js';
 import { builderPlan } from '../js/sim/builders.js';
 import { coverOf, coverMult } from '../js/sim/cover.js';
@@ -260,7 +260,7 @@ test('ruins are walk-in heavy cover: volleys pass them; a squad standing in one 
   const { log } = resolveRound(s, o);
   const hit = events(log).find(e => e.type === 'hit' && e.src === 'q1');
   eq(hit.dst, 'q2'); eq(hit.cover, 'heavy');
-  eq(hit.dmg, damageAfter(hit.raw * RULES.heavyCoverRanged, defOf(s.squads[1]).armor, hit.defended));
+  eq(hit.dmg, damageAfter(hit.raw * RULES.heavyCoverRanged, Math.max(0, defOf(s.squads[1]).armor - FACTIONS.kingdom.units.ranged.passive.armor), hit.defended), 'heavy cover (and Armour-piercing)');
   ok(!pointBlocked(obstacles(s), 22, 13.4, 1), 'a ruin does not block movement');
 });
 
@@ -586,7 +586,7 @@ test('Corpse Explosion bursts a summoned squad and hits the enemies around it (n
   const raw = events(log).find(e => e.type === 'hit' && e.kind === 'explode').raw;
   const sk = FACTIONS.undead.units.hero.skills.find(k => k.kind === 'explode');
   eq(raw, sk.base + sk.perModel * FACTIONS.undead.units.summon.models);
-  eq(raw, 26, 'a full summoned Warband bursts for 26 (8 + 3 per model)');
+  eq(raw, 23, 'a full summoned Warband (5 models) bursts for 23 (8 + 3 per model)');
 });
 
 test('summoned skeletons are Skeleton Warbands with a timed life', () => {
@@ -678,13 +678,16 @@ test('stance squads use their skills on their own unless auto skills is switched
   eq(r.state.squads[0].auto, false, 'switched off by order');
 });
 
-test('the Skeleton Warband swarm trains in pairs (one round), fragile and slow (no rushes); Skeleton Warriors are the old warband', () => {
+test('the Skeleton Warband: trains in pairs over 2 rounds, 5 models x 14 HP, armour 2, a smaller base, slow', () => {
   const U = FACTIONS.undead.units;
-  eq(U.swarm.pair, 2); ok(U.swarm.hpPer < U.fighter.hpPer); eq(U.swarm.tier, 3, 'tier 3: 3.6" a round'); eq(U.swarm.attack.dmg, 2.1); eq(U.fighter.name, 'Skeleton Warriors');
-  eq(RULES.trainRounds.swarm, 1);
+  eq(U.swarm.pair, 2); eq(U.swarm.models, 5); eq(U.swarm.hpPer, 14); eq(U.swarm.armor, 2); eq(U.swarm.tier, 3, 'tier 3: 3.6" a round'); eq(U.swarm.attack.dmg, 2.8); eq(U.fighter.name, 'Skeleton Warriors');
+  eq(RULES.trainRounds.swarm, 2); eq(FACTIONS.undead.train.swarm, 20);
+  ok(squadRadius(U.swarm, 5) < squadRadius({ ...U.swarm, compact: undefined }, 5) * 0.81, 'a compact base');
   const s = arena([[1, 'fighter', 40, 4]]); s.supply[1] = 100;
   const crypt = s.buildings.find(b => b.owner === 1 && b.type === 'hq');
-  const r = resolveRound(s, [orders(), { squads: {}, stances: {}, queue: { trains: { [crypt.id]: ['swarm'] } } }]);
+  let r = resolveRound(s, [orders(), { squads: {}, stances: {}, queue: { trains: { [crypt.id]: ['swarm'] } } }]);
+  eq(r.state.squads.filter(q => q.owner === 1 && q.role === 'swarm').length, 0, 'not yet after one round');
+  r = resolveRound(r.state, [orders(), { squads: {}, stances: {} }]);
   eq(r.state.squads.filter(q => q.owner === 1 && q.role === 'swarm').length, 2, 'two squads from one training');
   eq(armySize(r.state, 1), 3, 'both count toward the cap');
   const full = arena([[1, 'fighter', 40, 4]]); full.supply[1] = 100; full.board.cap = 2;
@@ -1061,7 +1064,7 @@ test('gold: a finished mine owns its site and pays every round', () => {
   ok(placeError(r.state, 1, 'well', 16.5, 19.5), 'the site is taken');
 });
 
-test('souls: only models dying on undead grave ground pay (either side); the graves spread there; no Crypt income', () => {
+test('souls: only models dying on undead grave ground pay (either side); the graves spread there', () => {
   // a kingdom model dies inside the soul well's graveyard (souls); another dies next to the warriors far from any graves (none)
   const s = arena([[1, 'fighter', 18.4, 19.5], [0, 'fighter', 20.3, 19.5, { hp: 2, models: 1 }], [1, 'fighter', 30, 29], [0, 'fighter', 31.9, 29, { hp: 2, models: 1 }]]);
   const w = addBuilding(s, 1, 'well', 16.5, 19.5, 0, true); w.grave = 5;
@@ -1072,8 +1075,7 @@ test('souls: only models dying on undead grave ground pay (either side); the gra
   const souls = events(r.log).filter(e => e.type === 'souls');
   ok(events(r.log).filter(e => e.type === 'hit' && e.lost).length === 2, 'two models fell');
   ok(souls.length === 1 && souls[0].owner === 1 && souls[0].amount === RULES.soulPerModel, 'only the one on the graves: ' + JSON.stringify(souls));
-  eq(FACTIONS.undead.eco.hq, 1, 'the Crypt earns only 1 by itself');
-  eq(r.state.supply[1], FACTIONS.undead.eco.start + RULES.soulPerModel + BUILDINGS.well.income + FACTIONS.undead.eco.hq);
+  eq(r.state.supply[1], Math.min(FACTIONS.undead.eco.start + RULES.soulPerModel + BUILDINGS.well.income + FACTIONS.undead.eco.hq, 1e9) - soulDecayOf(FACTIONS.undead.eco.start + RULES.soulPerModel + BUILDINGS.well.income + FACTIONS.undead.eco.hq));
   const w2 = r.state.buildings.find(b => b.id === w.id);
   eq(w2.grave, BUILDINGS.well.grave, 'the well keeps its own reach');
   const blob = r.state.graves[1].find(g => g.blob);
@@ -1206,7 +1208,8 @@ test('tech: Endless Swarm trains three squads; a destroyed tech building keeps i
   const s = arena([[0, 'fighter', 10, 4]]); s.supply[1] = 200;
   finishTech(s, 1, 'swarm3');
   const crypt = s.buildings.find(b => b.owner === 1 && b.type === 'hq');
-  const r = resolveRound(s, [orders(), { squads: {}, stances: {}, queue: { trains: { [crypt.id]: ['swarm'] } } }]);
+  let r = resolveRound(s, [orders(), { squads: {}, stances: {}, queue: { trains: { [crypt.id]: ['swarm'] } } }]);
+  r = resolveRound(r.state, [orders(), { squads: {}, stances: {} }]);
   eq(r.state.squads.filter(q => q.owner === 1 && q.role === 'swarm').length, 3);
   // research survives losing the building that did it
   const t = arena([[0, 'fighter', 10, 4]]); t.supply[1] = 200;
@@ -1265,8 +1268,9 @@ test('Necromancers: a weaker caster troop with mana; its summon raises one squad
   eq(r.state.squads[0].mana, N.mana.start - N.skills.find(k => k.kind === 'summon').mana + N.mana.regen);
 });
 
-test('death economy: the Crypt and Soul Wells barely produce; cheap squads dying on graves pay back more than they cost', () => {
-  eq(FACTIONS.undead.eco.hq, 1); eq(BUILDINGS.well.income, 2);
+test('Undead economy: a steady Crypt and Soul Wells; cheap squads dying on graves pay back more than they cost; souls above the threshold decay', () => {
+  eq(FACTIONS.undead.eco.hq, 6); eq(BUILDINGS.well.income, 6);
+  eq(soulDecayOf(RULES.soulKeep), 0); eq(soulDecayOf(RULES.soulKeep + 50), Math.floor(50 * RULES.soulDecay));
   const U = FACTIONS.undead.units, back = r => U[r].models * RULES.soulPerModel;
   const per = r => FACTIONS.undead.train[r] / (U[r].pair || 1);
   ok(back('swarm') > per('swarm') && back('fighter') > per('fighter'), 'cheap: profit');
@@ -1529,6 +1533,103 @@ test('squads and peasants do not get stuck (tools/stuck.mjs)', () => {
   const r = stuckReport(1, ['crossing', 'twinrivers'], 35);
   ok(r.streak <= 1, 'stuck 3+ rounds in a row: ' + r.streak + ' ' + JSON.stringify(r.causes));
   ok(r.stuck / Math.max(1, r.rounds) < 0.04, 'stuck walks ' + r.stuck + ' of ' + r.rounds);
+});
+
+console.log('M7 economy, passives, no-build zone, tech chips');
+
+test('income is itemised: the parts add up, and the round logs gathering, souls and decay', () => {
+  let s = createGame(5, ['kingdom', 'undead'], 'crossing');
+  const mem = [aiMemory(), aiMemory()];
+  for (let r = 0; r < 14; r++) {
+    const res = resolveRound(s, [aiOrders(s, 0, mem[0]), aiOrders(s, 1, mem[1])]);
+    for (const p of [0, 1]) {
+      const e = events(res.log).find(x => x.type === 'income' && x.owner === p);
+      const P = e.parts;
+      eq(P.hq + P.mine + P.well + P.farm + P.other + P.brutal, e.amount, 'flat parts add up (side ' + p + ')');
+      const gathered = events(res.log).filter(x => x.type === 'gather' && x.owner === p).reduce((n, x) => n + x.amount, 0);
+      eq(Object.values(P.gathered).reduce((n, v) => n + v, 0), gathered, 'gathered matches the gather events');
+      const souls = events(res.log).filter(x => x.type === 'souls' && x.owner === p).reduce((n, x) => n + x.amount, 0);
+      eq(P.souls, souls, 'souls match');
+    }
+    s = res.state;
+  }
+});
+
+test('souls above the threshold decay at the end of the round', () => {
+  const s = arena([[0, 'fighter', 10, 4]]); s.supply[1] = 200;
+  const r = resolveRound(s, [orders(), orders()]);
+  const e = events(r.log).find(x => x.type === 'income' && x.owner === 1);
+  eq(e.parts.decay, soulDecayOf(200 + e.amount));
+  eq(r.state.supply[1], 200 + e.amount - e.parts.decay);
+  ok(r.state.supply[0] >= 60, 'gold never decays');
+});
+
+test('a Warband dying on your graves returns more souls than it cost', () => {
+  const U = FACTIONS.undead.units;
+  ok(U.swarm.models * RULES.soulPerModel > FACTIONS.undead.train.swarm / U.swarm.pair);
+});
+
+test('passives: every unit type has one; Rend stacks cut damage and AP, then run out', () => {
+  for (const f of ['kingdom', 'undead']) for (const [r, u] of Object.entries(FACTIONS[f].units)) ok(u.passive && u.passive.name && u.passive.desc, f + ' ' + r);
+  const s = arena([[1, 'swarm', 20, 16], [0, 'fighter', 22.3, 16]]);
+  const o = holdAll(s); o[1].squads.q1 = plan([{ kind: 'strike', t: 'q2', x: 22.3, z: 16 }, { kind: 'strike', t: 'q2', x: 22.3, z: 16 }]);
+  let r = resolveRound(s, o);
+  const mf = r.state.squads.find(q => q.id === 'q2');
+  eq(mf.rend.n, 2, 'two hits, two stacks');
+  eq(apFor(mf), Math.round(RULES.ap * (1 - 2 * 0.05)), 'less AP');
+  r = resolveRound(r.state, [orders(), orders()]);
+  ok(!r.state.squads.find(q => q.id === 'q2').rend, 'it lasts through its next round (with less AP), then runs out');
+  // max 5 stacks
+  const t = arena([[1, 'swarm', 20, 16], [0, 'fighter', 22.3, 16]]); t.squads[1].rend = { n: 5, dmg: 0.05, ap: 0.05, until: t.round + 1 };
+  const o2 = holdAll(t); o2[1].squads.q1 = plan([{ kind: 'strike', t: 'q2', x: 22.3, z: 16 }]);
+  eq(resolveRound(t, o2).state.squads.find(q => q.id === 'q2').rend.n, 5, 'capped at 5');
+});
+
+test('passives: Soul Drain heals the Lich; Berserk hits harder when low; Bulwark blunts shots', () => {
+  const s = arena([[1, 'hero', 20, 16], [0, 'fighter', 28, 16]]);
+  s.squads[0].hp = 100;
+  const o = holdAll(s); o[1].squads.q1 = plan([{ kind: 'volley', x: 28, z: 16 }]);
+  const r = resolveRound(s, o);
+  ok(events(r.log).some(e => e.type === 'heal' && e.id === 'q1' && e.drain), 'drained');
+  const b = arena([[0, 'hero', 20, 16], [1, 'fighter', 22, 16]]);
+  const full = () => { const o = holdAll(b); o[0].squads.q1 = plan([{ kind: 'strike', t: 'q2', x: 22, z: 16 }]); return events(resolveRound(b, o).log).find(e => e.type === 'hit' && e.src === 'q1').raw; };
+  const hi = full(); b.squads[0].hp = 50; const lo = full();
+  ok(lo > hi * 1.4, 'berserk: ' + hi + ' -> ' + lo);
+  const w = arena([[1, 'ranged', 20, 6], [0, 'tank', 20, 16], [0, 'fighter', 30, 16]]);
+  const shoot = id => { const o = holdAll(w); o[1].squads.q1 = plan([{ kind: 'volley', x: w.squads.find(q => q.id === id).x, z: 16 }]); return events(resolveRound(w, o).log).find(e => e.type === 'hit' && e.src === 'q1'); };
+  w.squads[2].x = 20; w.squads[1].x = 40;
+  const vsFighter = shoot('q3');
+  w.squads[2].x = 40; w.squads[1].x = 20;
+  const vsTank = shoot('q2');
+  ok(vsTank.dmg < damageAfter(vsTank.raw, FACTIONS.kingdom.units.tank.armor, vsTank.defended), 'bulwark cuts it');
+  ok(vsFighter, 'control');
+});
+
+test('passives: Grave-bound, Reassemble and Chilling Touch', () => {
+  const s = arena([[1, 'fighter', 40, 16], [1, 'tank', 42, 20]]);
+  s.squads[0].hp = 20; s.squads[0].models = 2;
+  const r = resolveRound(s, holdAll(s));
+  ok(events(r.log).some(e => e.type === 'heal' && e.id === 'q1' && e.reassemble), 'warriors reassemble on the Crypt graves');
+  const c = arena([[1, 'fast', 20, 16], [0, 'fighter', 22.6, 16]]);
+  const o = holdAll(c); o[1].squads.q1 = plan([{ kind: 'strike', t: 'q2', x: 22.6, z: 16 }]); o[0].squads.q2 = { ...plan([]), defends: 3 };
+  const ev = events(resolveRound(c, o).log);
+  ok(ev.some(e => e.type === 'chill' && e.id === 'q2'), 'a defend stripped');
+});
+
+test('no building within 16" of an enemy building your side has seen', () => {
+  const s = createGame(1, ['kingdom', 'undead'], 'crossing');
+  const ehq = s.buildings.find(b => b.owner === 1 && b.type === 'hq');
+  for (const p of [0, 1]) s.explored[p] = s.explored[p].replace(/0/g, '1');   // pretend the side has seen it all
+  const spot = { x: ehq.x - 2 - 10, z: ehq.z };
+  const known = s.intel[0].known[ehq.id];
+  if (!known) s.intel[0].known[ehq.id] = { id: ehq.id, owner: 1, type: 'hq', x: ehq.x, z: ehq.z, w: ehq.w, d: ehq.d, hp: ehq.hp };
+  ok(/enemy building/.test(placeError(s, 0, 'tower', spot.x, spot.z)), 'blocked near the seen HQ: ' + placeError(s, 0, 'tower', spot.x, spot.z));
+  delete s.intel[0].known[ehq.id];
+  ok(!/enemy building/.test(placeError(s, 0, 'tower', spot.x, spot.z)), 'unseen: the zone does not apply');
+});
+
+test('every research has a short effect chip for the tech tree', () => {
+  for (const t of Object.values(TECH)) ok(t.chip && t.chip.length <= 20, t.id + ': ' + t.chip);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

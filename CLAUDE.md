@@ -19,12 +19,10 @@ economy, maps, fog, stances or the AI:**
   levels). Record new references in `docs/GAME.md` §20.
 - **Art and look:** use only the references the owner gives or names.
 
-## Balancing rule: the Undead tier rule (owner's rule)
-- **Low-tier Undead** (Skeleton Warband, Skeleton Warriors, Bone Archers; `FACTIONS.undead.lowTier`):
-  never change their **costs**, only their stats.
-- **High-tier Undead** (Grave Guard, Wraiths, Necromancers, the Lich's spells): costs may change, up
-  or down, but ask the owner before making or suggesting a cost change. Elite squads are meant to lose
-  value when they die (death economy).
+## Balancing rule: Undead costs (owner's rule, updated 2026-11-25)
+- Undead costs **may change** (the old "never change low-tier costs / ask before high-tier changes" rule is
+  replaced). Elite squads are still meant to lose value when they die (death economy), and the Skeleton
+  Warband must still return more souls when it dies on your graves than it costs to train.
 
 ## Commands
 - `node tests/sim.test.mjs` — simulation tests (must pass).

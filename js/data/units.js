@@ -51,7 +51,7 @@ export const RULES = {
   goalReach: 1.5,               // advance: within this of its target point the squad stops and guards there
   retreatReach: 3,              // retreat: within this of its fallback point the squad guards there
   // rounds a squad takes to train (it appears at the end of the last one)
-  trainRounds: { builder: 1, swarm: 1, fighter: 2, ranged: 2, fast: 2, mage: 2, tank: 3 },
+  trainRounds: { builder: 1, swarm: 2, fighter: 2, ranged: 2, fast: 2, mage: 2, tank: 3 },
   // production queues (each item is paid when it starts)
   queueMax: 5,                  // squads waiting per training building (not counting the one in training)
   queueMaxBuild: 5,             // buildings waiting in the base build queue
@@ -61,6 +61,10 @@ export const RULES = {
   // every model that dies on it pays souls and widens it a little
   soulPerModel: 3,
   soulPerHero: 15,
+  // banked souls above soulKeep lose soulDecay of the excess at the end of every round (use them or lose them)
+  soulKeep: 80,
+  soulDecay: 0.2,
+  enemyBuildGap: 16,            // no building within this many inches of an enemy building your side has seen
   graveStart: 0.5,              // a new undead site spreads this share of its graveyard at once; the rest by the end of the round
   graveHqStart: 10,             // the Crypt's graveyard at the start of the game (its full reach)
   graveBlob: 0.8,               // deaths on graves spread a small new grave area at the graveyard's nearest edge:
@@ -156,7 +160,7 @@ export const FACTIONS = {
       tank:    { name: 'Grave Guard', role: 'tank', models: 3, hpPer: 42, armor: 9, tier: 4, look: 'graveguard', vision: 9, defends: 2, attack: STRIKE(30, 3.2, 1.3), skills: [WALL('Grave Wall')] },
       fighter: { name: 'Skeleton Warriors', role: 'fighter', parry: true, models: 5, hpPer: 18, armor: 3, tier: 5, look: 'skeleton', vision: 9, defends: 1, attack: STRIKE(25, 2.4, 1.5) },
       // the swarm: fragile, quick, cheap, trained two squads at a time (`pair`; a later upgrade: three)
-      swarm:   { name: 'Skeleton Warband', role: 'swarm', pair: 2, models: 6, hpPer: 8, armor: 0, tier: 3, look: 'skeleton', vision: 9, defends: 0, attack: STRIKE(25, 2.1, 1.4) },
+      swarm:   { name: 'Skeleton Warband', role: 'swarm', pair: 2, compact: 0.8, models: 5, hpPer: 14, armor: 2, tier: 3, look: 'skeleton', vision: 9, defends: 0, attack: STRIKE(25, 2.8, 1.4) },
       ranged:  { name: 'Bone Archers', role: 'ranged', models: 4, hpPer: 20, armor: 1, tier: 5, look: 'archer', vision: 11, defends: 1, attack: VOLLEY(30, 2.4, 14, 0.9), skills: [STORM(35, 4, 15, 2.2)] },
       fast:    { name: 'Wraiths', role: 'fast', models: 3, hpPer: 28, armor: 3, tier: 6, look: 'wraith', vision: 11, defends: 1, ghost: true, attack: STRIKE(45, 9, 1.7), skills: [CHARGE(35, 5.6, 9)] },
       // a weaker caster troop: bolts, a weaker Dark Thunder, a one-squad summon
@@ -166,11 +170,10 @@ export const FACTIONS = {
     // Souls: fed by death on graveyards (grave ground spreads around undead buildings); Soul Wells give a
     // trickle and spread graves far. No builders.
     // a death economy: the Crypt (1) and Soul Wells (2) only keep it from stalling; deaths on graves pay the rest
-    eco: { res: 'souls', name: 'Souls', icon: 'souls', start: 90, hq: 1, gather: {} },
+    eco: { res: 'souls', name: 'Souls', icon: 'souls', start: 90, hq: 6, gather: {} },
     buildings: ['barracks', 'tower', 'well', 'monolith', 'wall', 'pit', 'sanctum'],
-    train: { tank: 16, fighter: 9, swarm: 14, ranged: 13, fast: 16, mage: 22 },
-    // balancing rule (owner): low tier (swarm, fighter, ranged) keep their costs, change their stats;
-    // high tier (tank, fast, mage, the Lich's spells) may change costs
+    train: { tank: 16, fighter: 9, swarm: 20, ranged: 13, fast: 16, mage: 22 },
+    // the cheap core squads (the owner's old tier rule is replaced: Undead costs may change, 2026-11-25)
     lowTier: ['swarm', 'fighter', 'ranged'],
     hqTrains: ['swarm', 'mage'],   // the Crypt raises the swarm and (from the Mausoleum) the Necromancers
     graves: true,             // its buildings spread graveyards
@@ -180,6 +183,35 @@ export const FACTIONS = {
 };
 // raised by Summon Warband (the Lich, Necromancers): the very same Skeleton Warband, only with a timed
 // life (crumbles after RULES.summonTtl rounds); not trainable, no pairs, not in the army cap, no souls
+// Passives: one unique, always-on ability per unit type (resolved in js/sim/resolve.js and js/sim/passives.js)
+//  berserk  : below `below` of max HP, deals x dmg and takes x taken        bulwark : ranged hits on it x mult
+//  disciplined : x mult vs a squad another own squad is engaged with        pierce  : its volleys / bolts ignore `armor`
+//  ridedown : x mult vs ranged squads and casters                         militia : +armor within `radius` of an own building
+//  drain    : heals `share` of the damage it deals                          gravebound : +armor on its side's graves
+//  reassemble : on own graves at round end, +hp per model                   rend    : each hit adds a stack (max `max`):
+//               -`dmg` damage and -`ap` max AP per stack, until the end of the target's next round
+//  longshot : x mult vs targets `range`" or more away                     chill   : each hit strips one defend
+//  siphon   : +mana when an enemy model dies within `radius`
+const PASSIVES = {
+  kingdom: {
+    hero:    { kind: 'berserk', name: 'Berserk', below: 0.4, dmg: 1.5, taken: 0.85, desc: 'Below 40 % HP: deals ×1.5 damage and takes ×0.85.' },
+    tank:    { kind: 'bulwark', name: 'Bulwark', mult: 0.75, desc: 'Ranged hits on it deal ×0.75 (on top of cover).' },
+    fighter: { kind: 'disciplined', name: 'Disciplined', mult: 1.25, desc: '+25 % damage against a squad another of your squads is also fighting.' },
+    ranged:  { kind: 'pierce', name: 'Armour-piercing', armor: 3, desc: 'Its volleys and Piercing Bolts ignore 3 armour.' },
+    fast:    { kind: 'ridedown', name: 'Ride Down', mult: 1.5, desc: '×1.5 damage against ranged squads and casters.' },
+    builder: { kind: 'militia', name: 'Militia', armor: 3, radius: 4, desc: '+3 armour within 4″ of one of your buildings.' },
+  },
+  undead: {
+    hero:    { kind: 'drain', name: 'Soul Drain', share: 0.25, desc: 'Heals 25 % of the damage its attacks and spells deal.' },
+    tank:    { kind: 'gravebound', name: 'Grave-bound', armor: 3, desc: '+3 armour while standing on your graves.' },
+    fighter: { kind: 'reassemble', name: 'Reassemble', hp: 2, desc: 'On your graves, regains 2 HP per model at the end of every round.' },
+    swarm:   { kind: 'rend', name: 'Rend', dmg: 0.05, ap: 0.05, max: 5, desc: 'Each hit: the target deals 5 % less damage and has 5 % less AP (stacks up to 5) until the end of its next round.' },
+    ranged:  { kind: 'longshot', name: 'Long Shot', mult: 1.25, range: 8, desc: '+25 % damage against targets 8″ or more away.' },
+    fast:    { kind: 'chill', name: 'Chilling Touch', desc: 'Each hit strips one of the target\'s remaining defends.' },
+    mage:    { kind: 'siphon', name: 'Soul Siphon', mana: 5, radius: 6, desc: '+5 mana whenever an enemy model dies within 6″.' },
+  },
+};
+for (const f of Object.keys(PASSIVES)) for (const [r, pv] of Object.entries(PASSIVES[f])) FACTIONS[f].units[r].passive = pv;
 FACTIONS.undead.units.summon = { ...FACTIONS.undead.units.swarm, role: 'summon', summoned: true };
 delete FACTIONS.undead.units.summon.pair;
 
@@ -202,7 +234,7 @@ export const BUILDINGS = {
   chapel:   { name: { kingdom: 'Chapel', undead: 'Chapel' }, icon: 'rally', cost: 35, work: 160, hp: 200, armor: 6, shape: 'circle', r: 1.0, vision: 6, research: true },
   pit:      { name: { kingdom: 'Charnel Pit', undead: 'Charnel Pit' }, icon: 'attack', cost: 30, work: 160, hp: 200, armor: 6, shape: 'rect', w: 3, d: 2.5, vision: 5, grave: 6, research: true },
   sanctum:  { name: { kingdom: 'Dark Sanctum', undead: 'Dark Sanctum' }, icon: 'mage', cost: 30, work: 160, hp: 180, armor: 5, shape: 'circle', r: 1.0, vision: 7, grave: 6, research: true },
-  well:     { name: { kingdom: 'Soul Well', undead: 'Soul Well' }, icon: 'souls', cost: 20, work: 160, hp: 180, armor: 5, shape: 'circle', r: 1.1, vision: 7, income: 2, site: true, souls: true, grave: 10 },
+  well:     { name: { kingdom: 'Soul Well', undead: 'Soul Well' }, icon: 'souls', cost: 20, work: 160, hp: 180, armor: 5, shape: 'circle', r: 1.1, vision: 7, income: 6, site: true, souls: true, grave: 10 },
 };
 export const ecoOf = faction => FACTIONS[faction].eco;
 export const trainCost = (faction, role) => FACTIONS[faction].train[role] || 0;
@@ -222,7 +254,7 @@ export const ROLE_ORDER = ['hero', 'tank', 'fighter', 'swarm', 'ranged', 'mage',
 export function squadRadius(def, models) {
   if (def.models === 1) return 0.65;
   const base = def.look === 'rider' || def.look === 'wraith' ? 0.62 : 0.5;
-  return base + 0.42 * Math.sqrt(Math.max(1, models));
+  return (base + 0.42 * Math.sqrt(Math.max(1, models))) * (def.compact || 1);   // compact: tighter ranks
 }
 
 export function unitDef(faction, role, tk = '') { return techUnit(FACTIONS[faction].units[role], faction, role, tk); }

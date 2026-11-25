@@ -23,6 +23,11 @@ It is a static site with no build step and no server, so it runs on GitHub Pages
   heavy cover (ranged hits halved, melee ×0.75); forests give light cover. Squads on Guard step into
   cover by themselves and shooters pick firing spots in cover. Units and buildings are tough (fights
   take a few rounds). Armies grow up to 30 squads (more on big maps).
+* **A readable economy:** tap your gold / souls counter for the Economy panel (last round by source,
+  next round expected, every income building). The Undead get steady souls from the Crypt and Soul
+  Wells plus souls from deaths on their graves, and banked souls above 80 decay.
+* **Passives:** every unit type has one (Berserk, Bulwark, Rend, Soul Drain, …).
+* **No building within 16″ of an enemy building you have seen** (no proxy rushes).
 * **Two economies.** The Kingdom earns **gold** from its Keep, mines and farms worked by up to 4
   peasants each. The Undead earn **souls** mainly from every model that dies on their graveyards;
   the Crypt (1) and Soul Wells (2) only trickle.

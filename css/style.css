@@ -525,3 +525,38 @@ button { font-family: inherit; color: inherit; cursor: pointer; touch-action: ma
 .tt-node.tier { background: #312a1b; border-color: rgba(255,207,90,.55); }
 .tt-or { align-self: center; font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: #ffcf5a; margin: -2px 0; }
 @media (max-width: 640px) { .rs-cards { grid-template-columns: 1fr; } .tt-card { padding: 12px; } .tt-grid { grid-template-columns: 84px repeat(3, 170px); gap: 8px 22px; min-width: 0; } .tt-lane { font-size: 11px; } }
+
+/* economy panel */
+#t-sup .ec.gold, #t-sup .ec.souls { cursor: pointer; }
+.eco-card { width: min(560px, calc(100vw - 24px)); max-height: 88vh; display: flex; flex-direction: column; padding: 18px; }
+.eco-card .help-body { overflow: auto; }
+.eco-card h3 { margin: 14px 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.eco-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.eco-row span { flex: 1; display: flex; flex-direction: column; } .eco-row small { color: var(--muted); font-size: 11px; }
+.eco-row b.pos { color: #8fe388; } .eco-row b.neg { color: #ff7a6e; }
+.eco-row.tot { border-bottom: 0; font-weight: 800; } .eco-row.tot b { color: #fff; }
+.eco-bank { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 4px 0 8px; } .eco-none, .eco-tip { color: var(--muted); font-size: 12px; line-height: 1.4; }
+.eco-bar { position: relative; height: 8px; border-radius: 4px; background: rgba(255,255,255,.12); margin: 0 0 6px; overflow: hidden; }
+.eco-bar i { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, #8a7cff, #c6b8ff); }
+.eco-bar em { position: absolute; top: -2px; bottom: -2px; width: 2px; background: #ff7a6e; }
+
+.dk-head .sub.pv { color: #d9c7ff; margin-top: 3px; line-height: 1.35; } .dk-head .sub.dbf { color: #ff9a8e; } .sl .st.rend { color: #ff9a8e; font-weight: 900; }
+
+/* tech tree: effect chips and the detail panel */
+.tt-body { display: flex; gap: 12px; min-height: 0; flex: 1; }
+.tt-body .tt-scroll { flex: 1; min-width: 0; }
+.tt-chip { grid-column: 2; display: block; font-style: normal; font-size: 10.5px; font-weight: 800; color: #ffe08a; margin-top: 1px; white-space: nowrap; }
+.tt-node.sel { outline: 2px solid #ffe08a; outline-offset: 1px; }
+.tt-detail { width: 250px; flex: none; background: rgba(255,255,255,.05); border-radius: 12px; padding: 12px; overflow: auto; }
+.tt-detail .tt-hint { color: var(--muted); font-size: 12px; }
+.tt-dh { display: flex; align-items: center; gap: 8px; } .tt-dh > div { flex: 1; display: flex; flex-direction: column; } .tt-dh small { color: var(--muted); font-size: 11px; }
+.tt-desc { font-size: 13px; line-height: 1.45; margin: 10px 0; }
+.tt-facts { display: flex; gap: 12px; font-weight: 800; font-size: 13px; } .tt-facts span { display: inline-flex; align-items: center; gap: 4px; }
+.tt-needs { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.4; }
+.tt-go { width: 100%; margin-top: 12px; } .tt-go:disabled { opacity: .5; }
+@media (max-width: 640px) {
+  .tt-body { flex-direction: column; }
+  .tt-detail { width: auto; max-height: 40vh; order: 2; }
+  .tt-detail:not(.on) { display: none; }
+}
+.tt-node > :first-child { grid-row: span 3; align-self: start; margin-top: 1px; }

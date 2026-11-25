@@ -16,7 +16,7 @@ import { validateOrders, actionCost } from './orders.js';
 import { buildStancePlan } from './stances.js';
 import { terrainFactor, pointBlocked, blocks, blocksMove, boardOf } from './nav.js';
 import { visibleTo, canSee, updateIntel } from './vision.js';
-import { obstacles, navKey, hitRadius, bdef, applyQueue, startQueues, graveAt, spreadGraves, finishTech, tkOf, ruleOf, spawnSpot, armyValue, incomeOf, edgeDist, gatherRate } from './base.js';
+import { obstacles, navKey, hitRadius, bdef, applyQueue, startQueues, graveAt, spreadGraves, finishTech, tkOf, ruleOf, spawnSpot, armyValue, incomeOf, incomeParts, soulDecayOf, edgeDist, gatherRate } from './base.js';
 import { approachSpot, closestOn } from './builders.js';
 import { coverOf, coverMult } from './cover.js';
 import { Nav } from './nav.js';
@@ -153,7 +153,12 @@ export function resolveRound(state0, ordersIn) {
   const targets = (q, allBuildings = false) => s.squads.filter(e => e.hp > 0 && e.owner !== q.owner)
     .concat(s.buildings.filter(b => b.hp > 0 && (allBuildings || b.owner !== q.owner)));
   const unitAt = id => s.squads.find(x => x.id === id) || s.buildings.find(x => x.id === id);
-  const atkDmg = (r, base) => base * r.q.models * r.mult;
+  // passives on the attacker's side: Berserk (low HP: more damage), Rend stacks on it (less damage)
+  const pv = q => (q && !q.type ? defOf(q).passive : null) || null;
+  const lowHp = q => { const d = defOf(q); return q.hp < d.models * d.hpPer * pv(q).below; };
+  const outMult = q => (pv(q)?.kind === 'berserk' && lowHp(q) ? pv(q).dmg : 1) * (q.rend ? 1 - q.rend.n * q.rend.dmg : 1);
+  const atkDmg = (r, base) => base * r.q.models * r.mult * outMult(r.q);
+  const RANGED_KINDS = ['volley', 'pierce', 'lob', 'storm', 'blast', 'thunder'];
 
   // ---- start: reveal tiers and what each squad prepared --------------------------
   seg = { kind: 'start', len: 0, tracks: {}, events: [] };
@@ -173,6 +178,7 @@ export function resolveRound(state0, ordersIn) {
 
   // ---- hits ---------------------------------------------------------------------
   let hits = [];
+  const ledger = [0, 1].map(() => ({ gathered: {}, souls: 0, soulPlaces: 0 }));   // this round's income by source
   const deaths = [];       // models that fell: where and when (souls for the undead)
   const gatherers = new Map(); // building id -> builders gathering there this round
   function hitOne(h) {
@@ -200,14 +206,36 @@ export function resolveRound(state0, ordersIn) {
     }
     // cover where it stands now (walls only count against attacks from their far side)
     const hs = unitAt(h.src), cover = coverOf(s, q, hs?.x, hs?.z), cm = coverMult(cover, h.kind);
+    // passives: the attacker's (src) and the target's (q)
+    const ps = pv(hs), pq = pv(q), ranged = RANGED_KINDS.includes(h.kind);
+    let pm = 1, armor = defOf(q).armor + (r ? r.armor : 0);
+    if (ps?.kind === 'disciplined' && living().some(o => o.owner === hs.owner && o !== hs && engagedWith(o, [q]).length)) pm *= ps.mult;
+    if (ps?.kind === 'ridedown' && (isShooter(defOf(q)) || isMage(defOf(q)))) pm *= ps.mult;
+    if (ps?.kind === 'longshot' && hs && dist(hs.x, hs.z, q.x, q.z) >= ps.range) pm *= ps.mult;
+    if (ps?.kind === 'pierce' && (h.kind === 'volley' || h.kind === 'pierce')) armor = Math.max(0, armor - ps.armor);
+    if (pq?.kind === 'bulwark' && ranged) pm *= pq.mult;
+    if (pq?.kind === 'berserk' && lowHp(q)) pm *= pq.taken;
+    if (pq?.kind === 'militia' && s.buildings.some(b => b.owner === q.owner && b.hp > 0 && edgeDist(b, q.x, q.z) - radiusOf(q) <= pq.radius)) armor += pq.armor;
+    if (pq?.kind === 'gravebound' && graveAt(s, q.owner, q.x, q.z)) armor += pq.armor;
     let defended = false;
     if (r && r.defends > 0) { r.defends--; defended = true; }
-    const dmg = damageAfter(h.dmg * cm * (walled ? r.wall.mult : 1), defOf(q).armor + (r ? r.armor : 0), defended);
+    if (ps?.kind === 'chill' && r && r.defends > 0) { r.defends--; ev({ type: 'chill', id: q.id, src: h.src }); }   // Chilling Touch strips a defend
+    const dmg = damageAfter(h.dmg * cm * pm * (walled ? r.wall.mult : 1), armor, defended);
     const before = q.models;
     q.hp = Math.max(0, q.hp - dmg);
     q.models = modelsFor(q, q.hp);
-    if (before > q.models && !q.ttl) deaths.push({ x: q.x, z: q.z, n: before - q.models, hero: defOf(q).models === 1, T });
+    if (before > q.models && !q.ttl) deaths.push({ x: q.x, z: q.z, n: before - q.models, hero: defOf(q).models === 1, T, owner: q.owner });
     if (h.stun && q.hp > 0) { q.stun = Math.max(q.stun || 0, h.stun); ev({ type: 'stun', id: q.id, src: h.src, ap: h.stun }); }
+    // Rend (Warbands): a stack on the target, until the end of its next round
+    if (ps?.kind === 'rend' && q.hp > 0) {
+      q.rend = { n: Math.min(ps.max, (q.rend?.n || 0) + 1), dmg: ps.dmg, ap: ps.ap, until: round + 1 };
+      ev({ type: 'rend', id: q.id, src: h.src, n: q.rend.n });
+    }
+    // Soul Drain (the Lich): heals a share of the damage it dealt
+    if (ps?.kind === 'drain' && hs.hp > 0) {
+      const d = defOf(hs), add = Math.min(d.models * d.hpPer - hs.hp, Math.round(dmg * ps.share * 10) / 10);
+      if (add > 0) { hs.hp = r3(hs.hp + add); hs.models = modelsFor(hs, hs.hp); ev({ type: 'heal', id: hs.id, amount: add, hp: hs.hp, models: hs.models, drain: true }); }
+    }
     ev({ type: 'hit', src: h.src, dst: q.id, dmg, raw: Math.round(h.dmg), defended, cover: cm < 1 ? cover : null, walled, kind: h.kind, hp: q.hp, models: q.models, lost: before - q.models, defLeft: r ? r.defends : 0 });
   }
   function applyHits(batch) {
@@ -574,7 +602,7 @@ export function resolveRound(state0, ordersIn) {
         const rate = gatherRate(s, b), acc = (q.gacc && q.gacc.bid === b.id ? q.gacc.ap : 0) + st.got;
         const amount = Math.floor(acc / rate);
         q.gacc = { bid: b.id, ap: acc - amount * rate };
-        if (amount > 0) { s.supply[q.owner] += amount; ev({ type: 'gather', id: q.id, bid: b.id, owner: q.owner, amount }); }
+        if (amount > 0) { s.supply[q.owner] += amount; ledger[q.owner].gathered[b.id] = (ledger[q.owner].gathered[b.id] || 0) + amount; ev({ type: 'gather', id: q.id, bid: b.id, owner: q.owner, amount }); }
         st.got = 0;
       }
     } else if (r.el >= a.cost && st.phase === 'go') {
@@ -892,6 +920,23 @@ export function resolveRound(state0, ordersIn) {
       ev({ type: 'heal', id: q.id, bid: b.id, amount: add, hp: q.hp, models: q.models });
     }
   }
+  // passives at the end of the round: Reassemble (Skeleton Warriors on own graves), Soul Siphon
+  // (Necromancers: mana for enemy models dying close by), and Rend stacks running out
+  for (const q of s.squads) {
+    if (q.hp <= 0) continue;
+    const pq = defOf(q).passive;
+    if (pq?.kind === 'reassemble' && graveAt(s, q.owner, q.x, q.z)) {
+      const d = defOf(q), max = d.models * d.hpPer, add = Math.min(max - q.hp, pq.hp * Math.max(1, q.models));
+      if (add > 0) { q.hp += add; q.models = modelsFor(q, q.hp); ev({ type: 'heal', id: q.id, amount: add, hp: q.hp, models: q.models, reassemble: true }); }
+    }
+    if (pq?.kind === 'siphon' && q.mana !== undefined) {
+      let n = 0;
+      for (const dd of deaths) if (dd.owner !== q.owner && dist(dd.x, dd.z, q.x, q.z) <= pq.radius) n += dd.n;
+      const add = Math.min(defOf(q).mana.max - q.mana, n * pq.mana);
+      if (add > 0) { q.mana += add; ev({ type: 'mana', id: q.id, mana: q.mana, gained: add, siphon: true }); }
+    }
+    if (q.rend && q.rend.until <= round) { delete q.rend; ev({ type: 'rendEnd', id: q.id }); }
+  }
   // mages regain mana; stun carried over from last round and still left is dropped, new stun carries once
   for (const q of s.squads) {
     const d = defOf(q);
@@ -915,6 +960,7 @@ export function resolveRound(state0, ordersIn) {
       if (!c) continue;
       const amount = d.hero ? RULES.soulPerHero : d.n * (RULES.soulPerModel + ruleOf(s, p, 'soulPerModel'));
       s.supply[p] += amount;
+      ledger[p].souls += amount; ledger[p].soulPlaces++;
       ev({ type: 'souls', owner: p, x: r3(d.x), z: r3(d.z), amount });
       // the graves spread where they died: a small grave area at that graveyard's nearest edge
       const g = spreadGraves(s, p, c, d.x, d.z, d.n);
@@ -952,10 +998,15 @@ export function resolveRound(state0, ordersIn) {
       ev({ type: 'revive', id: h.id, owner: p, x: r3(h.x), z: r3(h.z), hp: h.hp });
     }
   }
+  // income, itemised (the economy panel shows these parts): the flat income, plus what was gathered and
+  // harvested this round; then the Undead's souls above RULES.soulKeep decay
   for (const p of [0, 1]) {
-    const inc = incomeOf(s, p);
+    const inc = incomeOf(s, p), P = incomeParts(s, p);
     s.supply[p] += inc;
-    ev({ type: 'income', owner: p, amount: inc, supply: s.supply[p] });
+    const decay = FACTIONS[s.players[p].faction].graves ? soulDecayOf(s.supply[p]) : 0;
+    s.supply[p] -= decay;
+    const flat = P.hq + P.mine + P.well + P.farm + P.other;
+    ev({ type: 'income', owner: p, amount: inc, supply: s.supply[p], parts: { hq: P.hq, mine: P.mine, well: P.well, farm: P.farm, other: P.other, count: P.count, brutal: inc - flat, gathered: ledger[p].gathered, souls: ledger[p].souls, soulPlaces: ledger[p].soulPlaces, decay } });
   }
   updateIntel(s);
   for (const q of s.squads) {

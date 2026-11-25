@@ -116,6 +116,8 @@ export function economy(K, P, skill, posture, mem, orders) {
   const R = [];
   const req = (pri, cost, run, ready = true, tag = '', reserve = false) => R.push({ pri, cost, run, ready, tag, reserve });
   const army = K.army.length, threatened = K.threats.length > 0;
+  // souls above the decay threshold are lost a bit every round: spend them first
+  const flush = rising && supply > RULES.soulKeep;
   // healthy: the strategy's predicted strength ratio (with the remembered enemy army) is not losing
   const healthy = army >= 4 && (mem.ratio ?? 1) >= 0.9 && army >= K.enemies.filter(e => e.role !== 'builder').length * 0.7;
   const atWar = posture === 'attack' || posture === 'defend';
@@ -150,7 +152,7 @@ export function economy(K, P, skill, posture, mem, orders) {
   // the Undead push their graves toward the enemy over the game (the blight creep)
   if (rising && s.round >= 6 && P.defense > 0.5) req(20 + 20 * P.defense, BUILDINGS.wall.cost, () => spreadToward(front), true, 'creep');
   // more production when the bank is big
-  if (count('barracks') && supply >= 70 && count('barracks') < 1 + Math.floor(s.round / 8)) req(supply >= 150 ? 118 : 50, BUILDINGS.barracks.cost, () => place('barracks', (x, z) => -Math.abs(z - hq.z) * 0.4 - Math.abs(fwd * (x - hq.x) - 3)));
+  if (count('barracks') && (supply >= 70 || flush) && count('barracks') < 1 + Math.floor(s.round / 8)) req(supply >= 150 || flush ? 118 : 50, BUILDINGS.barracks.cost, () => place('barracks', (x, z) => -Math.abs(z - hq.z) * 0.4 - Math.abs(fwd * (x - hq.x) - 3)));
   // tech: HQ tiers, tech buildings, research (only with a healthy army)
   const t2 = TIER2[fac], t3 = TIER3[fac];
   const trainerIdle = b => !b.build && !b.train && !(b.queue || []).length;
@@ -197,7 +199,7 @@ export function economy(K, P, skill, posture, mem, orders) {
     }
     if (bv < topValue * 0.5 && supply < 120 && !threatened && army >= 4) continue;
     const pr = pairOf(fac, best, tk);
-    const pri = 60 + 30 * P.aggression + (atWar ? 25 : 0) + (army < 4 && (threatened || s.round >= 6) ? 30 : 0) + (threatened ? 20 : 0);
+    const pri = 60 + 30 * P.aggression + (atWar ? 25 : 0) + (flush ? 25 : 0) + (army < 4 && (threatened || s.round >= 6) ? 30 : 0) + (threatened ? 20 : 0);
     req(pri, trainCost(fac, best), () => { if (armyN + pr > s.board.cap || usedB.has(b.id)) return false; usedB.add(b.id); out.trains.push({ bid: b.id, role: best }); armyN += pr; return true; }, true, 'army');
   }
 

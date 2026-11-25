@@ -104,6 +104,20 @@ export const TECH = {
   plague:    { faction: 'undead', name: 'Plague of Graves', icon: 'souls', at: 'hq', cost: 60, rounds: 3, tier: 3, needs: ['necropolis'], doctrine: 'ud3',
                desc: 'Doctrine: enemy squads standing on your graves lose 1 HP per model at the end of every round.', rules: { graveDrain: 1 } },
 };
+
+// a short effect label for each research, shown on its tech tree node (the detail panel has the full text)
+const CHIPS = {
+  castle: 'Tier 2 · HP 600', citadel: 'Tier 3 · +1 CP', plough: 'Farming 7 AP', rotation: 'Farms +1', shafts: 'Mines +3', guild: 'Keep +4',
+  steel1: '+15 % dmg', steel2: '+15 % dmg', plate1: '+2 armour', plate2: '+2 armour', bodkin: '+2″ range',
+  legend: 'Hero +80 HP', valour: 'Rally +2 armour', hospital: 'Heal 6 / model', chosen: 'Revive 2 rnds',
+  knightly: 'Charge ×1.4', yeomanry: 'Volley 25 AP', crusade: '+10 % dmg, +1 def', fortress: 'Bldg +30 % HP',
+  mausoleum: 'Tier 2 · HP 600', necropolis: 'Tier 3 · HP 760', restless: 'Graves ×1.25', harvest: '+1 soul / model',
+  blight: 'Graves +2″', massgraves: 'Heal +4, graves +3″',
+  bones1: '+15 % dmg', bones2: '+15 % dmg', plating1: '+1 armour', plating2: '+1 armour', swarm3: 'Pairs → 3',
+  shroud: '+2 armour', necromancy: '+20 mana', greater: 'Summons 4 rnds', chain: '+1 jump', phylactery: 'Revive 2 rnds',
+  bonetide: '+2 HP / model', darkarts: '+10 mana / rnd', horde: '+1 summon', plague: 'Drain 1 / model',
+};
+for (const [id, c] of Object.entries(CHIPS)) if (TECH[id]) TECH[id].chip = c;
 for (const [id, t] of Object.entries(TECH)) t.id = id;
 
 // tier gates: these roles train only once the HQ reached that tech
