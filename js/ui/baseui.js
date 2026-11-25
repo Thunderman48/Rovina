@@ -315,7 +315,7 @@ export const BaseUI = {
     const army = this.phase === 'planning' ? this.planner.armyNext() : armySize(this.state, this.me);
     const tip = (eco.res === 'gold' ? 'Gold: your Keep, Mines and Farms pay every round; peasants gather more' : `Souls: the Crypt and Soul Wells pay every round; every model that dies on your graves gives ${RULES.soulPerModel} (a hero ${RULES.soulPerHero}); souls above ${RULES.soulKeep} decay`) + '. Tap for the full breakdown.';
     return `<span class="ec ${eco.res}" title="${tip}">${icon(eco.icon, 16)}<b>${left}</b><small>+${this.income()}${eco.res === 'souls' ? ' +☠' : ''}</small></span>`
-      + `<span class="ec" title="Army size / cap">${icon('army', 16)}<b>${army}</b><small>/${this.state.board.cap}</small></span>`;
+      + `<span class="ec" title="Population / cap: each squad takes its pop (Warband 1 each, Men-at-arms 2, Shieldwall 3 …; heroes and peasants free). Upkeep: income drops a little as it grows.">${icon('army', 16)}<b>${army}</b><small>/${this.state.board.cap} pop</small></span>`;
   },
 
   renderBuildBar() {
@@ -431,7 +431,9 @@ export const BaseUI = {
     }
     const roles = b.owner === this.me && !b.stale ? trainsOf(b.type, fac) : [];
     const techs = b.owner === this.me && !b.stale ? researchesAt(b.type, fac) : [];
-    const work = this.needsWork(b) ? `<div style="margin-top:8px"><button class="chip" data-x="work">${icon('builder', 14)} ${b.build ? 'Send a builder to finish it' : 'Send a builder to repair it'}</button></div>` : '';
+    const cancelling = this.planner.draft.cancelSites?.includes(b.id);
+    const canCancel = b.owner === this.me && !b.stale && b.build > 0;
+    const work = (this.needsWork(b) || canCancel) ? `<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">${this.needsWork(b) && !cancelling ? `<button class="chip" data-x="work">${icon('builder', 14)} ${b.build ? 'Send a builder to finish it' : 'Send a builder to repair it'}</button>` : ''}${canCancel ? `<button class="chip${cancelling ? ' on' : ''}" data-x="cancel">${cancelling ? '↺ Keep building it' : `✕ Cancel (refund ${Math.floor(BUILDINGS[b.type].cost * RULES.siteRefund)})`}</button>` : ''}</div>` : '';
     if (!roles.length && !techs.length) {
       dock.classList.add('hidden'); info.classList.remove('hidden');
       const st = b.build ? ` · under construction: ${Math.round(d.work - b.build)}/${d.work} work` : '';
@@ -442,7 +444,8 @@ export const BaseUI = {
         pay = ` · pays <b>+${d.income || 0}</b> a round` + (gatherRate(this.state, b) ? `, peasants working ${working}/${gatherSlotsOf(b.type)} (≈ +${working * Math.floor(RULES.ap / gatherRate(this.state, b))})` : '');
       }
       info.innerHTML = `<b>${b.owner === this.me ? 'Your' : 'Enemy'} ${esc(d.name[fac])}</b>${b.stale ? ' (last seen)' : ''} · ${hpTxt}${st}${pay}<br><span style="color:var(--muted)">${FX(b.type, fac)}${b.owner !== this.me ? ' Attack it with strikes, volleys and skills: buildings take extra damage.' : ''}</span>${work}`;
-      info.querySelector('[data-x]')?.addEventListener('click', () => this.sendBuilder(b));
+      info.querySelector('[data-x="work"]')?.addEventListener('click', () => this.sendBuilder(b));
+      info.querySelector('[data-x="cancel"]')?.addEventListener('click', () => this.planner.toggleCancelSite(b.id));
       return;
     }
     info.classList.add('hidden'); dock.classList.remove('hidden');
@@ -479,6 +482,7 @@ export const BaseUI = {
     });
     dock.querySelector('[data-x="tree"]')?.addEventListener('click', () => this.openTechTree());
     dock.querySelector('[data-x="work"]')?.addEventListener('click', () => this.sendBuilder(b));
+    dock.querySelector('[data-x="cancel"]')?.addEventListener('click', () => this.planner.toggleCancelSite(b.id));
   },
 
   // while placing: your build zone, or the free resource sites for mines / wells

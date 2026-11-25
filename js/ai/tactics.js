@@ -16,7 +16,7 @@ import { squadDpr, power, fightRatio } from './combat.js';
 import { dist } from '../sim/geom.js';
 import { coverSpots } from '../sim/cover.js';
 
-const speedIn = q => defOf(q).tier * RULES.moveFactor * RULES.ap;   // inches a round
+const speedIn = q => defOf(q).move;   // inches a round (100 AP)
 
 export function tactics(K, P, skill, mem, inf, tasks, o, rnd) {
   const { s, p } = K;

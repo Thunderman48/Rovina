@@ -35,7 +35,10 @@ export const RULES = {
   strikeLunge: 30,              // a Strike lunges up to this many AP of movement at a target out of reach
   // M3 base & economy (each faction's currency and income: FACTIONS[f].eco)
   shrineRadius: 3,              // resource sites: the ring drawn around them
-  armyCap: 30,                  // squads (builders and summoned squads don't count); maps add capBonus
+  armyCap: 50,                  // population cap (each squad takes its `pop`; builders, heroes, summons 0); maps add capBonus x 1.5
+  upkeepPerPop: 0.3,            // upkeep: floor(max(0, pop - upkeepFree) x upkeepPerPop) off each round's flat income
+  upkeepFree: 8,
+  siteRefund: 0.75,             // cancelling a building still under construction refunds this share of its cost
   maxBuilders: 3,               // default builder cap (each faction sets its own: FACTIONS.<f>.maxBuilders)
   gatherSlots: 2,               // builders that can gather at one building (BUILDINGS.<type>.slots overrides)
   buildZone: 16,                // own third of the board (inches from your edge)
@@ -141,12 +144,12 @@ export const FACTIONS = {
       hero:    { name: 'The Chosen', role: 'hero', models: 1, hpPer: 260, armor: 9, tier: 5, look: 'lord', vision: 12, defends: 2, attack: STRIKE(25, 18, 1.6), skills: [LEAP(20, 7, 2, 12, 1.6, 'Leap Strike'), RALLY(20, 5, 2, 4, 1), MIGHTY(30, 28, 2.6, 0.2, 25)] },
       tank:    { name: 'Shieldwall', role: 'tank', models: 3, hpPer: 68, armor: 12, tier: 4, look: 'shield', vision: 9, defends: 2, attack: STRIKE(30, 4, 1.3), skills: [WALL('Lock Shields')] },
       fighter: { name: 'Men-at-arms', role: 'fighter', parry: true, models: 4, hpPer: 40, armor: 7, tier: 5, look: 'sword', vision: 9, defends: 1, attack: STRIKE(25, 5, 1.5) },
-      ranged:  { name: 'Crossbows', role: 'ranged', models: 4, hpPer: 30, armor: 3, tier: 5, look: 'crossbow', vision: 11, defends: 1, attack: VOLLEY(30, 3.4, 14), melee: STRIKE(25, 2, 1.2), skills: [PIERCE(35, 4.5, 16)] },
+      ranged:  { name: 'Crossbows', role: 'ranged', move: 4.8, models: 4, hpPer: 30, armor: 3, tier: 5, look: 'crossbow', vision: 11, defends: 1, attack: VOLLEY(30, 3.4, 14), melee: STRIKE(25, 2, 1.2), skills: [PIERCE(35, 4.5, 16)] },
       fast:    { name: 'Outriders', role: 'fast', models: 3, hpPer: 48, armor: 5, tier: 6, look: 'rider', vision: 11, defends: 1, attack: STRIKE(45, 13, 1.7), skills: [CHARGE(35, 9, 9)] },
       builder: { name: 'Peasants', role: 'builder', models: 2, hpPer: 28, armor: 2, tier: 5, look: 'peasant', vision: 8, defends: 0, attack: STRIKE(25, 2, 1.2) },
     },
     // Gold: a steady builder economy (keep, big farms worked by many peasants, mines on resource sites)
-    eco: { res: 'gold', name: 'Gold', icon: 'gold', start: 60, hq: 6, gather: { farm: 8, mine: 10 } },
+    eco: { res: 'gold', name: 'Gold', icon: 'gold', start: 0, hq: 6, gather: { farm: 8, mine: 10 } },
     buildings: ['barracks', 'tower', 'farm', 'mine', 'banner', 'wall', 'forge', 'chapel'],
     train: { builder: 10, tank: 30, fighter: 24, ranged: 26, fast: 30 },
     hqTrains: ['builder', 'fighter'],   // the Keep trains peasants and Men-at-arms
@@ -162,7 +165,7 @@ export const FACTIONS = {
       // the swarm: fragile, quick, cheap, trained two squads at a time (`pair`; a later upgrade: three)
       swarm:   { name: 'Skeleton Warband', role: 'swarm', pair: 2, compact: 0.8, models: 5, hpPer: 14, armor: 2, tier: 3, look: 'skeleton', vision: 9, defends: 0, attack: STRIKE(25, 2.8, 1.4) },
       ranged:  { name: 'Bone Archers', role: 'ranged', models: 4, hpPer: 20, armor: 1, tier: 5, look: 'archer', vision: 11, defends: 1, attack: VOLLEY(30, 2.4, 14, 0.9), melee: STRIKE(25, 1.2, 1.2), skills: [STORM(35, 4, 15, 2.2)] },
-      fast:    { name: 'Wraiths', role: 'fast', models: 3, hpPer: 28, armor: 3, tier: 6, look: 'wraith', vision: 11, defends: 1, ghost: true, attack: STRIKE(45, 9, 1.7), skills: [CHARGE(35, 5.6, 9)] },
+      fast:    { name: 'Wraiths', role: 'fast', move: 9, models: 3, hpPer: 28, armor: 3, tier: 6, look: 'wraith', vision: 11, defends: 1, ghost: true, attack: STRIKE(45, 11, 1.7), skills: [CHARGE(35, 6.8, 9)] },
       // a weaker caster troop: bolts, a weaker Dark Thunder, a one-squad summon
       mage:    { name: 'Necromancers', role: 'mage', models: 2, hpPer: 20, armor: 1, tier: 4, look: 'necro', vision: 10, defends: 1, magic: true, attack: VOLLEY(25, 4, 9, 0.5), melee: STRIKE(25, 1.5, 1.2),
                  mana: { max: 60, start: 40, regen: 15 }, skills: [THUNDER(15, 20, 6, 10, 2, 3, 0.7), SUMMON(20, 35, 4, 1)] },
@@ -170,7 +173,7 @@ export const FACTIONS = {
     // Souls: fed by death on graveyards (grave ground spreads around undead buildings); Soul Wells give a
     // trickle and spread graves far. No builders.
     // a death economy: the Crypt (1) and Soul Wells (2) only keep it from stalling; deaths on graves pay the rest
-    eco: { res: 'souls', name: 'Souls', icon: 'souls', start: 90, hq: 6, gather: {} },
+    eco: { res: 'souls', name: 'Souls', icon: 'souls', start: 0, hq: 6, gather: {} },
     buildings: ['barracks', 'tower', 'well', 'monolith', 'wall', 'pit', 'sanctum'],
     train: { tank: 16, fighter: 9, swarm: 20, ranged: 13, fast: 16, mage: 22 },
     // the cheap core squads (the owner's old tier rule is replaced: Undead costs may change, 2026-11-25)
@@ -212,8 +215,17 @@ const PASSIVES = {
   },
 };
 for (const f of Object.keys(PASSIVES)) for (const [r, pv] of Object.entries(PASSIVES[f])) FACTIONS[f].units[r].passive = pv;
+// population (army cap) each squad takes, and its movement: inches per 100 AP (tier stays initiative only;
+// the default movement is the old tier x 1.2")
+const POP = { hero: 0, builder: 0, summon: 0, swarm: 1, fighter: 2, ranged: 2, mage: 2, fast: 3, tank: 3 };
+for (const f of Object.keys(FACTIONS)) for (const [r, u] of Object.entries(FACTIONS[f].units)) {
+  if (u.pop === undefined) u.pop = f === 'undead' && (r === 'fighter' || r === 'ranged') ? 1 : POP[r] ?? 1;
+  if (u.move === undefined) u.move = Math.round(u.tier * RULES.moveFactor * RULES.ap * 100) / 100;
+}
+FACTIONS.undead.units.fast.pop = 2;   // Wraiths
 FACTIONS.undead.units.summon = { ...FACTIONS.undead.units.swarm, role: 'summon', summoned: true };
 delete FACTIONS.undead.units.summon.pair;
+FACTIONS.undead.units.summon.pop = 0;   // summoned squads take no population
 
 // Buildings. Builders put them up: `work` is the builder AP needed to finish one.
 //  shape: 'rect' (w x d, rotated by rot 0/90) or 'circle' (r). fire: { dmg (x4 shots), range }
@@ -257,6 +269,8 @@ export function squadRadius(def, models) {
   return (base + 0.42 * Math.sqrt(Math.max(1, models))) * (def.compact || 1);   // compact: tighter ranks
 }
 
+// movement in inches per AP (the stat `move` is per 100 AP)
+export const moveOf = def => def.move / RULES.ap;
 export function unitDef(faction, role, tk = '') { return techUnit(FACTIONS[faction].units[role], faction, role, tk); }
 export const isMelee = def => def.attack.kind === 'strike';
 // the melee attack a squad strikes with: its basic attack, or a shooter's / caster's fallback (`melee`),

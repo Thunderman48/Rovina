@@ -8,7 +8,7 @@ import { RULES, FACTIONS, trainsOf, pairOf, maxBuildersOf } from '../data/units.
 import { TECH, GATES } from '../data/tech.js';
 import { MATCHUPS } from './matchups.js';
 import { emptyPlan, defOf, apFor } from '../sim/state.js';
-import { placeError, BUILDINGS, trainCost, footprint, builderCount, armySize, bdef, buildQueue, siteTaken, seenBy, graveCircles, hasTech, techError, gateOf, tkOf, researching } from '../sim/base.js';
+import { popCost, placeError, BUILDINGS, trainCost, footprint, builderCount, armySize, bdef, buildQueue, siteTaken, seenBy, graveCircles, hasTech, techError, gateOf, tkOf, researching } from '../sim/base.js';
 import { builderPlan, approachSpot } from '../sim/builders.js';
 import { dist } from '../sim/geom.js';
 import { learnedMult } from './learning.js';
@@ -131,7 +131,8 @@ export function economy(K, P, skill, posture, mem, orders) {
     const onGraves = sites.find(sh => !placeError(s, p, site, sh.x, sh.z, 0, queued));
     const pri = count(site) ? 55 + 30 * P.greed : threatened ? 98 : 125;   // the first site comes before the army
     const first = !count(site);
-    if (!rising || onGraves) req(pri, BUILDINGS[site].cost, () => place(site), true, 'site', first);
+    // a site can only be asked for when one is placeable (an enemy building's 16" zone can shut them all)
+    if (!rising || onGraves) req(pri, BUILDINGS[site].cost, () => place(site), !!onGraves, 'site', first);
     else if (sites.length) {
       req(pri - 5, BUILDINGS.wall.cost, () => spreadToward(sites[0]), true, 'spread');
       if (first) req(pri, BUILDINGS[site].cost, () => false, false, 'site', true);   // save for it meanwhile
@@ -198,7 +199,7 @@ export function economy(K, P, skill, posture, mem, orders) {
       if (v > bv) { bv = v; best = r; }
     }
     if (bv < topValue * 0.5 && supply < 120 && !threatened && army >= 4) continue;
-    const pr = pairOf(fac, best, tk);
+    const pr = popCost(fac, best, tk);
     const pri = 60 + 30 * P.aggression + (atWar ? 25 : 0) + (flush ? 25 : 0) + (army < 4 && (threatened || s.round >= 6) ? 30 : 0) + (threatened ? 20 : 0);
     req(pri, trainCost(fac, best), () => { if (armyN + pr > s.board.cap || usedB.has(b.id)) return false; usedB.add(b.id); out.trains.push({ bid: b.id, role: best }); armyN += pr; return true; }, true, 'army');
   }
@@ -211,7 +212,7 @@ export function economy(K, P, skill, posture, mem, orders) {
   mem.reqs = R.map(r => `${r.tag || '?'}:${r.pri | 0}:${r.cost}${r.ready ? '' : '!'}`);
   for (const r of R) {
     if (!r.ready) continue;
-    if (supply - held >= r.cost) { if (r.run()) supply -= r.cost; else if (r.reserve) held += r.cost; continue; }
+    if (supply - held >= r.cost) { if (r.run()) supply -= r.cost; else if (r.reserve && s.round <= 8) held += r.cost; continue; }
     // saving: only for important things (tiers, the first buildings), once
     if (r.pri >= 70 && r.tag !== 'army' && (r.tag !== 'tech' || healthy) && (r.reserve || !held)) held += r.cost;
   }

@@ -36,7 +36,8 @@ with no HQ on the table use "no squads left".)
 If both sides lose in the same round it is a **draw**. **There is no round limit.**
 
 Each side starts with: an HQ (at one of the map's 3 seeded HQ spots on its back edge), its army deployed
-in front of it, and its faction's starting resource. **Small starting armies** (since 2026-11-16; the
+in front of it, and **no resources** (both factions start at **0** since 2026-11-25, like most RTS games; the first
+income arrives at the end of round 1, so the first purchases are made in round 2). **Small starting armies** (since 2026-11-16; the
 rest comes from the base): **Kingdom:** The Chosen, **Men-at-arms** and **1 peasant (builder) squad**.
 **Undead:** the Lich and **a Skeleton Warband pair** (2 swarm squads). The Keep trains peasants
 and Men-at-arms; the Crypt trains the swarm.
@@ -484,7 +485,13 @@ Nameplates show Rend as ✂ with the stack count.
 
 - **Paths:** A* on a 0.5″ grid per squad radius (obstacles inflated by the radius; slow terrain costs
   more), then smoothed. Paths are computed when orders are given (planner / AI / stances).
-- **Each AP:** a walking squad advances along its path by its speed × terrain factor.
+- **Movement is its own stat** (since 2026-11-25): every unit has `move`, the inches it walks in a full
+  round (100 AP) on open ground (`FACTIONS.<f>.units.<role>.move`; the default is tier × 1.2). **Tier now
+  only sets initiative** (which tier acts first). `moveOf(def)` = `move / 100` is the speed in inches per
+  AP used by paths (`pathAP` / `walkAP` take it), stances, the planner's reach ring, the Strike lunge and
+  the AI. Exceptions to the default: **Crossbows 4.8″** (tier 5, so 6″ before), **Wraiths 9″** (tier 6,
+  7.2″ before). Research can add movement (Horse Breeding +1″, Hollow Bones +0.6″, Spectral Speed +1″).
+- **Each AP:** a walking squad advances along its path by its speed (`moveOf`) × terrain factor.
   - **Enemy squads block.** Walking into contact with an enemy (within engage distance) **stops** the
     move ("arrived": the fight starts there).
   - **Friendly squads do not block** (you can walk through your own lines); squads that have stopped
@@ -509,27 +516,27 @@ Ossuary) and Necromancers (Mausoleum; trained at the Crypt only). Everything els
 <!-- GEN:units -->
 **Kingdom** (`FACTIONS.kingdom.units`)
 
-| Role | Name | Models | HP/model | HP | Armour | Tier | Move "/rnd | Vision | Defends | Radius | Attack | AP | Dmg/model | Full squad/hit | Reach / range | Hits per 100 AP | Flags | Train cost | Train rnds |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| hero | The Chosen | 1 | 260 | 260 | 9 | 5 | 6 | 12 | 2 | 0.65 | strike | 25 | 18 | 20.7 | reach 1.6" + lunge 1.8" (one target) | 4 | - | - | - |
-| tank | Shieldwall | 3 | 68 | 204 | 12 | 4 | 4.8 | 9 | 2 | 1.227 | strike | 30 | 4 | 13.8 | reach 1.3" + lunge 1.44" (one target) | 3 | - | 30 | 3 |
-| fighter | Men-at-arms | 4 | 40 | 160 | 7 | 5 | 6 | 9 | 1 | 1.34 | strike | 25 | 5 | 23 | reach 1.5" + lunge 1.8" (one target) | 4 | parry | 24 | 2 |
-| ranged | Crossbows | 4 | 30 | 120 | 3 | 5 | 6 | 11 | 1 | 1.34 | volley | 30 | 3.4 | 13.6 | range 14", width 0.7" | 3 | melee when locked: strike 2/model, 25 AP, reach 1.2" | 26 | 2 |
-| fast | Outriders | 3 | 48 | 144 | 5 | 6 | 7.2 | 11 | 1 | 1.347 | strike | 45 | 13 | 44.85 | reach 1.7" + lunge 2.16" (one target) | 2 | - | 30 | 2 |
-| builder | Peasants | 2 | 28 | 56 | 2 | 5 | 6 | 8 | 0 | 1.094 | strike | 25 | 2 | 4.6 | reach 1.2" + lunge 1.8" (one target) | 4 | - | 10 | 1 |
+| Role | Name | Models | HP/model | HP | Armour | Tier (initiative) | Move "/rnd | Pop | Vision | Defends | Radius | Attack | AP | Dmg/model | Full squad/hit | Reach / range | Hits per 100 AP | Flags | Train cost | Train rnds |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| hero | The Chosen | 1 | 260 | 260 | 9 | 5 | 6 | 0 | 12 | 2 | 0.65 | strike | 25 | 18 | 20.7 | reach 1.6" + lunge 1.8" (one target) | 4 | - | - | - |
+| tank | Shieldwall | 3 | 68 | 204 | 12 | 4 | 4.8 | 3 | 9 | 2 | 1.227 | strike | 30 | 4 | 13.8 | reach 1.3" + lunge 1.44" (one target) | 3 | - | 30 | 3 |
+| fighter | Men-at-arms | 4 | 40 | 160 | 7 | 5 | 6 | 2 | 9 | 1 | 1.34 | strike | 25 | 5 | 23 | reach 1.5" + lunge 1.8" (one target) | 4 | parry | 24 | 2 |
+| ranged | Crossbows | 4 | 30 | 120 | 3 | 5 | 4.8 | 2 | 11 | 1 | 1.34 | volley | 30 | 3.4 | 13.6 | range 14", width 0.7" | 3 | melee when locked: strike 2/model, 25 AP, reach 1.2" | 26 | 2 |
+| fast | Outriders | 3 | 48 | 144 | 5 | 6 | 7.2 | 3 | 11 | 1 | 1.347 | strike | 45 | 13 | 44.85 | reach 1.7" + lunge 2.16" (one target) | 2 | - | 30 | 2 |
+| builder | Peasants | 2 | 28 | 56 | 2 | 5 | 6 | 0 | 8 | 0 | 1.094 | strike | 25 | 2 | 4.6 | reach 1.2" + lunge 1.8" (one target) | 4 | - | 10 | 1 |
 
 **Undead Legion** (`FACTIONS.undead.units`)
 
-| Role | Name | Models | HP/model | HP | Armour | Tier | Move "/rnd | Vision | Defends | Radius | Attack | AP | Dmg/model | Full squad/hit | Reach / range | Hits per 100 AP | Flags | Train cost | Train rnds |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| hero | Lich | 1 | 180 | 180 | 5 | 3 | 3.6 | 12 | 1 | 0.65 | volley | 25 | 13 | 13 | range 10", width 0.6" | 4 | melee when locked: strike 8/model, 25 AP, reach 1.4", mage: mana 60/100, +25/rnd | - | - |
-| tank | Grave Guard | 3 | 42 | 126 | 9 | 4 | 4.8 | 9 | 2 | 1.227 | strike | 30 | 3.2 | 11.04 | reach 1.3" + lunge 1.44" (one target) | 3 | - | 16 | 3 |
-| fighter | Skeleton Warriors | 5 | 18 | 90 | 3 | 5 | 6 | 9 | 1 | 1.439 | strike | 25 | 2.4 | 13.8 | reach 1.5" + lunge 1.8" (one target) | 4 | parry | 9 | 2 |
-| swarm | Skeleton Warband | 5 | 14 | 70 | 2 | 3 | 3.6 | 9 | 0 | 1.151 | strike | 25 | 2.8 | 16.1 | reach 1.4" + lunge 1.08" (one target) | 4 | - | 20 | 2 |
-| ranged | Bone Archers | 4 | 20 | 80 | 1 | 5 | 6 | 11 | 1 | 1.34 | volley | 30 | 2.4 | 9.6 | range 14", width 0.9" | 3 | melee when locked: strike 1.2/model, 25 AP, reach 1.2" | 13 | 2 |
-| fast | Wraiths | 3 | 28 | 84 | 3 | 6 | 7.2 | 11 | 1 | 1.347 | strike | 45 | 9 | 31.05 | reach 1.7" + lunge 2.16" (one target) | 2 | ghost | 16 | 2 |
-| mage | Necromancers | 2 | 20 | 40 | 1 | 4 | 4.8 | 10 | 1 | 1.094 | volley | 25 | 4 | 8 | range 9", width 0.5" | 4 | melee when locked: strike 1.5/model, 25 AP, reach 1.2", mage: mana 40/60, +15/rnd | 22 | 2 |
-| summon | Skeleton Warband | 5 | 14 | 70 | 2 | 3 | 3.6 | 9 | 0 | 1.151 | strike | 25 | 2.8 | 16.1 | reach 1.4" + lunge 1.08" (one target) | 4 | summoned (lasts 3 rnds, not trainable) | - | - |
+| Role | Name | Models | HP/model | HP | Armour | Tier (initiative) | Move "/rnd | Pop | Vision | Defends | Radius | Attack | AP | Dmg/model | Full squad/hit | Reach / range | Hits per 100 AP | Flags | Train cost | Train rnds |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| hero | Lich | 1 | 180 | 180 | 5 | 3 | 3.6 | 0 | 12 | 1 | 0.65 | volley | 25 | 13 | 13 | range 10", width 0.6" | 4 | melee when locked: strike 8/model, 25 AP, reach 1.4", mage: mana 60/100, +25/rnd | - | - |
+| tank | Grave Guard | 3 | 42 | 126 | 9 | 4 | 4.8 | 3 | 9 | 2 | 1.227 | strike | 30 | 3.2 | 11.04 | reach 1.3" + lunge 1.44" (one target) | 3 | - | 16 | 3 |
+| fighter | Skeleton Warriors | 5 | 18 | 90 | 3 | 5 | 6 | 1 | 9 | 1 | 1.439 | strike | 25 | 2.4 | 13.8 | reach 1.5" + lunge 1.8" (one target) | 4 | parry | 9 | 2 |
+| swarm | Skeleton Warband | 5 | 14 | 70 | 2 | 3 | 3.6 | 1 | 9 | 0 | 1.151 | strike | 25 | 2.8 | 16.1 | reach 1.4" + lunge 1.08" (one target) | 4 | - | 20 | 2 |
+| ranged | Bone Archers | 4 | 20 | 80 | 1 | 5 | 6 | 1 | 11 | 1 | 1.34 | volley | 30 | 2.4 | 9.6 | range 14", width 0.9" | 3 | melee when locked: strike 1.2/model, 25 AP, reach 1.2" | 13 | 2 |
+| fast | Wraiths | 3 | 28 | 84 | 3 | 6 | 9 | 2 | 11 | 1 | 1.347 | strike | 45 | 11 | 37.95 | reach 1.7" + lunge 2.7" (one target) | 2 | ghost | 16 | 2 |
+| mage | Necromancers | 2 | 20 | 40 | 1 | 4 | 4.8 | 2 | 10 | 1 | 1.094 | volley | 25 | 4 | 8 | range 9", width 0.5" | 4 | melee when locked: strike 1.5/model, 25 AP, reach 1.2", mage: mana 40/60, +15/rnd | 22 | 2 |
+| summon | Skeleton Warband | 5 | 14 | 70 | 2 | 3 | 3.6 | 0 | 9 | 0 | 1.151 | strike | 25 | 2.8 | 16.1 | reach 1.4" + lunge 1.08" (one target) | 4 | summoned (lasts 3 rnds, not trainable) | - | - |
 
 <!-- /GEN:units -->
 
@@ -555,7 +562,7 @@ measured from the squad's edge; "Full squad/hit" includes `strikeMult` for strik
 | Undead Legion | Lich | Corpse Explosion | `explode` | attack | 10 | - (mage) | 20 | - | range 9, radius 2.5, base 8, perModel 3 |
 | Undead Legion | Grave Guard | Grave Wall | `wall` | defense | 15 | 1 | - | - | mult 0.3, cosHalf 0.5 |
 | Undead Legion | Bone Archers | Arrow Storm | `storm` | attack | 35 | 2 | - | 4 x 4 = 16 | ranged true, dmg 4, range 15, radius 2.2 |
-| Undead Legion | Wraiths | Charge | `charge` | move | 35 | 1 | - | 5.6 x 3 = 16.799999999999997 | wind 8, dmg 5.6, len 9 |
+| Undead Legion | Wraiths | Charge | `charge` | move | 35 | 1 | - | 6.8 x 3 = 20.4 | wind 8, dmg 6.8, len 9 |
 | Undead Legion | Necromancers | Dark Thunder | `thunder` | attack | 15 | - (mage) | 20 | 6 x 2 = 12 | ranged true, dmg 6, range 10, jumps 2, jump 3, decay 0.7, radius 1 |
 | Undead Legion | Necromancers | Summon Warband | `summon` | defense | 20 | - (mage) | 35 | - | range 4, count 1, radius 1.6 |
 <!-- /GEN:skills -->
@@ -591,7 +598,7 @@ Damage per round = hits per 100 AP x damageAfter(dmg per model x models (x strik
 | Skeleton Warriors | 13.8 | 56 | 48 | 44 | 40 | 36 | 36 |
 | Skeleton Warband | 16.1 | 64 | 56 | 52 | 44 | 40 | 40 |
 | Bone Archers | 9.6 | 30 | 24 | 24 | 21 | 18 | 18 |
-| Wraiths | 31.05 | 62 | 54 | 50 | 44 | 40 | 38 |
+| Wraiths | 37.95 | 76 | 66 | 60 | 54 | 48 | 48 |
 | Necromancers | 8 | 32 | 28 | 24 | 24 | 20 | 20 |
 | Skeleton Warband | 16.1 | 64 | 56 | 52 | 44 | 40 | 40 |
 
@@ -615,7 +622,7 @@ Damage per round = hits per 100 AP x damageAfter(dmg per model x models (x strik
 | Skeleton Warriors | 26 (6.5 r) | 23 (5.8 r) | 16 (4 r) | 10 (2.5 r) | 14 (3.5 r) | 5 (1.3 r) |
 | Skeleton Warband | 24 (6 r) | 21 (5.3 r) | 14 (3.5 r) | 9 (2.3 r) | 12 (3 r) | 4 (1 r) |
 | Bone Archers | 38 (12.7 r) | 34 (11.3 r) | 23 (7.7 r) | 15 (5 r) | 18 (6 r) | 7 (2.3 r) |
-| Wraiths | 13 (6.5 r) | 11 (5.5 r) | 7 (3.5 r) | 5 (2.5 r) | 6 (3 r) | 2 (1 r) |
+| Wraiths | 10 (5 r) | 9 (4.5 r) | 6 (3 r) | 4 (2 r) | 5 (2.5 r) | 2 (1 r) |
 | Necromancers | 44 (11 r) | 41 (10.3 r) | 27 (6.8 r) | 18 (4.5 r) | 24 (6 r) | 8 (2 r) |
 | Skeleton Warband | 24 (6 r) | 21 (5.3 r) | 14 (3.5 r) | 9 (2.3 r) | 12 (3 r) | 4 (1 r) |
 
@@ -630,8 +637,8 @@ Damage per round = hits per 100 AP x damageAfter(dmg per model x models (x strik
 <!-- GEN:economy -->
 | Faction | Resource | Start | HQ income/rnd | Gather (AP per 1 resource) | Builder gathering a full round | Buildable |
 | --- | --- | --- | --- | --- | --- | --- |
-| Kingdom | Gold | 60 | 6 | farm 8 (4 gatherers), mine 10 (2 gatherers) | farm ~12, mine ~10 | barracks, tower, farm, mine, banner, wall, forge, chapel |
-| Undead Legion | Souls | 90 | 6 | - (no builders) | - | barracks, tower, well, monolith, wall, pit, sanctum |
+| Kingdom | Gold | 0 | 6 | farm 8 (4 gatherers), mine 10 (2 gatherers) | farm ~12, mine ~10 | barracks, tower, farm, mine, banner, wall, forge, chapel |
+| Undead Legion | Souls | 0 | 6 | - (no builders) | - | barracks, tower, well, monolith, wall, pit, sanctum |
 
 Builders: Kingdom up to 10 peasant squads (not in the army cap); Undead 0 (buildings rise by themselves). HQ trains: Kingdom builder/fighter; Undead Legion swarm/mage.
 
@@ -678,7 +685,28 @@ Flat income: Crypt 6 a round, Soul Well 6 a round each. Kingdom deaths on undead
   - **Deaths still pay:** every model that dies on either side (summoned skeletons excepted) **on the Undead side's grave ground** pays **`RULES.soulPerModel` = 3** souls (a hero **`soulPerHero`** = 15), credited at the end of the round where it fell (§10.4).
   - **Cheap squads profit:** the pay is per **model**, so cheap many-model squads give back **more than they cost** when they fall on graves: a Skeleton Warband squad has 5 models → 15 souls for 10 souls of cost (1.5×); Skeleton Warriors 1.7×. Elite few-model squads give back less (Grave Guard / Wraiths 0.6×, Necromancers 0.3×).
   - **Soul decay** (`RULES.soulKeep` = 80, `RULES.soulDecay` = 0.2): at the end of every round, after income, a bank above 80 souls loses `floor((bank − 80) × 0.2)`. A big fight still pays, but the bank can't snowball: spend it.
-  - **Start:** 90 souls (the Kingdom: 60 gold). No gathering (no builders). In mirror Undead matches each side collects from deaths on its own graves.
+  - **Start:** 0 souls (both factions start at 0; before 2026-11-25: 90 souls / 60 gold). No gathering (no builders). In mirror Undead matches each side collects from deaths on its own graves.
+- **Population and upkeep** (Dawn of War style, since 2026-11-25; `popCost` / `armySize` / `incomeParts` in
+  `js/sim/base.js`):
+  - **Population:** every squad costs **pop** (`FACTIONS.<f>.units.<role>.pop`): Warband (each squad of a
+    pair), Skeleton Warriors, Bone Archers **1**; Men-at-arms, Crossbows, Wraiths, Necromancers **2**;
+    Shieldwall, Outriders, Grave Guard **3**; heroes, peasants and summoned skeletons **0**. A Warband pair
+    costs 2 (pop × pair). Squads in training count; queued ones don't.
+  - **Population cap:** `RULES.armyCap` = **50** pop + the map's `capBonus` × 1.5 (Twin Rivers / Highland
+    +6, Great Field +12). A training item waits ("population cap") while pop + its pop would pass it.
+    The top bar shows "pop N / cap".
+  - **Upkeep:** every round, `upkeep = min(flat income, floor(max(0, pop − RULES.upkeepFree) ×
+    RULES.upkeepPerPop))` with `upkeepFree` = **8** and `upkeepPerPop` = **0.3** (e.g. 30 pop → −6 a
+    round). It is taken from the **flat** income (HQ, Mines, Wells, Farms; before the Brutal ×), so income
+    never goes below 0; **gathering and souls from deaths are not taxed**. It is the `upkeep` part of the
+    income (with `pop`), a row in the Economy panel and in the log line. A big army costs economy; a small
+    one lets the economy grow.
+- **Cancelling a building under construction** (since 2026-11-25): the `cancelSites: [bid]` order (at most
+  10; only own buildings with `build > 0`) removes the site at round start and refunds
+  **`floor(cost × RULES.siteRefund)`** = **75 %** of its cost (Warcraft III / StarCraft style). Event
+  `siteCancel`; builders working there go idle. The building panel of an own unfinished site has
+  "✕ Cancel (refund N)" (tap again to keep building it). Waiting queue items and training / research
+  still refund in full.
 - **Undead costs may change** (owner, 2026-11-25; the old low-tier / high-tier cost rule is replaced). Elite squads are meant to lose value when they die, and the Warband must return more souls than it costs.
 - **Income breakdown** (`incomeParts` in `js/sim/base.js`; the round's `income` event has `parts`):
   - **Parts:** the flat income by source (`hq`, `mine`, `well`, `farm`, `other`, with counts); `brutal` (the AI's extra); `gathered` (per building, from the peasants' `gather` events this round); `souls` from deaths (and the number of places); `decay`.
@@ -735,10 +763,10 @@ Flat income: Crypt 6 a round, Soul Well 6 a round each. Kingdom deaths on undead
 - **Training:** paid when it **starts** (round start, from the building's queue, §10.3); the squad
   appears next to the building at the end of its last training round (builder 1, fighter / ranged /
   fast 2, tank 3), on the first free spot (toward the enemy first). Squads in training count toward the
-  army cap; queued squads do not. Stopping a squad in training refunds its full cost.
-- **Army cap:** `RULES.armyCap` = **30** squads + the map's bonus (Twin Rivers / Highland +4, Great Field
-  +8). **Builders and summoned skeletons don't count** (`inArmy` in `js/sim/base.js`); squads in training
-  do (builders in training don't).
+  population cap; queued squads do not. Stopping a squad in training refunds its full cost.
+- **Population cap** (replaced the 30-squad army cap on 2026-11-25): `RULES.armyCap` = **50 pop** + the
+  map's `capBonus` × 1.5 (Twin Rivers / Highland +6, Great Field +12). Squads cost their unit's pop
+  (§10.2); **heroes, builders and summoned skeletons cost 0**; squads in training count (pop × pair).
 
 ### 10.3 Production queues (`startQueues` in `js/sim/base.js`)
 Two kinds of persistent queue, stored in the state and kept across rounds with no new orders:
@@ -812,6 +840,11 @@ Repair (Kingdom builders): builder AP x (max HP / work) HP per AP. Undead buildi
 - **No building within `RULES.enemyBuildGap` = 16″ of an enemy building the side has seen** (its intel,
   `s.intel[p].known`; fog-fair): "Too close to an enemy building (16″)". This stops tower or Barracks
   rushes next to an enemy base. Buildings the side hasn't seen don't count.
+  **Home ground is exempt** (since 2026-11-25): a spot within the map's zone (`board.zone` = board width ÷ 3:
+  Crossing 16″, Twin Rivers / Highland 21″, Great Field 27″) of the side's own HQ edge ignores the rule,
+  so enemy grave creep or forward Monoliths can't shut a side out of its own base. (Found when both sides
+  started at 0: the Undead crept to the middle of Crossing before the Kingdom's first Mine, and the zone
+  covered nearly the whole Kingdom base.)
 - **Your own squads make way:** when a site starts (`startQueues`), every own squad overlapping its
   footprint moves to the nearest free spot outside it (`pushOut` in `js/sim/base.js`, rings 0.5″ apart
   around the building; a `pushed` event, logged as "makes way for …").
@@ -876,7 +909,7 @@ whose walk finds no path drops the task (`workFail`) instead of trying it again 
 The Keep trains builders (peasants); the **Crypt trains the Skeleton Warband swarm** (`FACTIONS.<f>.hqTrains`);
 Barracks / Ossuary train tank, fighter, ranged, fast (the Ossuary also the swarm).
 **Pairs:** a unit with `pair: 2` (the Skeleton Warband) spawns **2 squads** from one training (each a
-full squad, both counting toward the army cap; the queue waits unless 2 cap slots are free). One squad in training at a
+full squad, each costing its pop; the queue waits unless 2 pop are free). One squad in training at a
 time each, with up to 5 more queued (§10.3).
 
 ### 11.6 Tower and HQ fire (after all tiers)
@@ -916,6 +949,28 @@ War commanders and C&C Generals powers for the exclusive picks.
 - **Tiers:** the HQ upgrade is itself research (`hqTier`): Tier 2 (Castle / Mausoleum) unlocks the
   **elite squads** (gates below), the **tech buildings** ("Needs the Castle" in placement) and the tier
   2 research and doctrine; Tier 3 (Citadel / Necropolis) the strongest research and the last doctrine.
+- **Harder unit unlocks** (since 2026-11-25, Age of Empires–style unit-line research): Tier 2 alone no
+  longer unlocks the elite squads. Each needs its own **unlock research** at the Barracks / Ossuary after
+  Tier 2 (`GATES` in `js/data/tech.js` names it; a gated card says "needs Shieldwall Drill"): Kingdom
+  **Shieldwall Drill** (35, 2 rounds) → Shieldwall, **Outrider Stables** (45, 3) → Outriders; Undead
+  **Grave Vigil** (25, 2) → Grave Guard, **Wraith Pact** (30, 3) → Wraiths, **Necromancer Circle**
+  (35, 3) → Necromancers. The Barracks / Ossuary research in their training queue like tech buildings
+  (one item at a time: research there pauses training).
+- **A longer tree** (since 2026-11-25):
+  - **Rising costs** (StarCraft +1 / +2 / +3): every weapon / armour line has a **level III** at Tier 3
+    (Steel Weapons III / Plate Armour III 80, 4 rounds; Sharpened Bones III / Bone Plating III 55, 4),
+    about ×1.6 the cost and +1 round of level II; it needs level II.
+  - **Small upgrades** (cheap, 1–2 rounds, +5–10 % or +1): Whetstones, Padded Jacks, Hardy Peasants,
+    Sharpened Picks (mines 9 AP a gold, `mineGather`), Masonry / Bone Masonry (+15 % building HP),
+    Hoardings / Dread Spires (+1 tower and HQ fire damage, `fireAdd`), Horse Breeding / Hollow Bones /
+    Spectral Speed (`move`), Grave Dust, Ossified Skin, Soul Conduits (Soul Wells +1, `wellIncome`).
+  - **Ability upgrades** (middle of the tree; effect `addSkill` gives a unit a new skill, reusing existing
+    skill kinds): Shield Drill (Men-at-arms: Lock Shields), Fire Arrows (Crossbows: Fire Volley, an
+    Arrow Storm–type circle, 3 a model), Sweeping Blow (The Chosen: Sweep), Bone Shields (Skeleton
+    Warriors: Grave Wall), Bone Spears (Bone Archers: Bone Spear, a Piercing Bolt–type line, 3.5 a
+    model), Shadow Walk (Wraiths: Shadow Step). Squads use them like their own skills (orders, stances,
+    auto skills).
+  - The tree screen has a **Barracks / Ossuary lane** ("unit unlocks and drills"); every item has a chip.
   The HQ gets more HP (current HP grows by the same amount), stronger fire or graves, and a bigger model.
 - **Doctrines:** one exclusive pick per tier: researching one locks the other for the rest of the game.
 - **Research is kept** when the building that did it is destroyed (only research in progress there is
@@ -929,11 +984,11 @@ War commanders and C&C Generals powers for the exclusive picks.
   HP).
 
 <!-- GEN:tech -->
-**Kingdom** (`TECH` in `js/data/tech.js`). Gates: Shieldwall need Castle; Outriders need Castle; Blacksmith needs Castle; Chapel needs Castle.
+**Kingdom** (`TECH` in `js/data/tech.js`). Gates: Shieldwall need Shieldwall Drill; Outriders need Outrider Stables; Blacksmith needs Castle; Chapel needs Castle.
 
 | id | Name | Tier | At | Cost | Rounds | Needs | Doctrine | Effect |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `castle` | Castle | 2 | Keep | 60 | 3 | a Barracks | - | Tier 2: the Keep becomes a Castle (HP 600, stronger fire). Unlocks Shieldwall and Outriders, the Blacksmith, the Chapel and a doctrine. |
+| `castle` | Castle | 2 | Keep | 60 | 3 | a Barracks | - | Tier 2: the Keep becomes a Castle (HP 600, stronger fire). Opens the unit unlocks (Shieldwall Drill, Outrider Stables), the Blacksmith, the Chapel and a doctrine. |
 | `citadel` | Citadel | 3 | Keep | 100 | 4 | Castle, a Blacksmith or Chapel | - | Tier 3: the Citadel (HP 800, fire 5, +1 command point). Unlocks the strongest research and the last doctrine. |
 | `plough` | Heavy Plough | 1 | Keep | 20 | 1 | - | - | Farmers work faster: 7 AP per gold instead of 8. |
 | `rotation` | Crop Rotation | 2 | Keep | 40 | 2 | Heavy Plough, Castle | - | Every farm earns +1 gold a round by itself. |
@@ -952,12 +1007,26 @@ War commanders and C&C Generals powers for the exclusive picks.
 | `yeomanry` | Free Yeomanry | 2 | Keep | 40 | 2 | Castle | tier 2 pick | Doctrine: Crossbows reload faster (volley 25 AP); peasants +3 armour and hit harder. |
 | `crusade` | Crusade | 3 | Keep | 70 | 3 | Citadel | tier 3 pick | Doctrine: all soldiers deal 10 % more damage and get +1 defend. |
 | `fortress` | Fortress Realm | 3 | Keep | 70 | 3 | Citadel | tier 3 pick | Doctrine: buildings +30 % HP, towers +2″ range, Palisades need half the work. |
+| `drill` | Shieldwall Drill | 2 | Barracks | 35 | 2 | Castle | - | Unlocks Shieldwall squads at the Barracks. |
+| `stables` | Outrider Stables | 2 | Barracks | 45 | 3 | Castle | - | Unlocks Outriders at the Barracks. |
+| `steel3` | Steel Weapons III | 3 | Blacksmith | 80 | 4 | Steel Weapons II | - | Soldiers deal another 15 % more damage. |
+| `plate3` | Plate Armour III | 3 | Blacksmith | 80 | 4 | Plate Armour II | - | Soldiers +2 more armour. |
+| `whetstones` | Whetstones | 1 | Barracks | 15 | 1 | - | - | Men-at-arms deal 10 % more damage. |
+| `padded` | Padded Jacks | 1 | Barracks | 15 | 1 | - | - | Crossbows +1 armour. |
+| `hardy` | Hardy Peasants | 1 | Keep | 15 | 1 | - | - | Peasants +4 HP per model. |
+| `picks` | Sharpened Picks | 1 | Keep | 20 | 1 | - | - | Peasants mine faster: 9 AP per gold instead of 10. |
+| `masonry` | Masonry | 2 | Keep | 35 | 2 | Castle | - | All your buildings +15 % HP. |
+| `hoardings` | Hoardings | 2 | Blacksmith | 30 | 2 | - | - | Watchtowers and the Keep fire for +1 damage per shot. |
+| `horses` | Horse Breeding | 2 | Barracks | 30 | 2 | Outrider Stables | - | Outriders move 1″ further a round. |
+| `shielddrill` | Shield Drill | 2 | Barracks | 40 | 2 | Castle | - | Men-at-arms gain Lock Shields (hits from the front deal 30 % this round). |
+| `firearrows` | Fire Arrows | 2 | Blacksmith | 45 | 3 | - | - | Crossbows gain Fire Volley: a circle of burning bolts (3 per model) within 14″, arcing over walls. |
+| `sweeping` | Sweeping Blow | 2 | Chapel | 50 | 3 | - | - | The Chosen gains Sweep: a full circle swing (14) around him. |
 
-**Undead Legion** (`TECH` in `js/data/tech.js`). Gates: Grave Guard need Mausoleum; Wraiths need Mausoleum; Necromancers need Mausoleum; Charnel Pit needs Mausoleum; Dark Sanctum needs Mausoleum.
+**Undead Legion** (`TECH` in `js/data/tech.js`). Gates: Grave Guard need Grave Vigil; Wraiths need Wraith Pact; Necromancers need Necromancer Circle; Charnel Pit needs Mausoleum; Dark Sanctum needs Mausoleum.
 
 | id | Name | Tier | At | Cost | Rounds | Needs | Doctrine | Effect |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `mausoleum` | Mausoleum | 2 | Crypt | 40 | 2 | a Ossuary | - | Tier 2: the Crypt becomes a Mausoleum (HP 600, graves 12″). Unlocks Grave Guard and Wraiths (Ossuary), Necromancers (Crypt), the Charnel Pit, the Dark Sanctum and a doctrine. |
+| `mausoleum` | Mausoleum | 2 | Crypt | 40 | 2 | a Ossuary | - | Tier 2: the Crypt becomes a Mausoleum (HP 600, graves 12″). Opens the unit unlocks (Grave Vigil, Wraith Pact, Necromancer Circle), the Charnel Pit, the Dark Sanctum and a doctrine. |
 | `necropolis` | Necropolis | 3 | Crypt | 70 | 4 | Mausoleum, a Charnel Pit or Dark Sanctum | - | Tier 3: the Necropolis (HP 760, graves 14″). Unlocks the strongest research and the last doctrine. |
 | `restless` | Restless Earth | 1 | Crypt | 15 | 1 | - | - | Graves spread 25 % more where things die. |
 | `harvest` | Soul Harvest | 2 | Crypt | 30 | 2 | Mausoleum | - | Every model dying on your graves gives +1 soul. |
@@ -977,6 +1046,21 @@ War commanders and C&C Generals powers for the exclusive picks.
 | `darkarts` | Dark Arts | 2 | Crypt | 30 | 2 | Mausoleum | tier 2 pick | Doctrine: the Lich and Necromancers regain 10 more mana a round; Dark Thunder hits 30 % harder. |
 | `horde` | Endless Horde | 3 | Crypt | 60 | 3 | Necropolis | tier 3 pick | Doctrine: Summon Warband raises one more squad (the Lich 3, Necromancers 2). |
 | `plague` | Plague of Graves | 3 | Crypt | 60 | 3 | Necropolis | tier 3 pick | Doctrine: enemy squads standing on your graves lose 1 HP per model at the end of every round. |
+| `vigil` | Grave Vigil | 2 | Ossuary | 25 | 2 | Mausoleum | - | Unlocks Grave Guard at the Ossuary. |
+| `pact` | Wraith Pact | 2 | Ossuary | 30 | 3 | Mausoleum | - | Unlocks Wraiths at the Ossuary. |
+| `circle` | Necromancer Circle | 2 | Ossuary | 35 | 3 | Mausoleum | - | Unlocks Necromancers at the Crypt. |
+| `bones3` | Sharpened Bones III | 3 | Charnel Pit | 55 | 4 | Sharpened Bones II | - | Skeletons deal another 15 % more damage. |
+| `plating3` | Bone Plating III | 3 | Charnel Pit | 55 | 4 | Bone Plating II | - | Skeletons +1 more armour. |
+| `dust` | Grave Dust | 1 | Crypt | 10 | 1 | - | - | Skeleton Warbands deal 10 % more damage. |
+| `ossified` | Ossified Skin | 1 | Ossuary | 10 | 1 | - | - | Skeleton Warriors +1 armour. |
+| `hollow` | Hollow Bones | 1 | Ossuary | 10 | 1 | - | - | Bone Archers move 0.6″ further a round. |
+| `conduits` | Soul Conduits | 1 | Crypt | 20 | 1 | - | - | Soul Wells earn +1 soul a round. |
+| `bonemason` | Bone Masonry | 2 | Crypt | 30 | 2 | Mausoleum | - | All your buildings +15 % HP. |
+| `dread` | Dread Spires | 2 | Charnel Pit | 25 | 2 | - | - | Bone Spires and the Crypt fire for +1 damage per shot. |
+| `spectral` | Spectral Speed | 2 | Ossuary | 25 | 2 | Wraith Pact | - | Wraiths move 1″ further a round. |
+| `boneshields` | Bone Shields | 2 | Ossuary | 30 | 2 | Mausoleum | - | Skeleton Warriors gain Grave Wall (hits from the front deal 30 % this round). |
+| `bonespears` | Bone Spears | 2 | Charnel Pit | 35 | 3 | - | - | Bone Archers gain Bone Spear: a line that hits every enemy on it (3.5 per model), 15″. |
+| `shadowwalk` | Shadow Walk | 2 | Dark Sanctum | 45 | 3 | Wraith Pact | - | Wraiths gain Shadow Step: vanish and reappear up to 6″ away, no parting blows. |
 
 <!-- /GEN:tech -->
 
@@ -1007,10 +1091,10 @@ War commanders and C&C Generals powers for the exclusive picks.
 <!-- GEN:maps -->
 | Map | id | Size | Build zone (x <) | Army cap | HQ spots (z, player 0 at x 3.5) | Resource sites | Rivers (x: fords z/width) | Lakes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Crossing | `crossing` | 48 x 32 | 16" (player 1: x > 32) | 30 | 9, 16, 23 | 4 | 24: 7/3, 25/3 | 0 |
-| Twin Rivers | `twinrivers` | 64 x 40 | 21" (player 1: x > 43) | 34 | 10, 20, 30 | 6 | 22: 9/3, 29/3; 42: 31/3, 11/3 | 0 |
-| Highland Ruins | `highland` | 64 x 44 | 21" (player 1: x > 43) | 34 | 11, 22, 33 | 6 | - | 1 |
-| Great Field | `greatfield` | 80 x 52 | 27" (player 1: x > 53) | 38 | 12, 26, 40 | 8 | 40: 8/3, 26/3.4, 44/3 | 2 |
+| Crossing | `crossing` | 48 x 32 | 16" (player 1: x > 32) | 50 | 9, 16, 23 | 4 | 24: 7/3, 25/3 | 0 |
+| Twin Rivers | `twinrivers` | 64 x 40 | 21" (player 1: x > 43) | 56 | 10, 20, 30 | 6 | 22: 9/3, 29/3; 42: 31/3, 11/3 | 0 |
+| Highland Ruins | `highland` | 64 x 44 | 21" (player 1: x > 43) | 56 | 11, 22, 33 | 6 | - | 1 |
+| Great Field | `greatfield` | 80 x 52 | 27" (player 1: x > 53) | 62 | 12, 26, 40 | 8 | 40: 8/3, 26/3.4, 44/3 | 2 |
 
 #### Crossing (`crossing`, 48" x 32")
 
@@ -1211,7 +1295,7 @@ Each round, in this order:
 - **Utilities** (P = personality, §14.9):
   - **build:** 0.55 + 0.3 × greed + 0.2 × tech.
   - **defend** (any non-builder threat, §14.1): 0.6 + 1.5 × min(2, ratio of the threats vs its squads within 16″ of its HQ).
-  - **attack** (from the personality's first-attack round and army size): aggression × min(2.2, attack ratio / (attackRatio + skill edge)), + 0.4 with 18+ squads, + 0.3 from round 30.
+  - **attack** (from the personality's first-attack round and army size): aggression × min(2.2, attack ratio / (attackRatio + skill edge)), + 0.4 with 18+ squads, + 0.3 from round 30, + 0.6 when its population is at 85 %+ of the cap (a maxed army can't grow, so it is used).
   - **harass** (it has a fast squad and knows an enemy Mine / Well / Farm): 0.45 × aggression + 0.1.
 - **Choice:** the highest utility wins. **Hysteresis:** the current posture stays unless the best beats it by 0.15. Defend always wins.
 
@@ -1296,6 +1380,13 @@ Squads are given tasks in this order; each squad gets one:
 | Research per idle HQ / tech building (healthy, round ≥ 6): the first allowed item of the personality's list | 20 + 35 × tech (−10 at the HQ, −10 at war) |
 | Army: one squad per idle training building | 60 + 30 × aggression (+25 at war, +30 when under 4 squads and threatened or past round 5, +20 if threatened) |
 
+- **Research lists** (§14.9) now include the unit unlocks, level III lines, small and ability upgrades,
+  and a list for the Barracks / Ossuary (unlocks first for the roles the personality's mix wants). Gated
+  roles are not trained until their unlock is done (`gateOf`).
+- **Population:** the cap check uses `popCost` (pop × pair); the AI never cancels sites.
+- **Unplaceable sites:** the site request is only "ready" when a free seen site can be placed; a ready
+  request whose placement fails holds its cost back only in the first 8 rounds (before, an unplaceable
+  first Mine held 30 gold for the whole game and starved the army).
 - **Research before training:** research at a building goes ahead of that building's army request (priority 140 +) when the army is healthy and the bank covers its cost + 15.
 - **Healthy** means:
   - 4+ squads;
@@ -1312,7 +1403,7 @@ Squads are given tasks in this order; each squad gets one:
     - **Matchup scores:** from the combat simulator's table `js/ai/matchups.js`.
   - **Diversity:** a role above 45 % of the army is worth × 0.6; casters beyond 1 per 5 squads × 0.3.
   - **Skipping a building:** a building whose best option is under half the best option of any building skips training (to free it for research). This doesn't apply when threatened, when under 4 squads, or with 120+ in the bank.
-  - **The army cap** is respected (pairs count as 2).
+  - **The population cap** is respected (`popCost`: pop × pair).
 
 **The combat simulator (`tools/matchups.mjs`, `npm run matchups`):**
 - **The duels:** for every pair of trainable squad types (all faction pairs), equal-cost groups (about 100 resource a side; Warband pairs count per squad) fight in an open arena. They start 9″ apart, are played by the AI's own tactics for up to 20 rounds, and repeat over 4 seeds with sides swapped.
@@ -1524,6 +1615,11 @@ Balance report 2026-11-25 · 8 seeds x 2 orders per map x 2 (new AI on each side
 | Global combat rules | `RULES` in `js/data/units.js` (table in §7 of the generated rules below) | armour constant, defend / cover / siege multipliers, engagement, parry, overwatch |
 | Economy per faction | `FACTIONS.<f>.eco` (`start`, `hq`, `gather`), `FACTIONS.<f>.train` (costs), `FACTIONS.<f>.buildings` (build list) | |
 | Buildings | `BUILDINGS` in `js/data/units.js` | cost, work, hp, armour, footprint, vision, fire, income, cp, site, souls, trains |
+| Movement (inches per 100 AP) | `FACTIONS.<f>.units.<role>.move` (default tier × `RULES.moveFactor` × 100: Crossbows 4.8, Wraiths 9); tech `move` effects | how far a squad walks; tier only sets initiative |
+| Population and upkeep | `FACTIONS.<f>.units.<role>.pop` (the `POP` table in `units.js`: 1 / 2 / 3; heroes, builders, summons 0), `RULES.armyCap` (pop cap 50; maps + capBonus × 1.5), `RULES.upkeepPerPop` 0.3, `RULES.upkeepFree` 8 | army size and how much a big army slows the economy |
+| Cancel refund | `RULES.siteRefund` 0.75 | refund for cancelling an unfinished building |
+| Unit unlock research | `GATES` and the `drill` / `stables` / `vigil` / `pact` / `circle` items in `js/data/tech.js` | when elite squads appear |
+| Small / level III / ability upgrades | `TECH` in `js/data/tech.js` (effects `move`, `addSkill`, `fireAdd`, `mineGather`, `wellIncome` besides the older ones) | the longer tree |
 | Training time, caps, souls, sites, work reach | `RULES.trainRounds`, `armyCap`, `maxBuilders`, `gatherSlots`, `maxBannerCp`, `maxFarms`, `soulRange`, `soulPerModel`, `soulPerHero`, `siteHp`, `workReach` | |
 | Faction identity | `FACTIONS.<f>.hqTrains` (what the HQ trains), `FACTIONS.<f>.maxBuilders` (Kingdom 10, Undead 0), `FACTIONS.undead.rises` (buildings rise, no builders) | |
 | Undead rising buildings | `RULES.riseWork` (work per round, 80), `RULES.maxRising` (2 at once), `RULES.undeadMend` (0.05 of max HP per round) | build speed and resilience of the Undead base |
@@ -1545,7 +1641,7 @@ Balance report 2026-11-25 · 8 seeds x 2 orders per map x 2 (new AI on each side
 | Undead tier rule | `FACTIONS.undead.lowTier` (`swarm`, `fighter`, `ranged`) | low tier: only stats change, never `train` costs; high tier: costs may change either way, but only after asking the owner |
 | Lich spells | `SUMMON(ap, mana, range, count)`, `THUNDER(ap, mana, dmg, range, jumps, jump, decay)`, `EXPLODE(ap, mana, range, radius, base, perModel)`; summoned squads: `FACTIONS.undead.units.summon` is derived from `units.swarm` right after `FACTIONS` (change the Warband and summons change with it); `RULES.summonTtl` | |
 | The Chosen | `LEAP(ap, range, cd, dmg, radius, name)`, `RALLY(ap, radius, cd, armor, dmgMult)`, `MIGHTY(ap, dmg, reach, cosHalf, stun, cd)` | stun length = `stun` AP |
-| Army cap | `RULES.armyCap` (30), map `capBonus` (`js/data/maps.js`) | big battles cost frame time and AI time |
+| Population cap | `RULES.armyCap` (50 pop), map `capBonus` × 1.5 (`js/data/maps.js`) | big battles cost frame time and AI time |
 | Graveyards and souls | `BUILDINGS.<type>.grave` (reach: well 10, hq 10, others 6, Monolith 6), `RULES.graveStart` (0.5 at placement; full by the end of the round), `graveHqStart` (10), `graveBlob` (0.8″: radius of the grave area a death adds at the nearest edge, × √models, merging, no maximum; `spreadGraves` in `js/sim/base.js`), `soulPerModel`, `soulPerHero`; `FACTIONS.undead.eco.hq` (1), `BUILDINGS.well.income` (2) | the whole Undead economy: how fast it snowballs |
 | Hero revive | `RULES.reviveRadius` (3″), `reviveRounds` (3), `reviveHp` (0.5) | how costly losing the hero is |
 | The swarm | `FACTIONS.undead.units.swarm` (`pair`, stats), `train.swarm`, `RULES.trainRounds.swarm` | the Undead horde's size; `tier` (3 since 2026-11-17, was 6 then 4: 3.6″ a round, so the swarm can't rush) and `attack.dmg` (2.1) set how fast and hard it hits early |
@@ -1601,7 +1697,10 @@ Balance report 2026-11-25 · 8 seeds x 2 orders per map x 2 (new AI on each side
 | `strikeMult` | `1.15` | a melee Strike (target attack) deals x this its listed damage |
 | `strikeLunge` | `30` | AP of movement (at the squad's speed) a Strike may lunge at a target out of reach |
 | `shrineRadius` | `3` | ring drawn around resource sites (visual + placement keep-out x 0.6) |
-| `armyCap` | `30` | base squad cap (builders and summoned squads do not count; maps add capBonus) |
+| `armyCap` | `50` | population cap (squads cost their unit's pop; heroes, builders and summons are free; maps add capBonus x 1.5) |
+| `upkeepPerPop` | `0.3` | upkeep: flat income lost per pop above upkeepFree (rounded down, never more than the flat income) |
+| `upkeepFree` | `8` | pop that costs no upkeep |
+| `siteRefund` | `0.75` | share of the cost refunded when an unfinished building is cancelled |
 | `maxBuilders` | `3` | default builder cap (FACTIONS.<f>.maxBuilders overrides) |
 | `gatherSlots` | `2` | builders that can gather at one building (BUILDINGS.<type>.slots overrides: farm 4) |
 | `buildZone` | `16` | default build zone (each map: round(width / 3)) |
@@ -1702,7 +1801,7 @@ Whenever rules, numbers, the AI or maps change:
 
 | Feature here | Similar to | What is shared | What is different here |
 |---|---|---|---|
-| Squads of several models; damage removes models; a big squad cap (30) | Dawn of War, Company of Heroes | squad-based armies, losses shown as fewer models, a squad cap | turn-based with simultaneous orders; damage scales with the models left |
+| Squads of several models; damage removes models; a population cap (50) | Dawn of War, Company of Heroes | squad-based armies, losses shown as fewer models, a squad cap | turn-based with simultaneous orders; damage scales with the models left |
 | Speed tiers inside a round, simultaneous orders | tabletop wargames (alternating / initiative activation), WeGo games such as Combat Mission | everyone plans, then the round resolves | faster tiers act first; AP is time inside a tier |
 | Heroes with three skills | Warcraft III | heroes with a small kit that shapes fights | no hero levels or items |
 | Mana mages (the Lich, Necromancers): spells cost mana, regenerate each round | Warcraft III casters | mana pool and regeneration | no cooldowns for mages; casts repeat while AP and mana last |
@@ -1712,6 +1811,13 @@ Whenever rules, numbers, the AI or maps change:
 | Undead buildings that build themselves | Warcraft III Undead (summoned buildings), StarCraft Protoss (warped-in buildings) | no worker has to stay to finish a building | a separate limit of 2 rising at once; they mend slowly |
 | Workers on farms; farms use land | Age of Empires | farmers gather at farms; farms take building space | 4 farmers per farm; peasants also build and repair |
 | Resource sites to claim (Mines, Soul Wells) | Dawn of War (strategic points), Company of Heroes (territory) | fixed spots on the map worth fighting over | Soul Wells only trickle souls and spread graves far |
+| Population per squad and upkeep that grows with the army | Dawn of War (squad cap / support cap, upkeep that lowers requisition income), StarCraft (supply), Warcraft III (upkeep tiers) | each squad costs pop against a cap; a big army lowers income | upkeep is a linear tax above 8 pop, taken only from the flat income (never below 0) |
+| Weapon / armour levels I–III with rising costs | StarCraft (+1 / +2 / +3 upgrades), Warcraft III Blacksmith | each level costs more and takes longer | level III needs Tier 3 |
+| Unit unlock research after a tier | Age of Empires (unit-line research; Stable / Archery Range units by age), Company of Heroes (unlocking units by research) | an elite unit needs its own research, not just the tier | done at the Barracks / Ossuary queue |
+| Ability upgrades (a squad gains a skill) | Dawn of War / Company of Heroes (researched squad abilities), Warcraft III (caster abilities by research) | research that adds an ability, not just stats | reuses the game's existing skill kinds |
+| Cancel an unfinished building for a partial refund | Warcraft III / StarCraft (cancel refunds 75 %) | a mistake or a lost site isn't a total loss | only before it is finished |
+| Starting with no resources | most RTS games (a fixed start, income from then on) | first purchases come from income | both sides start at 0 with their small armies |
+| Movement separate from initiative | tabletop wargames (Move characteristic vs initiative) | how far a unit walks is its own stat | tier still decides who acts first |
 | Production queues paid when the item starts | the queues of most RTS games (StarCraft II: 5 per building) | queue several items per building | payment at start, the queue waits when you can't pay |
 | Fog of war with explored / visible ground | most RTS games (Warcraft, StarCraft, Age of Empires) | black mist for never-seen ground, a haze for explored ground | line of sight blocked by walls and deep forests |
 | Command points (3 direct orders a round) | tabletop command / order systems | you can't micro everything | squads without orders follow stances |

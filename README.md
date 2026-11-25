@@ -22,14 +22,23 @@ It is a static site with no build step and no server, so it runs on GitHub Pages
 * **Cover, Dawn of War style.** Squads standing in ruins or right behind a Palisade / Bone Fence are in
   heavy cover (ranged hits halved, melee ×0.75); forests give light cover. Squads on Guard step into
   cover by themselves and shooters pick firing spots in cover. Units and buildings are tough (fights
-  take a few rounds). Armies grow up to 30 squads (more on big maps).
+  take a few rounds).
+* **Start from nothing, pay for your army:** both sides start with 0 gold / souls. Squads cost
+  population (1–3 pop; heroes and peasants are free) against a cap of 50 (more on big maps), and every
+  pop above 8 costs upkeep from your income, like Dawn of War. Unfinished buildings can be cancelled
+  for a 75 % refund.
+* **A long tech tree:** elite squads need their own unlock research after Tier 2, weapon and armour
+  lines go up to level III with rising costs, and many small upgrades and a few ability upgrades
+  (Lock Shields, Fire Volley, Bone Spear, Shadow Step...) fill the tree. Movement is its own stat
+  (Crossbows are slow, Wraiths fast); tier only decides who acts first.
 * **A readable economy:** tap your gold / souls counter for the Economy panel (last round by source,
   next round expected, every income building). The Undead get steady souls from the Crypt and Soul
   Wells plus souls from deaths on their graves, and banked souls above 80 decay.
 * **Locked in melee:** shooters and casters can't shoot or use ranged skills while an enemy melee
   squad is on them; their shots become a weaker melee strike (and they have a Melee button).
 * **Passives:** every unit type has one (Berserk, Bulwark, Rend, Soul Drain, …).
-* **No building within 16″ of an enemy building you have seen** (no proxy rushes).
+* **No building within 16″ of an enemy building you have seen** (no proxy rushes), except on your
+  home ground near your own HQ.
 * **Two economies.** The Kingdom earns **gold** from its Keep, mines and farms worked by up to 4
   peasants each. The Undead earn **souls** mainly from every model that dies on their graveyards;
   the Crypt (1) and Soul Wells (2) only trickle.

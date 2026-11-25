@@ -1,5 +1,5 @@
 // Headless tests for the simulation. Run: node tests/sim.test.mjs
-import { RULES, FACTIONS, BUILDINGS, trainCost, skillOf, pairOf, squadRadius } from '../js/data/units.js';
+import { RULES, FACTIONS, BUILDINGS, trainCost, skillOf, pairOf, squadRadius, moveOf } from '../js/data/units.js';
 import { createGame, addSquad, defOf, radiusOf, emptyOrders, emptyPlan, apFor } from '../js/sim/state.js';
 import { resolveRound, damageAfter, engagedWith, losCut } from '../js/sim/resolve.js';
 import { cpUsage, validateOrders, actionCost } from '../js/sim/orders.js';
@@ -9,7 +9,7 @@ import { PERSONALITIES, SKILL, BRUTAL_INCOME, pickPersonality } from '../js/ai/p
 import { fightRatio } from '../js/ai/combat.js';
 import { MATCHUPS } from '../js/ai/matchups.js';
 import { canSee, visibleTo } from '../js/sim/vision.js';
-import { soulDecayOf, incomeParts, edgeDist, placeError, addBuilding, incomeOf, obstacles, startQueues, armySize, spreadGraves, finishTech, techError, gateOf, validateQueue, bdef, bname, tkOf, ruleOf, bonusCp } from '../js/sim/base.js';
+import { popCost, soulDecayOf, incomeParts, edgeDist, placeError, addBuilding, incomeOf, obstacles, startQueues, armySize, spreadGraves, finishTech, techError, gateOf, validateQueue, bdef, bname, tkOf, ruleOf, bonusCp } from '../js/sim/base.js';
 import { TECH } from '../js/data/tech.js';
 import { builderPlan } from '../js/sim/builders.js';
 import { coverOf, coverMult } from '../js/sim/cover.js';
@@ -28,9 +28,12 @@ function test(name, fn) {
 function ok(c, msg = 'assertion failed') { if (!c) throw new Error(msg); }
 const eq = (a, b, msg) => ok(a === b, `${msg || 'expected equal'}: ${JSON.stringify(a)} !== ${JSON.stringify(b)}`);
 
+// arenas start with a bank (games start at 0 resources) so tests can build and train at once
+const BANK = [60, 90];
 // an empty board (open ground in the middle of the mat) with chosen squads
 function arena(list) {
   const s = createGame(7);
+  s.supply = BANK.slice();
   s.squads = []; s.nextId = 1;
   // HQs at fixed spots for the tests
   for (const b of s.buildings) { b.z = 16; b.x = b.owner === 0 ? 3.5 : 44.5; }
@@ -309,8 +312,8 @@ test('movement goes around rocks and slows in forests', () => {
   const nav = Nav.for(s.terrain, 1, 't');
   const pts = nav.path(10.5, 25, 16.5, 25);   // rock at 13.5,25
   ok(pts.length >= 2, 'path should bend round the rock');
-  const open = walkAP(s.terrain, 4, 2, [{ x: 20, z: 2 }], 50, 5);
-  const wood = walkAP(s.terrain, 12, 7.5, [{ x: 28, z: 7.5 }], 50, 5);
+  const open = walkAP(s.terrain, 4, 2, [{ x: 20, z: 2 }], 50, 5 * RULES.moveFactor);
+  const wood = walkAP(s.terrain, 12, 7.5, [{ x: 28, z: 7.5 }], 50, 5 * RULES.moveFactor);
   ok(wood.x - 12 < open.x - 4, 'forest should be slower');
 });
 
@@ -567,7 +570,7 @@ test('Summon Warband: two squads rise when it is cast (hittable, but they don\'t
   r.state.buildings = r.state.buildings.filter(b => b.type !== 'tower');   // no more tower fire from here on
   const sum = r.state.squads.filter(q => q.role === 'summon');
   eq(sum.length, 2, 'two squads'); ok(sum.every(q => q.ttl === RULES.summonTtl), 'ttl ' + sum.map(q => q.ttl));
-  eq(armySize(r.state, 1), 1, 'summons are not in the army cap');
+  eq(armySize(r.state, 1), 0, 'summons (and the Lich) take no population');
   for (let i = 0; i < 2; i++) r = resolveRound(r.state, holdAll(r.state));
   eq(r.state.squads.filter(q => q.role === 'summon').length, 2, 'still there after 2 more rounds');
   r = resolveRound(r.state, holdAll(r.state));
@@ -592,7 +595,7 @@ test('Corpse Explosion bursts a summoned squad and hits the enemies around it (n
 });
 
 test('summoned skeletons are Skeleton Warbands with a timed life', () => {
-  const U = FACTIONS.undead.units, { role, summoned, ...rest } = U.summon, { role: r2, pair, ...sw } = U.swarm;
+  const U = FACTIONS.undead.units, { role, summoned, pop: p1, ...rest } = U.summon, { role: r2, pair, pop: p2, ...sw } = U.swarm;
   eq(JSON.stringify(rest), JSON.stringify(sw), 'same name, models, HP, armour, tier, look, attack');
   ok(summoned && role === 'summon' && U.summon.pair === undefined, 'a summon, not a pair');
   eq(U.summon.name, 'Skeleton Warband');
@@ -800,7 +803,7 @@ const ob = (builds = [], trains = []) => ({ squads: {}, stances: {}, builds, tra
 test('a new game: an HQ each at a seeded spot, faction currencies, four free resource sites', () => {
   const s = createGame(1);
   eq(s.buildings.filter(b => b.type === 'hq').length, 2);
-  eq(s.supply.join(), FACTIONS.kingdom.eco.start + ',' + FACTIONS.undead.eco.start);
+  eq(s.supply.join(), '0,0', 'both sides start at 0'); eq(FACTIONS.kingdom.eco.start + FACTIONS.undead.eco.start, 0);
   eq(s.shrines.length, 4); ok(s.shrines.every(x => x.owner === -1));
   const spots = new Set();
   for (let sd = 1; sd < 30; sd++) spots.add(createGame(sd).buildings[0].z);
@@ -832,7 +835,7 @@ test('a builder puts up a new building over its work (a farm takes it into a sec
   let r = resolveRound(s, o);
   let b = r.state.buildings.find(x => x.type === 'farm');
   ok(b && b.build > 0 && b.build < BUILDINGS.farm.work, 'site placed and worked on');
-  eq(r.state.supply[0], FACTIONS.kingdom.eco.start - BUILDINGS.farm.cost + FACTIONS.kingdom.eco.hq, 'paid; no farm income yet');
+  eq(r.state.supply[0], BANK[0] - BUILDINGS.farm.cost + FACTIONS.kingdom.eco.hq, 'paid; no farm income yet');
   r = resolveRound(r.state, [ob(), ob()]);
   b = r.state.buildings.find(x => x.type === 'farm');
   eq(b.build, 0, 'finished in round 2 (the builder kept at it)'); eq(b.hp, BUILDINGS.farm.hp, 'full hp');
@@ -855,7 +858,7 @@ test('two builders stack; a builder further away walks over and works when it ar
 test('a far-away site is reached and built even with squads in the way (no failures across seeds)', () => {
   let fails = 0, built = 0, tried = 0;
   for (let seed = 1; seed <= 12; seed++) {
-    const s = createGame(seed);
+    const s = createGame(seed); s.supply = BANK.slice();
     const q = s.squads.find(x => x.owner === 0 && x.role === 'builder');
     for (const [dx, dz] of [[6, 3], [5, 0], [3, 4], [3, -4], [-1, 6]]) {
       const x = q.x + dx, z = q.z + dz;
@@ -941,7 +944,7 @@ test('training takes rounds: a fighter appears at the end of its second round', 
   let r = resolveRound(s, [ob([], [{ bid: b.id, role: 'fighter' }]), ob()]);
   eq(r.state.squads.filter(q => q.owner === 0).length, n0, 'not yet');
   eq(r.state.buildings.find(x => x.id === b.id).train.left, 1, 'one round to go');
-  eq(r.state.supply[0], FACTIONS.kingdom.eco.start - trainCost('kingdom', 'fighter') + incomeOf(r.state, 0), 'paid up front');
+  eq(r.state.supply[0], BANK[0] - trainCost('kingdom', 'fighter') + incomeOf(r.state, 0), 'paid up front');
   r = resolveRound(r.state, [ob(), ob()]);
   eq(r.state.squads.filter(q => q.owner === 0).length, n0 + 1);
   ok(events(r.log).some(e => e.type === 'spawn' && e.role === 'fighter'));
@@ -1062,7 +1065,7 @@ test('gold: a finished mine owns its site and pays every round', () => {
   addBuilding(s, 0, 'mine', 16.5, 19.5, 0, true);
   const r = resolveRound(s, holdAll(s));
   eq(r.state.shrines[0].owner, 0);
-  eq(r.state.supply[0], FACTIONS.kingdom.eco.start + FACTIONS.kingdom.eco.hq + BUILDINGS.mine.income);
+  eq(r.state.supply[0], BANK[0] + FACTIONS.kingdom.eco.hq + BUILDINGS.mine.income);
   ok(placeError(r.state, 1, 'well', 16.5, 19.5), 'the site is taken');
 });
 
@@ -1077,7 +1080,7 @@ test('souls: only models dying on undead grave ground pay (either side); the gra
   const souls = events(r.log).filter(e => e.type === 'souls');
   ok(events(r.log).filter(e => e.type === 'hit' && e.lost).length === 2, 'two models fell');
   ok(souls.length === 1 && souls[0].owner === 1 && souls[0].amount === RULES.soulPerModel, 'only the one on the graves: ' + JSON.stringify(souls));
-  eq(r.state.supply[1], Math.min(FACTIONS.undead.eco.start + RULES.soulPerModel + BUILDINGS.well.income + FACTIONS.undead.eco.hq, 1e9) - soulDecayOf(FACTIONS.undead.eco.start + RULES.soulPerModel + BUILDINGS.well.income + FACTIONS.undead.eco.hq));
+  eq(r.state.supply[1], Math.min(BANK[1] + RULES.soulPerModel + BUILDINGS.well.income + FACTIONS.undead.eco.hq, 1e9) - soulDecayOf(BANK[1] + RULES.soulPerModel + BUILDINGS.well.income + FACTIONS.undead.eco.hq));
   const w2 = r.state.buildings.find(b => b.id === w.id);
   eq(w2.grave, BUILDINGS.well.grave, 'the well keeps its own reach');
   const blob = r.state.graves[1].find(g => g.blob);
@@ -1155,7 +1158,8 @@ test('tech: gates, prerequisites, doctrines and tech buildings', () => {
   const hq = s.buildings.find(b => b.owner === 0 && b.type === 'hq');
   const bar = addBuilding(s, 0, 'barracks', 6, 4, 0, true);
   // tier gates: no Shieldwall or Outriders before the Castle; no Blacksmith either
-  eq(gateOf(s, 0, 'tank'), 'castle'); eq(gateOf(s, 0, 'fighter'), '');
+  eq(gateOf(s, 0, 'tank'), 'drill'); eq(gateOf(s, 0, 'fighter'), ''); eq(gateOf(s, 0, 'fast'), 'stables');
+  eq(techError(s, 0, 'drill', bar), 'Needs Castle', 'the unlock needs Tier 2');
   let v = validateQueue(s, 0, { queue: { trains: { [bar.id]: ['tank', 'fighter'] } } });
   eq(v.tq[bar.id].join(), 'fighter', 'the gated Shieldwall is refused');
   eq(placeError(s, 0, 'forge', 9, 13), 'Needs the Castle');
@@ -1169,7 +1173,9 @@ test('tech: gates, prerequisites, doctrines and tech buildings', () => {
   eq(v.tq[hq.id].length, 1, 'the same research only once');
   // doctrines: one pick locks the other
   finishTech(s, 0, 'castle');
-  eq(gateOf(s, 0, 'tank'), ''); eq(placeError(s, 0, 'forge', 9, 13), '');
+  eq(gateOf(s, 0, 'tank'), 'drill', 'Tier 2 alone does not unlock Shieldwall'); eq(placeError(s, 0, 'forge', 9, 13), '');
+  eq(techError(s, 0, 'drill', bar, [], [], true), '');
+  finishTech(s, 0, 'drill'); eq(gateOf(s, 0, 'tank'), '', 'the unlock research does');
   v = validateQueue(s, 0, { queue: { trains: { [hq.id]: ['tech:knightly', 'tech:yeomanry'] } } });
   eq(v.tq[hq.id].join(), 'tech:knightly', 'only one doctrine of a pair');
   finishTech(s, 0, 'knightly');
@@ -1383,7 +1389,7 @@ test('lakes block movement but not sight or shots', () => {
 
 test('big maps: build zone, army cap and pathing follow the map', () => {
   const s = createGame(3, ['kingdom', 'undead'], 'greatfield');
-  eq(s.board.zone, Math.round(80 / 3)); eq(s.board.cap, RULES.armyCap + 8); eq(RULES.armyCap, 30);
+  eq(s.board.zone, Math.round(80 / 3)); eq(s.board.cap, RULES.armyCap + 12); eq(RULES.armyCap, 50);
   const nav = Nav.for(obstacles(s), 1, 'gf');
   ok(nav.path(5, 5, 75, 47).length > 0, 'a path across the great field');
   ok(!placeError(s, 0, 'farm', 22, 20) || placeError(s, 0, 'farm', 22, 20) !== 'Only in your third of the table', 'x 22 is in your third on an 80 wide table');
@@ -1500,7 +1506,7 @@ test('AI: every personality builds, researches and attacks', () => {
   for (const f of ['kingdom', 'undead']) for (const P of PERSONALITIES[f]) {
     const fac = f === 'kingdom' ? ['kingdom', 'undead'] : ['undead', 'kingdom'];
     // a personality on the back foot may not attack in one game: it must in at least one of two
-    const games = [2, 3].map(seed => aiGame(seed, fac, 'twinrivers', 45, [{ personality: P.id }, {}]));
+    const games = [2, 3].map(seed => aiGame(seed, fac, 'twinrivers', 60, [{ personality: P.id }, {}]));
     for (const { s } of games) {
       const built = (s.buildings || []).filter(b => b.owner === 0).length;
       ok(built >= 3 || s.winner !== null, P.id + ' builds (' + built + ')');
@@ -1563,7 +1569,7 @@ test('souls above the threshold decay at the end of the round', () => {
   const e = events(r.log).find(x => x.type === 'income' && x.owner === 1);
   eq(e.parts.decay, soulDecayOf(200 + e.amount));
   eq(r.state.supply[1], 200 + e.amount - e.parts.decay);
-  ok(r.state.supply[0] >= 60, 'gold never decays');
+  eq(events(r.log).find(x => x.type === 'income' && x.owner === 0).parts.decay, 0, 'gold never decays');
 });
 
 test('a Warband dying on your graves returns more souls than it cost', () => {
@@ -1631,6 +1637,16 @@ test('no building within 16" of an enemy building your side has seen', () => {
   ok(!/enemy building/.test(placeError(s, 0, 'tower', spot.x, spot.z)), 'unseen: the zone does not apply');
 });
 
+test('the 16" zone does not reach a side\'s home ground (within the map zone of its own HQ)', () => {
+  const s = createGame(1, ['kingdom', 'undead'], 'crossing');
+  for (const p of [0, 1]) s.explored[p] = s.explored[p].replace(/0/g, '1');
+  const hq = s.buildings.find(b => b.owner === 0 && b.type === 'hq');
+  const fence = addBuilding(s, 1, 'wall', hq.x + 18, hq.z, 0, true);   // enemy creep 18" out
+  s.intel[0].known[fence.id] = { id: fence.id, owner: 1, type: 'wall', x: fence.x, z: fence.z, w: fence.w, d: fence.d, hp: fence.hp };
+  eq(placeError(s, 0, 'tower', hq.x + 8, hq.z + 6), '', 'home ground: allowed');
+  ok(/enemy building/.test(placeError(s, 0, 'tower', hq.x + 22, hq.z + 6)), 'out in the field: blocked');
+});
+
 test('every research has a short effect chip for the tech tree', () => {
   for (const t of Object.values(TECH)) ok(t.chip && t.chip.length <= 20, t.id + ': ' + t.chip);
 });
@@ -1688,6 +1704,72 @@ test('auto skills rotate: a skill used last round scores lower than another usab
 test('Crossbows a bit weaker, the Lich hits harder', () => {
   eq(FACTIONS.kingdom.units.ranged.attack.dmg, 3.4); eq(skillOf(FACTIONS.kingdom.units.ranged, 'pierce').dmg, 4.5);
   eq(FACTIONS.undead.units.hero.attack.dmg, 13); eq(skillOf(FACTIONS.undead.units.hero, 'thunder').dmg, 17);
+});
+
+console.log('M9 population, upkeep, longer tree, movement');
+
+test('population: squads cost pop (Warband pair 2, Men-at-arms 2, Shieldwall 3; heroes, peasants, summons free)', () => {
+  eq(popCost('undead', 'swarm'), 2); eq(popCost('kingdom', 'fighter'), 2); eq(popCost('kingdom', 'tank'), 3);
+  eq(popCost('kingdom', 'hero'), 0); eq(popCost('kingdom', 'builder'), 0);
+  const s = arena([[0, 'fighter', 10, 10], [0, 'tank', 10, 14], [0, 'hero', 10, 18], [0, 'builder', 10, 22]]);
+  eq(armySize(s, 0), 5);
+  const full = arena([[0, 'fighter', 10, 10]]); full.board.cap = 3;
+  const bar = addBuilding(full, 0, 'barracks', 6, 4, 0, true); full.supply[0] = 500;
+  eq(startQueues(full, 0, { tq: { [bar.id]: ['fighter'] } }).trains[bar.id][0].wait, 'cap', '2 + 2 > 3');
+});
+
+test('upkeep: income drops with population above the free amount, never below 0', () => {
+  const s = arena([]);
+  for (let i = 0; i < 10; i++) addSquad(s, 0, 'fighter', 8 + (i % 5) * 3, 6 + Math.floor(i / 5) * 3);
+  const P = incomeParts(s, 0);
+  eq(P.pop, 20); eq(P.upkeep, Math.min(P.hq, Math.floor((20 - RULES.upkeepFree) * RULES.upkeepPerPop)));
+  eq(incomeOf(s, 0), P.hq - P.upkeep);
+  for (let i = 0; i < 30; i++) addSquad(s, 0, 'tank', 20 + (i % 6) * 3, 8 + Math.floor(i / 6) * 3);
+  eq(incomeOf(s, 0), 0, 'upkeep never takes more than the flat income');
+});
+
+test('longer tree: unit unlocks need Tier 2; level III needs level II; ability upgrades add skills; small upgrades', () => {
+  const s = arena([[0, 'fighter', 10, 10], [0, 'ranged', 10, 14], [1, 'fast', 40, 10]]);
+  const bar = addBuilding(s, 0, 'barracks', 6, 4, 0, true);
+  eq(techError(s, 0, 'stables', bar, [], [], true), 'Needs Castle');
+  finishTech(s, 0, 'castle'); eq(gateOf(s, 0, 'fast'), 'stables', 'Tier 2 is not enough');
+  finishTech(s, 0, 'stables'); eq(gateOf(s, 0, 'fast'), '');
+  eq(techError(s, 0, 'steel3', null), 'Needs Steel Weapons II');
+  ok(TECH.steel3.cost > TECH.steel2.cost && TECH.steel3.rounds > TECH.steel2.rounds, 'rising costs');
+  ok(!skillOf(defOf(s.squads[0]), 'wall'), 'no Lock Shields yet');
+  finishTech(s, 0, 'shielddrill'); ok(skillOf(defOf(s.squads[0]), 'wall'), 'Men-at-arms gain Lock Shields');
+  finishTech(s, 0, 'firearrows'); ok(skillOf(defOf(s.squads[1]), 'storm')?.ranged, 'Crossbows gain Fire Volley (ranged)');
+  const m0 = defOf(s.squads[2]).move; finishTech(s, 1, 'spectral'); eq(defOf(s.squads[2]).move, m0 + 1, 'Spectral Speed');
+  const k = arena([]); const hq = k.buildings.find(b => b.owner === 0 && b.type === 'hq');
+  const f0 = bdef(hq).fire.dmg; finishTech(k, 0, 'hoardings'); eq(bdef(hq).fire.dmg, f0 + 1, 'Hoardings');
+});
+
+test('cancelling a building under construction refunds 75 % of its cost', () => {
+  const s = arena([[0, 'builder', 7, 9]]);
+  const b = addBuilding(s, 0, 'barracks', 8, 4, 0, false);
+  const before = s.supply[0];
+  const r = resolveRound(s, [{ squads: {}, stances: {}, cancelSites: [b.id] }, orders()]);
+  ok(!r.state.buildings.some(x => x.id === b.id), 'gone');
+  const e = events(r.log).find(x => x.type === 'siteCancel');
+  eq(e.refund, Math.floor(BUILDINGS.barracks.cost * RULES.siteRefund));
+  eq(r.state.supply[0], before + e.refund + incomeOf(r.state, 0));
+  const done = addBuilding(s, 0, 'tower', 12, 4, 0, true);
+  eq(validateOrders(s, 0, { cancelSites: [done.id] }).cancelSites.length, 0, 'finished buildings cannot be cancelled');
+});
+
+test('movement is its own stat: Crossbows walk 4.8" and Wraiths 9" in 100 AP; tier is still initiative', () => {
+  eq(FACTIONS.kingdom.units.ranged.move, 4.8); eq(FACTIONS.undead.units.fast.move, 9);
+  eq(FACTIONS.kingdom.units.ranged.tier, 5); eq(FACTIONS.undead.units.fast.tier, 6);
+  eq(FACTIONS.undead.units.fast.attack.dmg, 11);
+  const s = arena([[0, 'ranged', 10, 4]]); s.terrain = [];
+  const w = walkAP(s.terrain, 10, 4, [{ x: 30, z: 4 }], 100, moveOf(defOf(s.squads[0])));
+  ok(Math.abs(w.x - 14.8) < 0.05, 'walked ' + (w.x - 10).toFixed(2));
+  const v = walkAP([], 10, 4, [{ x: 30, z: 4 }], 100, moveOf(FACTIONS.undead.units.fast));
+  ok(Math.abs(v.x - 19) < 0.05, 'Wraiths walked ' + (v.x - 10).toFixed(2));
+});
+
+test('every research item has an effect chip', () => {
+  for (const [id, T] of Object.entries(TECH)) ok(T.chip && T.chip.length <= 20, id + ': ' + T.chip);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

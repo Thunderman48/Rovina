@@ -21,7 +21,7 @@ export const ProductionUI = {
     return {
       gold: `Waits: needs ${f.need} more gold`, souls: `Waits: needs ${f.need} more souls`,
       builders: 'Waits for a free builder', blocked: 'Waits: an enemy squad is standing on the spot',
-      cap: `Waits: army cap (${this.state.board.cap} squads)`, line: 'Waits its turn',
+      cap: `Waits: population cap (${this.state.board.cap})`, line: 'Waits its turn',
       needs: 'Waits: ' + (f.why || 'its requirements'),
     }[f.wait] || (f.wait === eco.res ? 'Waits for ' + eco.name.toLowerCase() : 'Waits');
   },

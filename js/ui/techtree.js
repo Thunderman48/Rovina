@@ -8,7 +8,7 @@ import { icon } from './iconset.js';
 import { sfx } from '../audio/sfx.js';
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const LANES = { kingdom: ['hq', 'forge', 'chapel', 'doctrine'], undead: ['hq', 'pit', 'sanctum', 'doctrine'] };
+const LANES = { kingdom: ['hq', 'barracks', 'forge', 'chapel', 'doctrine'], undead: ['hq', 'barracks', 'pit', 'sanctum', 'doctrine'] };
 
 export const TechTreeUI = {
   openTechTree() {
@@ -53,7 +53,7 @@ export const TechTreeUI = {
     if (!el || el.classList.contains('hidden') || !this.state) return;
     const fac = this.faction(this.me), all = techsOf(fac), lanes = LANES[fac] || ['hq'];
     const laneOf = t => t.doctrine ? 'doctrine' : t.at;
-    const laneName = l => l === 'doctrine' ? 'Doctrines · pick one of each pair' : l === 'hq' ? BUILDINGS.hq.name[fac] + ' · tiers and economy' : BUILDINGS[l].name[fac];
+    const laneName = l => l === 'doctrine' ? 'Doctrines · pick one of each pair' : l === 'hq' ? BUILDINGS.hq.name[fac] + ' · tiers and economy' : l === 'barracks' ? BUILDINGS.barracks.name[fac] + ' · unit unlocks and drills' : BUILDINGS[l].name[fac];
     el.querySelector('#tt-sub').innerHTML = `${esc(FACTIONS[fac].name)} · tap a research to see what it does and queue it · it is paid when it starts and the building does nothing else meanwhile`;
     let h = '<div class="tt-corner"></div>' + [1, 2, 3].map(t => `<div class="tt-col">Tier ${t}</div>`).join('');
     for (const l of lanes) {

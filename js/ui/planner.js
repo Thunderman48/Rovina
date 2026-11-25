@@ -1,10 +1,10 @@
 // Draft orders for this round + predictions for drawing them.
-import { RULES, isMelee, isShooter, skillOf, skillsOf, cdOf, isMage, trainsOf, meleeOf } from '../data/units.js';
+import { RULES, isMelee, isShooter, skillOf, skillsOf, cdOf, isMage, trainsOf, meleeOf, moveOf } from '../data/units.js';
 import { emptyOrders, emptyPlan, defOf, radiusOf, apFor } from '../sim/state.js';
 import { planCost, actionCost, cpUsage, SKILL_KINDS } from '../sim/orders.js';
 import { clampAim, engagedWith } from '../sim/resolve.js';
 import { Nav, pathAP, walkAP } from '../sim/nav.js';
-import { obstacles, navKey, placeError, footprint, armySize, builderCount, BUILDINGS, trainCost, bdef, startQueues, trainsRole, itemCost, isTechItem, techError, gateOf, researchesAt } from '../sim/base.js';
+import { popCost, tkOf, obstacles, navKey, placeError, footprint, armySize, builderCount, BUILDINGS, trainCost, bdef, startQueues, trainsRole, itemCost, isTechItem, techError, gateOf, researchesAt } from '../sim/base.js';
 import { TECH } from '../data/tech.js';
 import { builderPlan, builderIdleTarget, gatherTarget } from '../sim/builders.js';
 import { gatherRate, hitRadius } from '../sim/base.js';
@@ -13,7 +13,9 @@ import { norm, segCircle, dist } from '../sim/geom.js';
 export class Planner {
   constructor(g) { this.g = g; this.reset(); }
   // draft.bq / draft.tq[bid] are edited copies of the queues (null = unchanged); draft.cancel stops training
-  reset() { this.draft = { ...emptyOrders(), goals: {}, auto: {}, bq: null, tq: {}, cancel: [], repeat: {} }; this._fc = null; }
+  reset() { this.draft = { ...emptyOrders(), goals: {}, auto: {}, bq: null, tq: {}, cancel: [], repeat: {}, cancelSites: [] }; this._fc = null; }
+  // cancel / un-cancel an own site still under construction (refunded at the start of the round)
+  toggleCancelSite(bid) { const l = this.draft.cancelSites; const i = l.indexOf(bid); if (i >= 0) l.splice(i, 1); else l.push(bid); this._fc = null; this.g.changed(); }
   get s() { return this.g.state; }
   squad(id) { return this.s.squads.find(q => q.id === id); }
   plan(id) { return this.draft.squads[id] || null; }
@@ -71,7 +73,7 @@ export class Planner {
     for (const a of (plan ? plan.actions : [])) {
       const c = actionCost(q, a);
       if (a.kind === 'move') {
-        const w = walkAP(this.s.terrain, x, z, a.pts, a.ap - (a.disengage ? RULES.disengageAP : 0), def.tier);
+        const w = walkAP(this.s.terrain, x, z, a.pts, a.ap - (a.disengage ? RULES.disengageAP : 0), moveOf(def));
         const last = w.line[w.line.length - 1], prev = w.line[w.line.length - 2] || { x, z };
         const d = norm(last.x - prev.x, last.z - prev.z);
         if (d.l > 1e-3) { fx = d.x; fz = d.z; }
@@ -146,10 +148,10 @@ export class Planner {
       disengage = this.engagedAt(q, from.x, from.z).some(e => (e.x - from.x) * d.x + (e.z - from.z) * d.z < 0);
     }
     const extra = disengage ? RULES.disengageAP : 0;
-    const need = pathAP(this.s.terrain, from.x, from.z, pts, def.tier) + extra;
+    const need = pathAP(this.s.terrain, from.x, from.z, pts, moveOf(def)) + extra;
     const left = this.plan(q.id) ? this.apLeft(q) : apFor(q);
     const ap = Math.max(1, Math.min(left, Math.ceil(need)));
-    const w = walkAP(this.s.terrain, from.x, from.z, pts, Math.max(0, ap - extra), def.tier);
+    const w = walkAP(this.s.terrain, from.x, from.z, pts, Math.max(0, ap - extra), moveOf(def));
     let inches = 0;
     for (let i = 1; i < w.line.length; i++) inches += Math.hypot(w.line[i].x - w.line[i - 1].x, w.line[i].z - w.line[i - 1].z);
     return { from, pts, need: Math.ceil(need), ap, left, line: w.line, end: { x: w.x, z: w.z }, inches, short: need > left + 0.5, disengage };
@@ -311,7 +313,7 @@ export class Planner {
     let n = armySize(this.s, this.g.me) - this.draft.cancel.filter(id => this.s.buildings.find(b => b.id === id)?.train?.role).length;
     for (const [bid, l] of Object.entries(fc.trains)) {
       const b = this.s.buildings.find(x => x.id === bid), list = b ? this.tqList(b) : [];
-      l.forEach((x, i) => { if (x.starts && !isTechItem(x.repeat ? b.repeat : list[i])) n++; });
+      l.forEach((x, i) => { const r = x.repeat ? b.repeat : list[i]; if (x.starts && !isTechItem(r) && r !== 'builder') n += popCost(this.fac, r, tkOf(this.s, this.g.me)); });
     }
     return n;
   }

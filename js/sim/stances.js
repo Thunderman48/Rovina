@@ -6,7 +6,7 @@
 //            RULES.advanceEngage; otherwise march on: to its target point if it has one (then guard
 //            there), else on the enemy HQ (searching its possible spots while unknown)
 //  retreat : fall back to the nearest own Mine / Soul Well (else the HQ) and guard there
-import { RULES, isMelee, isShooter, meleeOf } from '../data/units.js';
+import { RULES, isMelee, isShooter, meleeOf, moveOf } from '../data/units.js';
 import { defOf, radiusOf, emptyPlan, apFor } from './state.js';
 import { obstacles, navKey, hitRadius, edgeGap, footOf } from './base.js';
 import { builderIdleTarget, closestOn } from './builders.js';
@@ -29,7 +29,7 @@ function coverMove(s, q, plan, left, R, from, ok = () => true) {
   const nav = Nav.for(obstacles(s), radiusOf(q), navKey(s));
   const pts = nav.path(q.x, q.z, spot.x, spot.z);
   if (!pts.length) return left;
-  const ap = Math.min(left, Math.ceil(pathAP(s.terrain, q.x, q.z, pts, defOf(q).tier)) + 1);
+  const ap = Math.min(left, Math.ceil(pathAP(s.terrain, q.x, q.z, pts, moveOf(defOf(q)))) + 1);
   plan.actions.push({ kind: 'move', pts, ap });
   return left - ap;
 }
@@ -64,9 +64,9 @@ export function meleePlan(s, q, e, plan, left, lead = null) {
     const nav = Nav.for(obstacles(s), r, navKey(s));
     const pts = nav.path(q.x, q.z, to.x, to.z);
     // stop `want` short of the target
-    const full = pathAP(s.terrain, q.x, q.z, pts, def.tier);
+    const full = pathAP(s.terrain, q.x, q.z, pts, moveOf(def));
     const cut = trimPath(q.x, q.z, pts, want);
-    const ap = Math.ceil(pathAP(s.terrain, q.x, q.z, cut, def.tier)) + 1;
+    const ap = Math.ceil(pathAP(s.terrain, q.x, q.z, cut, moveOf(def))) + 1;
     if (ap + strike > left) {
       // can't strike this round: walk toward it with everything
       plan.actions.push({ kind: 'move', pts: cut.length ? cut : pts, ap: left });
@@ -75,7 +75,7 @@ export function meleePlan(s, q, e, plan, left, lead = null) {
     }
     plan.actions.push({ kind: 'move', pts: cut, ap });
     left -= ap;
-    const end = walkAP(s.terrain, q.x, q.z, cut, ap, def.tier);
+    const end = walkAP(s.terrain, q.x, q.z, cut, ap, moveOf(def));
     fromX = end.x; fromZ = end.z;
   }
   const ax = e.x + (lead ? lead.x : 0), az = e.z + (lead ? lead.z : 0);

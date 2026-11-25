@@ -84,7 +84,7 @@ export function cpUsage(s, p, orders) {
 
 export function validateOrders(s, p, orders0) {
   const orders = orders0 || {};
-  const out = { squads: {}, stances: {}, goals: {}, auto: {}, queue: null };
+  const out = { squads: {}, stances: {}, goals: {}, auto: {}, queue: null, cancelSites: [] };
   if (s.buildings) out.queue = validateQueue(s, p, orders);
   const plans = {};
   for (const [id, plan] of Object.entries(orders.squads || {})) {
@@ -95,6 +95,11 @@ export function validateOrders(s, p, orders0) {
   for (const [id, st] of Object.entries(orders.stances || {})) {
     const q = s.squads.find(x => x.id === id);
     if (q && q.owner === p && STANCES.includes(st)) out.stances[id] = st;
+  }
+  // cancel own buildings still under construction (refund RULES.siteRefund of the cost)
+  for (const id of (orders.cancelSites || []).slice(0, 10)) {
+    const b = (s.buildings || []).find(x => x.id === id);
+    if (b && b.owner === p && b.hp > 0 && b.build > 0 && !out.cancelSites.includes(id)) out.cancelSites.push(id);
   }
   // auto skills on / off per squad
   for (const [id, v] of Object.entries(orders.auto || {})) {

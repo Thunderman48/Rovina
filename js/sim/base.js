@@ -153,8 +153,12 @@ export function placeError(s, p, type, x, z, rot = 0, extra = [], squads = true)
   // only on ground the side has seen; undead buildings only on their own graves (like blight / creep)
   if (type !== 'hq' && !seenBy(s, p, x, z)) return 'You haven\'t seen that spot yet';
   if (type !== 'hq' && FACTIONS[s.players[p].faction].graves && !graveAt(s, p, x, z)) return 'Undead buildings must stand on your graves';
-  // no building near an enemy building the side has seen (anti-rush; fog-fair: only what it knows)
-  if (type !== 'hq') for (const k of Object.values((s.intel && s.intel[p] && s.intel[p].known) || {})) {
+  // no building near an enemy building the side has seen (anti-rush; fog-fair: only what it knows),
+  // except on the side's home ground (within the map's zone of its own HQ), so enemy creep can't shut
+  // a side out of its own base
+  const ownHq = (s.buildings || []).find(b => b.owner === p && b.type === 'hq' && b.hp > 0);
+  const home = ownHq && edgeDist(ownHq, x, z) <= (s.board.zone || RULES.buildZone);
+  if (type !== 'hq' && !home) for (const k of Object.values((s.intel && s.intel[p] && s.intel[p].known) || {})) {
     if (k.owner !== p && k.hp > 0 && edgeDist(k, x, z) < RULES.enemyBuildGap) return `Too close to an enemy building (${RULES.enemyBuildGap}″)`;
   }
   const live = (s.buildings || []).filter(b => b.hp > 0).concat(extra);
@@ -210,7 +214,14 @@ export const isBuilder = q => q.role === 'builder';
 export function builderCount(s, p) { return s.squads.filter(q => q.owner === p && q.hp > 0 && isBuilder(q)).length + (s.buildings || []).filter(b => b.owner === p && b.train && b.train.role === 'builder').length; }
 // squads counted against the army cap: builders (their own cap) and summoned squads don't count
 export const inArmy = q => !isBuilder(q) && !q.ttl;
-export function armySize(s, p) { return s.squads.filter(q => q.owner === p && q.hp > 0 && inArmy(q)).length + (s.buildings || []).filter(b => b.owner === p && b.train && b.train.role && b.train.role !== 'builder').reduce((n, b) => n + pairOf(s.players[p].faction, b.train.role, tkOf(s, p)), 0); }
+// population a role takes when trained (a pair / three of a swarm counts each squad)
+export const popCost = (fac, role, tk = '') => (unitDef(fac, role, tk).pop || 0) * pairOf(fac, role, tk);
+// the side's population: its army squads plus the squads in training (builders, heroes and summons are free)
+export function armySize(s, p) {
+  const tk = tkOf(s, p), fac = s.players[p].faction;
+  return s.squads.filter(q => q.owner === p && q.hp > 0 && inArmy(q)).reduce((n, q) => n + (unitDef(q.faction, q.role, q.tk).pop || 0), 0)
+    + (s.buildings || []).filter(b => b.owner === p && b.train && b.train.role && b.train.role !== 'builder').reduce((n, b) => n + popCost(fac, b.train.role, tk), 0);
+}
 // undead grave ground of side p: graveyards around its buildings and leftover patches
 export function graveCircles(s, p) {
   return (s.buildings || []).filter(b => b.owner === p && b.hp > 0 && b.grave > 0).map(b => ({ x: b.x, z: b.z, r: b.grave, b }))
@@ -262,16 +273,19 @@ export function incomeParts(s, p) {
   for (const b of s.buildings || []) {
     if (b.owner !== p || b.hp <= 0 || b.build) continue;
     if (b.type === 'hq') { out.hq += eco.hq + ruleOf(s, p, 'hqIncome'); continue; }
-    const v = (bdef(b).income || 0) + (b.type === 'farm' ? ruleOf(s, p, 'farmIncome') : b.type === 'mine' ? ruleOf(s, p, 'mineIncome') : 0);
+    const v = (bdef(b).income || 0) + (b.type === 'farm' ? ruleOf(s, p, 'farmIncome') : b.type === 'mine' ? ruleOf(s, p, 'mineIncome') : b.type === 'well' ? ruleOf(s, p, 'wellIncome') : 0);
     if (!v) continue;
     const k = b.type in out.count ? b.type : 'other';
     out[k] += v; out.count[k]++;
   }
+  // upkeep (Dawn of War style): the army costs a little every round, never more than the flat income
+  out.pop = armySize(s, p);
+  out.upkeep = Math.min(out.hq + out.mine + out.well + out.farm + out.other, Math.floor(Math.max(0, out.pop - RULES.upkeepFree) * RULES.upkeepPerPop));
   return out;
 }
 export function incomeOf(s, p) {
   const P = incomeParts(s, p);
-  return Math.round((P.hq + P.mine + P.well + P.farm + P.other) * (s.players[p].incomeMult || 1));   // Brutal AI
+  return Math.round((P.hq + P.mine + P.well + P.farm + P.other - P.upkeep) * (s.players[p].incomeMult || 1));   // Brutal AI
 }
 // souls lost to decay at the end of a round with `bank` souls banked (above RULES.soulKeep)
 export const soulDecayOf = bank => Math.max(0, Math.floor((bank - RULES.soulKeep) * RULES.soulDecay));
@@ -279,7 +293,7 @@ export const soulDecayOf = bank => Math.max(0, Math.floor((bank - RULES.soulKeep
 export function gatherRate(s, b) {
   if (!b || b.hp <= 0 || b.build) return 0;
   const r = FACTIONS[s.players[b.owner].faction].eco.gather[b.type] || 0;
-  return r && b.type === 'farm' ? Math.max(1, r + ruleOf(s, b.owner, 'farmGather')) : r;
+  return r && b.type === 'farm' ? Math.max(1, r + ruleOf(s, b.owner, 'farmGather')) : r && b.type === 'mine' ? Math.max(1, r + ruleOf(s, b.owner, 'mineGather')) : r;
 }
 // can building b train `role` (ignoring supply)?
 export function trainsRole(b, role, faction) { return trainsOf(b.type, faction).includes(role); }
@@ -400,7 +414,7 @@ export function startQueues(s, p, opts = {}) {
   }
   if (apply) s.bq[p] = keep;
   let army = armySize(s, p), nb = builderCount(s, p);
-  for (const b of cancel.size ? s.buildings : []) if (cancel.has(b.id) && b.owner === p && b.train && b.train.role) { if (b.train.role === 'builder') nb--; else army--; }
+  for (const b of cancel.size ? s.buildings : []) if (cancel.has(b.id) && b.owner === p && b.train && b.train.role) { if (b.train.role === 'builder') nb--; else army -= popCost(fac, b.train.role, tkOf(s, p)); }
   for (const b of trainers(s, p).sort((a, c) => +a.id.slice(1) - +c.id.slice(1))) {
     const list = out.trains[b.id] = [];
     let busy = !!b.train && !cancel.has(b.id), started = false;
@@ -430,12 +444,12 @@ export function startQueues(s, p, opts = {}) {
       const c = trainCost(fac, role), tk = tkOf(s, p);
       let wait = '', need = 0;
       if (gateOf(s, p, role)) wait = 'needs';
-      else if (role !== 'builder' && army + pairOf(fac, role, tk) > s.board.cap) wait = 'cap';
+      else if (role !== 'builder' && army + popCost(fac, role, tk) > s.board.cap) wait = 'cap';
       else if (role === 'builder' && nb >= maxBuildersOf(fac)) wait = 'builders';
       else if (supply < c) { wait = res; need = c - supply; }
       busy = true;
       if (wait) { list.push({ wait, need }); continue; }
-      supply -= c; if (role === 'builder') nb++; else army += pairOf(fac, role, tk);
+      supply -= c; if (role === 'builder') nb++; else army += popCost(fac, role, tk);
       list.push({ starts: true, repeat: fromRepeat }); started = true;
       if (apply) {
         s.supply[p] -= c;

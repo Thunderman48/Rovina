@@ -1,6 +1,6 @@
 // Builders: walk next to a site and spend the AP that is left as work.
 // Shared by the planner UI and the AI so both make the same orders.
-import { RULES, gatherSlotsOf } from '../data/units.js';
+import { RULES, gatherSlotsOf, moveOf } from '../data/units.js';
 import { defOf, radiusOf } from './state.js';
 import { obstacles, navKey, footprint, edgeDist, gatherRate, bdef } from './base.js';
 import { Nav, pathAP, pointBlocked } from './nav.js';
@@ -49,7 +49,7 @@ export function builderPlan(s, q, f, apLeft) {
   const nav = Nav.for(obstacles(s), rq, navKey(s));
   const pts = nav.path(q.x, q.z, spot.x, spot.z);
   if (!pts.length) return { actions: [], arrive: 0, work: 0, reach: false, end: { x: q.x, z: q.z } };
-  const walk = Math.ceil(pathAP(s.terrain, q.x, q.z, pts, tier));
+  const walk = Math.ceil(pathAP(s.terrain, q.x, q.z, pts, moveOf(defOf(q))));
   return { actions, arrive: Math.min(apLeft, walk), work: Math.max(0, apLeft - walk), reach: walk <= apLeft, end: spot, pts };
 }
 // buildings builder q could gather at, nearest first, that still have a free slot

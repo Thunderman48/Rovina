@@ -52,6 +52,7 @@ export const EconomyUI = {
       P.well ? row('souls', `${P.count.well} ${bname('well')}${P.count.well > 1 ? 's' : ''}`, P.well) : '',
       P.farm ? row('farm', `${P.count.farm} ${bname('farm')}${P.count.farm > 1 ? 's' : ''} (passive)`, P.farm) : '',
       P.other ? row('spawn', 'Other buildings', P.other) : '',
+      P.upkeep ? row('army', `Upkeep for ${P.pop} pop`, -P.upkeep, `${RULES.upkeepPerPop} per pop above ${RULES.upkeepFree}, never more than the flat income`) : '',
     ].join('');
     const bank = s.supply[me];
     let h = `<p class="eco-bank">${icon(eco.icon, 18)}<b>${bank}</b> ${R} banked`;
@@ -79,7 +80,7 @@ export const EconomyUI = {
       h += `<div class="eco-row tot"><span>Total</span><b>${tot >= 0 ? '+' : ''}${tot}</b></div>`;
     }
     // next round
-    const N = incomeParts(s, me), flat = N.hq + N.mine + N.well + N.farm + N.other;
+    const N = incomeParts(s, me), flat = N.hq + N.mine + N.well + N.farm + N.other - N.upkeep;
     h += '<h3>Next round (expected)</h3>' + flatRows(N);
     const g = this.expectedGather();
     for (const e of g) h += row('builder', `${e.n} peasant${e.n > 1 ? 's' : ''} gathering at the ${bname(e.b.type)}`, e.amount, `if they work all round (1 ${R.toLowerCase()} per ${gatherRate(s, e.b)} AP)`);

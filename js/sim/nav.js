@@ -152,9 +152,8 @@ export class Nav {
   }
 }
 
-// AP needed to walk a path for a squad with the given base tier (terrain-aware)
-export function pathAP(terrain, ax, az, pts, tier) {
-  const sp = tier * RULES.moveFactor;
+// AP needed to walk a path for a squad moving `sp` inches per AP on open ground (moveOf(def)), terrain-aware
+export function pathAP(terrain, ax, az, pts, sp) {
   let ap = 0, x = ax, z = az;
   for (const p of pts) {
     const d = dist(x, z, p.x, p.z), n = Math.max(1, Math.ceil(d / 0.25));
@@ -168,8 +167,7 @@ export function pathAP(terrain, ax, az, pts, tier) {
 }
 
 // Walk along pts spending at most `ap`; returns the end point and the polyline walked
-export function walkAP(terrain, ax, az, pts, ap, tier) {
-  const sp = tier * RULES.moveFactor;
+export function walkAP(terrain, ax, az, pts, ap, sp) {
   let x = ax, z = az, left = ap;
   const line = [{ x, z }];
   for (const p of pts) {

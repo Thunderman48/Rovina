@@ -53,7 +53,7 @@ export function military(K, P, skill, posture, mem, inf) {
   const needScout = (!K.ehq && K.round >= 2) || (K.round - (mem.lastScout || 0) >= scoutEvery && K.round >= 8);
   let scout = mem.scoutId && K.army.find(q => q.id === mem.scoutId && !tasks.has(q.id));
   if (needScout && !scout && K.army.length >= 3) {
-    scout = free().filter(q => q.role !== 'hero' && q.role !== 'mage').sort((a, b) => K.def(b).tier - K.def(a).tier || power(a) - power(b))[0];
+    scout = free().filter(q => q.role !== 'hero' && q.role !== 'mage').sort((a, b) => K.def(b).move - K.def(a).move || power(a) - power(b))[0];
     if (scout) mem.scoutId = scout.id;
   }
   if (scout && needScout) {

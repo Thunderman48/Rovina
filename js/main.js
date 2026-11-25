@@ -1,6 +1,6 @@
 // Rovina game controller.
 import * as THREE from 'three';
-import { RULES, FACTIONS, ROLE_ORDER, isMelee, isShooter, skillOf, skillsOf, cdOf, SELF_SKILLS, isMage, meleeOf } from './data/units.js';
+import { RULES, FACTIONS, ROLE_ORDER, isMelee, isShooter, skillOf, skillsOf, cdOf, SELF_SKILLS, isMage, meleeOf, moveOf } from './data/units.js';
 import { createGame, defOf, radiusOf, apFor } from './sim/state.js';
 import { planCost, actionCost } from './sim/orders.js';
 import { resolveRound, arcHits, losCut, inCover, clampAim, engagedWith } from './sim/resolve.js';
@@ -486,12 +486,12 @@ class Game {
     if (q && q.owner === this.me) {
       const pr = this.planner.predict(q);
       const left = this.planner.plan(q.id) ? this.planner.apLeft(q) : apFor(q);
-      const reach = left * defOf(q).tier * RULES.moveFactor;
+      const reach = left * moveOf(defOf(q));
       if (this.mode === 'move' && reach > 0.3) { const r = ring(reach + radiusOf(q), 0.06, 0xffffff, 0.45, 0.05, 72); r.position.x = pr.x; r.position.z = pr.z; L.add(r); }
     } else if (q) {
       // enemy selected: show its strike reach
       const def = defOf(q);
-      const r = def.attack.kind === 'strike' ? radiusOf(q) + def.attack.reach + def.tier * RULES.moveFactor * (RULES.ap - def.attack.ap + RULES.strikeLunge) : def.attack.range;
+      const r = def.attack.kind === 'strike' ? radiusOf(q) + def.attack.reach + moveOf(def) * (RULES.ap - def.attack.ap + RULES.strikeLunge) : def.attack.range;
       const m = ring(r, 0.07, COL.volley, 0.5, 0.05, 72); m.position.x = q.x; m.position.z = q.z; L.add(m);
     }
   }
@@ -770,7 +770,7 @@ class Game {
     const at = kind === 'melee' && meleeOf(def) ? meleeOf(def) : def.attack, dmg = at.dmg * q.models;
     if (at.kind === 'strike') {
       // target attack: snaps to the enemy nearest the aim point; reach and lunge rings around the squad
-      const lunge = def.tier * RULES.moveFactor * RULES.strikeLunge;
+      const lunge = moveOf(def) * RULES.strikeLunge;
       const rr = ring(radiusOf(q) + at.reach, 0.06, COL.swing, 0.6, 0.05, 72); rr.position.x = pr.x; rr.position.z = pr.z; L.add(rr);
       const lr = ring(radiusOf(q) + at.reach + lunge, 0.04, COL.swing, 0.3, 0.05, 72); lr.position.x = pr.x; lr.position.z = pr.z; L.add(lr);
       const tg = this.strikePick(q, p.x, p.z);
@@ -916,10 +916,10 @@ class Game {
     if (q.owner !== this.me) {
       dock.classList.add('hidden');
       info.classList.remove('hidden');
-      const atkTxt = at.kind === 'strike' ? `Strikes one target for ${Math.round(at.dmg * q.models * RULES.strikeMult)} (${+(at.dmg * RULES.strikeMult).toFixed(2)} per model), reach ${at.reach}″, lunges up to ${(def.tier * RULES.moveFactor * RULES.strikeLunge).toFixed(1)}″` : at.kind === 'lob' ? `Lobs arrows over walls for ${at.dmg * q.models}, range ${at.range}″` : `Volleys for ${at.dmg * q.models}, range ${at.range}″ (needs a clear line)`;
+      const atkTxt = at.kind === 'strike' ? `Strikes one target for ${Math.round(at.dmg * q.models * RULES.strikeMult)} (${+(at.dmg * RULES.strikeMult).toFixed(2)} per model), reach ${at.reach}″, lunges up to ${(moveOf(def) * RULES.strikeLunge).toFixed(1)}″` : at.kind === 'lob' ? `Lobs arrows over walls for ${at.dmg * q.models}, range ${at.range}″` : `Volleys for ${at.dmg * q.models}, range ${at.range}″ (needs a clear line)`;
       const skTxt = sks.map(k => ` · ${k.name}${cdOf(q, k.kind) > 0 ? ` recharging (${cdOf(q, k.kind)})` : ' ready'}`).join('');
       info.innerHTML = `<b>Enemy ${esc(def.name)}</b> · tier ${def.tier} · ${q.models}/${def.models} models · ${q.hp} HP<br>
-        <span style="color:var(--muted)">${atkTxt}${skTxt}${def.passive ? ` · passive <b>${esc(def.passive.name)}</b>: ${esc(def.passive.desc)}` : ''}${q.rend ? ` · Rended ×${q.rend.n}` : ''} · moves ${(def.tier * RULES.moveFactor * 100).toFixed(1)}″ per round.${def.ghost ? ' Ignores engagement.' : ''} The red ring shows how far it can strike this round.</span>`;
+        <span style="color:var(--muted)">${atkTxt}${skTxt}${def.passive ? ` · passive <b>${esc(def.passive.name)}</b>: ${esc(def.passive.desc)}` : ''}${q.rend ? ` · Rended ×${q.rend.n}` : ''} · moves ${def.move.toFixed(1)}″ per round.${def.ghost ? ' Ignores engagement.' : ''} The red ring shows how far it can strike this round.</span>`;
       return;
     }
     info.classList.add('hidden');
@@ -950,7 +950,7 @@ class Game {
         <button class="ib x" data-act="close">✕</button></div>
       <div class="dk-ap">${apBlocks(q, plan, false)}</div>
       <div class="dk-btns">
-        ${b('mode:move', 'move', 'Move', `${(left * def.tier * RULES.moveFactor).toFixed(1)}″ left`, this.mode === 'move', left < 1, 'move')}
+        ${b('mode:move', 'move', 'Move', `${(left * moveOf(def)).toFixed(1)}″ left`, this.mode === 'move', left < 1, 'move')}
         ${b('mode:attack', melee ? 'attack' : 'shoot', atkName, `${at.ap} AP${!melee && engaged ? ' · strikes' : ''}`, this.mode === 'attack', left < at.ap, 'attack')}
         ${!melee && meleeOf(def) ? b('mode:melee', 'attack', 'Melee', `${meleeOf(def).ap} AP`, this.mode === 'melee', left < meleeOf(def).ap, 'attack') : ''}
         ${skBtn}
@@ -1128,11 +1128,12 @@ class Game {
       else if (e.type === 'queueDrop' && e.owner === this.me) lines.push({ T: e.T, html: `Build queue: ${esc(BUILDINGS[e.btype].name[this.faction(e.owner)])} dropped (${esc(e.why)})` });
       else if (e.type === 'spawn' && e.owner === this.me) lines.push({ T: e.T, html: e.summon ? `<b class="t${e.owner}">A summoned Skeleton Warband</b> rises from the ground` : `<b class="t${e.owner}">New ${esc(FACTIONS[this.faction(e.owner)].units[e.role].name)}</b> join your army` });
       else if (e.type === 'bdown') lines.push({ T: e.T, html: `${name(e.id)} is destroyed` });
+      else if (e.type === 'siteCancel' && e.owner === this.me) lines.push({ T: e.T, html: `${esc(BUILDINGS[e.btype].name[this.faction(e.owner)])} site cancelled: <span class="gain">+${e.refund}</span> refunded` });
       else if (e.type === 'toMelee') lines.push({ T: e.T, html: `${name(e.id)} is locked in melee: its ${e.from === 'volley' ? 'volley' : esc(skillOf(defOf(tl.squads.find(x => x.id === e.id)), e.from)?.name || e.from)} becomes a melee strike at ${name(e.t)}` });
       else if (e.type === 'pushed' && tl.squads.find(x => x.id === e.id)?.owner === this.me) lines.push({ T: e.T, html: `${name(e.id)} makes way for ${name(e.bid)}` });
       else if (e.type === 'shrine') lines.push({ T: e.T, html: e.owner === this.me ? 'You claim a resource site' : e.owner < 0 ? 'A resource site is freed' : 'The enemy claims a resource site' });
       else if (e.type === 'income' && e.owner === this.me) {
-        const P = e.parts || {}, bits = [P.hq && `HQ +${P.hq}`, P.mine && `mines +${P.mine}`, P.well && `wells +${P.well}`, P.farm && `farms +${P.farm}`, P.brutal && `brutal +${P.brutal}`].filter(Boolean).join(', ');
+        const P = e.parts || {}, bits = [P.hq && `HQ +${P.hq}`, P.mine && `mines +${P.mine}`, P.well && `wells +${P.well}`, P.farm && `farms +${P.farm}`, P.upkeep && `upkeep −${P.upkeep}`, P.brutal && `brutal +${P.brutal}`].filter(Boolean).join(', ');
         lines.push({ T: e.T, html: `Income <span class="gain">+${e.amount}</span> ${this.ecoName()}${bits ? ` (${bits})` : ''}${P.decay ? ` · <span class="dmg">−${P.decay}</span> decayed` : ''} (now ${e.supply}) · tap the ${this.ecoName().toLowerCase()} counter for the full breakdown` });
       }
       else if (e.type === 'souls' && e.owner === this.me) lines.push({ T: e.T, html: `The fallen give <span class="gain">+${e.amount}</span> souls` });
@@ -1451,7 +1452,7 @@ const HELP = {
 <p>The two armies play very differently.</p>
 <ul>
 <li><b>Kingdom: the all-rounder.</b> Sturdy, plain squads that are easy to learn. Its hero, <b>The Chosen</b>, leaps into fights (<b>Leap Strike</b> hits and shoves at the landing), <b>Rallies</b> nearby allies (+${FACTIONS.kingdom.units.hero.skills.find(k => k.kind === 'rally').armor} armour and a defend) and lands a <b>Mighty Swing</b>: big damage, long reach, and it <b>stuns</b> (the target's actions pause).</li>
-<li><b>Kingdom economy: gold and farms.</b> The Keep earns ${FACTIONS.kingdom.eco.hq} a round, every <b>Mine</b> (on a resource site) ${BUILDINGS.mine.income}. <b>Farms</b> are big (they take up land) and up to ${BUILDINGS.farm.slots} <b>peasants</b> work each one (1 gold per ${FACTIONS.kingdom.eco.gather.farm} AP each): the more peasants and farms, the stronger your late game. Peasants (up to ${FACTIONS.kingdom.maxBuilders}) don't count toward the army cap.</li>
+<li><b>Kingdom economy: gold and farms.</b> The Keep earns ${FACTIONS.kingdom.eco.hq} a round, every <b>Mine</b> (on a resource site) ${BUILDINGS.mine.income}. <b>Farms</b> are big (they take up land) and up to ${BUILDINGS.farm.slots} <b>peasants</b> work each one (1 gold per ${FACTIONS.kingdom.eco.gather.farm} AP each): the more peasants and farms, the stronger your late game. Peasants (up to ${FACTIONS.kingdom.maxBuilders}) cost no population.</li>
 <li><b>Builders</b> (peasants) put up every Kingdom building. Pick a building, move the see-through ghost (green = it fits, red = it doesn't, and why) and press <b>✓ Confirm</b>: it joins your <b>build queue</b> (numbered ghosts). A free builder takes the next one and spends its AP as <b>work</b>; with no orders it keeps at its job, then farms or mines. Drag the <b>hammer</b> knob onto a site or damaged building, or the <b>gather</b> knob onto a farm or mine.</li>
 <li><b>Undead: a never-ending horde.</b> Every squad is weaker but costs about half as much, and the <b>Skeleton Warband</b> swarm (fragile, very slow, cheap, 1 round) comes <b>two squads at a time</b>; the <b>Skeleton Warriors</b> are the sturdier fighters. The hero, the <b>Lich</b>, is a slow <b>mage</b>: it shoots magic bolts and casts with <b>mana</b> (${FACTIONS.undead.units.hero.mana.max} max, +${FACTIONS.undead.units.hero.mana.regen} a round) instead of cooldowns, so it can cast the same spell several times in a round while it has AP and mana: <b>Summon Warband</b> (two Skeleton Warband squads rise, march on the enemy and crumble after ${RULES.summonTtl} rounds), <b>Dark Thunder</b> (chain lightning that jumps to nearby enemies) <b>Corpse Explosion</b> (blow up one of your summoned squads). <b>Necromancers</b> (trained at the Crypt once it is a Mausoleum) are a weaker caster troop with their own mana: bolts, a weaker Dark Thunder, and a one-squad summon.</li>
 <li><b>Undead economy: steady souls, plus the dead.</b> The Crypt (+${FACTIONS.undead.eco.hq}) and every <b>Soul Well</b> (+${BUILDINGS.well.income}, on a resource site) pay souls every round: take more sites to grow. Your buildings spread <b>graveyards</b> around them (Soul Wells ${BUILDINGS.well.grave}″, the Crypt ${BUILDINGS.hq.grave}″, others ${BUILDINGS.tower.grave}″). <b>Every model that dies on your graves</b> (either side) gives <b>${RULES.soulPerModel} souls</b> (a hero ${RULES.soulPerHero}), and the graves creep out where it died: cheap squads like the Warband give back more than they cost when they fall there. But souls above <b>${RULES.soulKeep}</b> <b>decay</b> (${Math.round(RULES.soulDecay * 100)} % of the excess each round), so spend them. The Undead have <b>no builders</b>: buildings <b>rise out of the ground</b> on their own (${RULES.maxRising} at a time) and slowly mend.</li>
@@ -1460,8 +1461,8 @@ const HELP = {
 <li><b>Where to build:</b> anywhere you have <b>seen</b> at least once (not right next to a resource site). <b>Undead</b> buildings must stand on your <b>graves</b>, like blight or creep (Monoliths too). The <b>Monolith</b> (${BUILDINGS.monolith.cost} souls, rises in ${Math.ceil(BUILDINGS.monolith.work / RULES.riseWork)} rounds) spreads its own graves (${BUILDINGS.monolith.grave}″) and heals your squads near it (+${BUILDINGS.monolith.heal.hp} HP per model a round within ${BUILDINGS.monolith.heal.radius}″). Push graves forward with Monoliths and cheap Bone Fences on the edge of your graves, then raise Soul Wells and Ossuaries there.</li>
 <li><b>Small starts:</b> the Kingdom begins with its hero, Men-at-arms and one peasant squad; the Undead with the Lich and a Skeleton Warband pair. Everything else comes from your base.</li>
 <li><b>Production queues.</b> One build queue for your base (up to ${RULES.queueMaxBuild}) and a training queue at every HQ / Barracks (up to ${RULES.queueMax}). Each item is <b>paid when it starts</b>; if you can't afford it, no builder is free or the army is at its cap, the queue <b>waits</b> (amber dot). The <b>Production</b> bar above your squad cards shows every queue: tap an icon to remove it (tap the squad in training twice to stop it for a refund), drag one sideways to reorder.</li>
-<li><b>Barracks / Ossuaries</b> train fighters, shooters and fast squads in 2 rounds, tanks in 3. <b>Towers</b> see far and shoot. <b>Banners</b> (Kingdom): +1 command point. <b>Monoliths</b> (Undead): graves and a small heal. <b>Walls</b> block paths and volleys. Army cap: ${RULES.armyCap} squads (more on the big maps).</li>
-<li><b>Tech tree</b> (🜲 button, or T): research is done at your HQ and in tech buildings, in the same queue as training (paid when it starts; the building does nothing else meanwhile). <b>Tier 2</b> (Castle / Mausoleum, at the HQ) unlocks the elite squads (Kingdom: Shieldwall, Outriders; Undead: Grave Guard, Wraiths, Necromancers) and the tech buildings (Blacksmith and Chapel / Charnel Pit and Dark Sanctum). <b>Tier 3</b> (Citadel / Necropolis) unlocks the strongest research. At each tier you pick <b>one of two doctrines</b>: the other is locked for the rest of the battle. Research stays even if the building that did it falls.</li>
+<li><b>Barracks / Ossuaries</b> train fighters, shooters and fast squads in 2 rounds, tanks in 3. <b>Towers</b> see far and shoot. <b>Banners</b> (Kingdom): +1 command point. <b>Monoliths</b> (Undead): graves and a small heal. <b>Walls</b> block paths and volleys. Population cap: ${RULES.armyCap} pop (more on the big maps): most squads cost 1–3 pop, heroes, peasants and summons nothing. Every pop above ${RULES.upkeepFree} costs <b>upkeep</b> (${RULES.upkeepPerPop} a pop, from your round income). You start with nothing: the first income comes at the end of round 1. An unfinished building can be cancelled for a ${Math.round(RULES.siteRefund * 100)} % refund.</li>
+<li><b>Tech tree</b> (🜲 button, or T): research is done at your HQ and in tech buildings, in the same queue as training (paid when it starts; the building does nothing else meanwhile). <b>Tier 2</b> (Castle / Mausoleum, at the HQ) opens the <b>unit unlocks</b> at the Barracks / Ossuary (each elite squad needs its own: Shieldwall Drill, Outrider Stables; Grave Vigil, Wraith Pact, Necromancer Circle), the ability upgrades (new skills such as Lock Shields, Fire Volley, Bone Spear, Shadow Step) and the tech buildings (Blacksmith and Chapel / Charnel Pit and Dark Sanctum). <b>Tier 3</b> (Citadel / Necropolis) unlocks the strongest research. At each tier you pick <b>one of two doctrines</b>: the other is locked for the rest of the battle. Weapon and armour lines go up to level III, each level dearer than the last; many small upgrades (+1 armour, +10 % damage, faster mining...) cost little. Research stays even if the building that did it falls.</li>
 </ul>`,
   fog: () => `
 <p>The table is covered in <b>fog</b>: thick mist where you have never been, a thin haze where you have been but can't see right now. You only see enemies your squads and buildings can see: within their vision, not behind walls or rocks, and not deep in a forest (a squad inside a forest is only seen from close by). Hidden enemies show as faded <b>last seen</b> markers, and enemy buildings stay where you last saw them.</p>

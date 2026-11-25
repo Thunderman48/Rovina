@@ -116,4 +116,4 @@ export function buildMapTerrain(def) {
 }
 export function mapSites(def) { const m = mirrorOn(def.w, def.h); return def.sites.flatMap(p => [{ ...p }, m(p)]); }
 // board info stored on the game state
-export function boardOf(def) { return { w: def.w, h: def.h, zone: Math.round(def.w / 3), cap: RULES.armyCap + (def.capBonus || 0) }; }
+export function boardOf(def) { return { w: def.w, h: def.h, zone: Math.round(def.w / 3), cap: RULES.armyCap + Math.round((def.capBonus || 0) * 1.5) }; }

@@ -90,7 +90,8 @@ export const defOf = q => unitDef(q.faction, q.role, q.tk);
 export const radiusOf = q => squadRadius(defOf(q), q.models);
 export const alive = q => q.hp > 0;
 export const modelsFor = (q, hp) => Math.max(0, Math.ceil(hp / defOf(q).hpPer - 1e-9));
-export const speedOf = q => defOf(q).tier * RULES.moveFactor;
+// inches per AP on open ground (the unit's `move` stat; tier is initiative only)
+export const speedOf = q => defOf(q).move / RULES.ap;
 // AP a squad has this round: 100, less 5 % per Rend stack on it (the Warband's passive)
 export const apFor = q => Math.round(RULES.ap * (1 - (q && q.rend ? q.rend.n * q.rend.ap : 0)));
 export function emptyOrders() { return { squads: {}, stances: {} }; }

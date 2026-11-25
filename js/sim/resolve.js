@@ -100,6 +100,16 @@ export function resolveRound(state0, ordersIn) {
   // production queues: apply this round's queue edits, then start what can start (paid now)
   const baseEvents = [];
   const bev = e => baseEvents.push(e);
+  // cancelled sites (still under construction): removed, RULES.siteRefund of the cost back
+  for (const p of [0, 1]) for (const id of orders[p].cancelSites || []) {
+    const b = s.buildings.find(x => x.id === id);
+    if (!b || b.owner !== p || b.hp <= 0 || !(b.build > 0)) continue;
+    const refund = Math.floor(BUILDINGS[b.type].cost * RULES.siteRefund);
+    s.supply[p] += refund;
+    s.buildings = s.buildings.filter(x => x !== b);
+    for (const q of s.squads) if (q.task?.bid === id) q.task = null;
+    baseEvents.push({ type: 'siteCancel', id, owner: p, btype: b.type, refund });
+  }
   for (const p of [0, 1]) if (orders[p].queue) applyQueue(s, p, orders[p].queue, bev);
   for (const p of [0, 1]) if (orders[p].queue) startQueues(s, p, { apply: true, ev: bev });
   // planning-time knowledge
@@ -1019,8 +1029,8 @@ export function resolveRound(state0, ordersIn) {
     s.supply[p] += inc;
     const decay = FACTIONS[s.players[p].faction].graves ? soulDecayOf(s.supply[p]) : 0;
     s.supply[p] -= decay;
-    const flat = P.hq + P.mine + P.well + P.farm + P.other;
-    ev({ type: 'income', owner: p, amount: inc, supply: s.supply[p], parts: { hq: P.hq, mine: P.mine, well: P.well, farm: P.farm, other: P.other, count: P.count, brutal: inc - flat, gathered: ledger[p].gathered, souls: ledger[p].souls, soulPlaces: ledger[p].soulPlaces, decay } });
+    const flat = P.hq + P.mine + P.well + P.farm + P.other - P.upkeep;
+    ev({ type: 'income', owner: p, amount: inc, supply: s.supply[p], parts: { hq: P.hq, mine: P.mine, well: P.well, farm: P.farm, other: P.other, upkeep: P.upkeep, pop: P.pop, count: P.count, brutal: inc - flat, gathered: ledger[p].gathered, souls: ledger[p].souls, soulPlaces: ledger[p].soulPlaces, decay } });
   }
   updateIntel(s);
   for (const q of s.squads) {

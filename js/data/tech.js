@@ -17,7 +17,7 @@ const SKELETONS = ['swarm', 'fighter', 'ranged', 'summon'];
 export const TECH = {
   // ---------------------------------------------------------------- Kingdom
   castle:    { faction: 'kingdom', name: 'Castle', icon: 'goal', at: 'hq', cost: 60, rounds: 3, tier: 2, hqTier: 2, needsBuilding: ['barracks'],
-               desc: 'Tier 2: the Keep becomes a Castle (HP 600, stronger fire). Unlocks Shieldwall and Outriders, the Blacksmith, the Chapel and a doctrine.',
+               desc: 'Tier 2: the Keep becomes a Castle (HP 600, stronger fire). Opens the unit unlocks (Shieldwall Drill, Outrider Stables), the Blacksmith, the Chapel and a doctrine.',
                buildings: [{ types: ['hq'], hp: 600, fireDmg: 4, name: 'Castle' }] },
   citadel:   { faction: 'kingdom', name: 'Citadel', icon: 'goal', at: 'hq', cost: 100, rounds: 4, tier: 3, hqTier: 3, needs: ['castle'], needsBuilding: ['forge', 'chapel'],
                desc: 'Tier 3: the Citadel (HP 800, fire 5, +1 command point). Unlocks the strongest research and the last doctrine.',
@@ -61,7 +61,7 @@ export const TECH = {
 
   // ---------------------------------------------------------------- Undead
   mausoleum: { faction: 'undead', name: 'Mausoleum', icon: 'goal', at: 'hq', cost: 40, rounds: 2, tier: 2, hqTier: 2, needsBuilding: ['barracks'],
-               desc: 'Tier 2: the Crypt becomes a Mausoleum (HP 600, graves 12″). Unlocks Grave Guard and Wraiths (Ossuary), Necromancers (Crypt), the Charnel Pit, the Dark Sanctum and a doctrine.',
+               desc: 'Tier 2: the Crypt becomes a Mausoleum (HP 600, graves 12″). Opens the unit unlocks (Grave Vigil, Wraith Pact, Necromancer Circle), the Charnel Pit, the Dark Sanctum and a doctrine.',
                buildings: [{ types: ['hq'], hp: 600, graveSet: 12, name: 'Mausoleum' }] },
   necropolis:{ faction: 'undead', name: 'Necropolis', icon: 'goal', at: 'hq', cost: 70, rounds: 4, tier: 3, hqTier: 3, needs: ['mausoleum'], needsBuilding: ['pit', 'sanctum'],
                desc: 'Tier 3: the Necropolis (HP 760, graves 14″). Unlocks the strongest research and the last doctrine.',
@@ -103,6 +103,76 @@ export const TECH = {
                desc: 'Doctrine: Summon Warband raises one more squad (the Lich 3, Necromancers 2).', units: [{ roles: ['hero', 'mage'], skills: { summon: { add: { count: 1 } } } }] },
   plague:    { faction: 'undead', name: 'Plague of Graves', icon: 'souls', at: 'hq', cost: 60, rounds: 3, tier: 3, needs: ['necropolis'], doctrine: 'ud3',
                desc: 'Doctrine: enemy squads standing on your graves lose 1 HP per model at the end of every round.', rules: { graveDrain: 1 } },
+
+  // ---------------------------------------------------------------- longer tree (2026-11-25)
+  // unit unlocks (Barracks / Ossuary, after Tier 2): elite squads need their own research
+  drill:     { faction: 'kingdom', name: 'Shieldwall Drill', icon: 'tank', at: 'barracks', cost: 35, rounds: 2, tier: 2, needs: ['castle'],
+               desc: 'Unlocks Shieldwall squads at the Barracks.' },
+  stables:   { faction: 'kingdom', name: 'Outrider Stables', icon: 'fast', at: 'barracks', cost: 45, rounds: 3, tier: 2, needs: ['castle'],
+               desc: 'Unlocks Outriders at the Barracks.' },
+  vigil:     { faction: 'undead', name: 'Grave Vigil', icon: 'tank', at: 'barracks', cost: 25, rounds: 2, tier: 2, needs: ['mausoleum'],
+               desc: 'Unlocks Grave Guard at the Ossuary.' },
+  pact:      { faction: 'undead', name: 'Wraith Pact', icon: 'fast', at: 'barracks', cost: 30, rounds: 3, tier: 2, needs: ['mausoleum'],
+               desc: 'Unlocks Wraiths at the Ossuary.' },
+  circle:    { faction: 'undead', name: 'Necromancer Circle', icon: 'mage', at: 'barracks', cost: 35, rounds: 3, tier: 2, needs: ['mausoleum'],
+               desc: 'Unlocks Necromancers at the Crypt.' },
+  // level III of the weapon / armour lines (StarCraft-style rising costs: about x1.6 and a round longer)
+  steel3:    { faction: 'kingdom', name: 'Steel Weapons III', icon: 'attack', at: 'forge', cost: 80, rounds: 4, tier: 3, needs: ['steel2'],
+               desc: 'Soldiers deal another 15 % more damage.', units: [{ roles: SOLDIERS, dmgMult: 1.15 }] },
+  plate3:    { faction: 'kingdom', name: 'Plate Armour III', icon: 'defend', at: 'forge', cost: 80, rounds: 4, tier: 3, needs: ['plate2'],
+               desc: 'Soldiers +2 more armour.', units: [{ roles: SOLDIERS, armor: 2 }] },
+  bones3:    { faction: 'undead', name: 'Sharpened Bones III', icon: 'attack', at: 'pit', cost: 55, rounds: 4, tier: 3, needs: ['bones2'],
+               desc: 'Skeletons deal another 15 % more damage.', units: [{ roles: SKELETONS, dmgMult: 1.15 }] },
+  plating3:  { faction: 'undead', name: 'Bone Plating III', icon: 'defend', at: 'pit', cost: 55, rounds: 4, tier: 3, needs: ['plating2'],
+               desc: 'Skeletons +1 more armour.', units: [{ roles: SKELETONS, armor: 1 }] },
+  // small upgrades
+  whetstones:{ faction: 'kingdom', name: 'Whetstones', icon: 'attack', at: 'barracks', cost: 15, rounds: 1, tier: 1,
+               desc: 'Men-at-arms deal 10 % more damage.', units: [{ roles: ['fighter'], dmgMult: 1.1 }] },
+  padded:    { faction: 'kingdom', name: 'Padded Jacks', icon: 'defend', at: 'barracks', cost: 15, rounds: 1, tier: 1,
+               desc: 'Crossbows +1 armour.', units: [{ roles: ['ranged'], armor: 1 }] },
+  hardy:     { faction: 'kingdom', name: 'Hardy Peasants', icon: 'builder', at: 'hq', cost: 15, rounds: 1, tier: 1,
+               desc: 'Peasants +4 HP per model.', units: [{ roles: ['builder'], hpPer: 4 }] },
+  picks:     { faction: 'kingdom', name: 'Sharpened Picks', icon: 'node', at: 'hq', cost: 20, rounds: 1, tier: 1,
+               desc: 'Peasants mine faster: 9 AP per gold instead of 10.', rules: { mineGather: -1 } },
+  masonry:   { faction: 'kingdom', name: 'Masonry', icon: 'fortify', at: 'hq', cost: 35, rounds: 2, tier: 2, needs: ['castle'],
+               desc: 'All your buildings +15 % HP.', buildings: [{ types: ['hq', 'barracks', 'tower', 'farm', 'mine', 'banner', 'wall', 'forge', 'chapel'], hpMult: 1.15 }] },
+  hoardings: { faction: 'kingdom', name: 'Hoardings', icon: 'range', at: 'forge', cost: 30, rounds: 2, tier: 2,
+               desc: 'Watchtowers and the Keep fire for +1 damage per shot.', buildings: [{ types: ['tower', 'hq'], fireAdd: 1 }] },
+  horses:    { faction: 'kingdom', name: 'Horse Breeding', icon: 'fast', at: 'barracks', cost: 30, rounds: 2, tier: 2, needs: ['stables'],
+               desc: 'Outriders move 1″ further a round.', units: [{ roles: ['fast'], move: 1 }] },
+  dust:      { faction: 'undead', name: 'Grave Dust', icon: 'attack', at: 'hq', cost: 10, rounds: 1, tier: 1,
+               desc: 'Skeleton Warbands deal 10 % more damage.', units: [{ roles: ['swarm', 'summon'], dmgMult: 1.1 }] },
+  ossified:  { faction: 'undead', name: 'Ossified Skin', icon: 'defend', at: 'barracks', cost: 10, rounds: 1, tier: 1,
+               desc: 'Skeleton Warriors +1 armour.', units: [{ roles: ['fighter'], armor: 1 }] },
+  hollow:    { faction: 'undead', name: 'Hollow Bones', icon: 'ranged', at: 'barracks', cost: 10, rounds: 1, tier: 1,
+               desc: 'Bone Archers move 0.6″ further a round.', units: [{ roles: ['ranged'], move: 0.6 }] },
+  conduits:  { faction: 'undead', name: 'Soul Conduits', icon: 'souls', at: 'hq', cost: 20, rounds: 1, tier: 1,
+               desc: 'Soul Wells earn +1 soul a round.', rules: { wellIncome: 1 } },
+  bonemason: { faction: 'undead', name: 'Bone Masonry', icon: 'fortify', at: 'hq', cost: 30, rounds: 2, tier: 2, needs: ['mausoleum'],
+               desc: 'All your buildings +15 % HP.', buildings: [{ types: ['hq', 'barracks', 'tower', 'well', 'monolith', 'wall', 'pit', 'sanctum'], hpMult: 1.15 }] },
+  dread:     { faction: 'undead', name: 'Dread Spires', icon: 'range', at: 'pit', cost: 25, rounds: 2, tier: 2,
+               desc: 'Bone Spires and the Crypt fire for +1 damage per shot.', buildings: [{ types: ['tower', 'hq'], fireAdd: 1 }] },
+  spectral:  { faction: 'undead', name: 'Spectral Speed', icon: 'fast', at: 'barracks', cost: 25, rounds: 2, tier: 2, needs: ['pact'],
+               desc: 'Wraiths move 1″ further a round.', units: [{ roles: ['fast'], move: 1 }] },
+  // ability upgrades: a squad type gains a skill
+  shielddrill:{ faction: 'kingdom', name: 'Shield Drill', icon: 'fortify', at: 'barracks', cost: 40, rounds: 2, tier: 2, needs: ['castle'],
+               desc: 'Men-at-arms gain Lock Shields (hits from the front deal 30 % this round).',
+               units: [{ roles: ['fighter'], addSkill: { kind: 'wall', name: 'Lock Shields', cat: 'defense', ap: 15, mult: 0.3, cosHalf: 0.5, cd: 1 } }] },
+  firearrows:{ faction: 'kingdom', name: 'Fire Arrows', icon: 'shoot', at: 'forge', cost: 45, rounds: 3, tier: 2,
+               desc: 'Crossbows gain Fire Volley: a circle of burning bolts (3 per model) within 14″, arcing over walls.',
+               units: [{ roles: ['ranged'], addSkill: { kind: 'storm', name: 'Fire Volley', cat: 'attack', ranged: true, ap: 35, dmg: 3, range: 14, radius: 2, cd: 2 } }] },
+  sweeping:  { faction: 'kingdom', name: 'Sweeping Blow', icon: 'sweep', at: 'chapel', cost: 50, rounds: 3, tier: 2,
+               desc: 'The Chosen gains Sweep: a full circle swing (14) around him.',
+               units: [{ roles: ['hero'], addSkill: { kind: 'sweep', name: 'Sweep', cat: 'attack', ap: 30, dmg: 14, reach: 1.6, cd: 2 } }] },
+  boneshields:{ faction: 'undead', name: 'Bone Shields', icon: 'fortify', at: 'barracks', cost: 30, rounds: 2, tier: 2, needs: ['mausoleum'],
+               desc: 'Skeleton Warriors gain Grave Wall (hits from the front deal 30 % this round).',
+               units: [{ roles: ['fighter'], addSkill: { kind: 'wall', name: 'Grave Wall', cat: 'defense', ap: 15, mult: 0.3, cosHalf: 0.5, cd: 1 } }] },
+  bonespears:{ faction: 'undead', name: 'Bone Spears', icon: 'range', at: 'pit', cost: 35, rounds: 3, tier: 2,
+               desc: 'Bone Archers gain Bone Spear: a line that hits every enemy on it (3.5 per model), 15″.',
+               units: [{ roles: ['ranged'], addSkill: { kind: 'pierce', name: 'Bone Spear', cat: 'attack', ranged: true, ap: 35, dmg: 3.5, range: 15, width: 0.7, cd: 2 } }] },
+  shadowwalk:{ faction: 'undead', name: 'Shadow Walk', icon: 'disrupt', at: 'sanctum', cost: 45, rounds: 3, tier: 2, needs: ['pact'],
+               desc: 'Wraiths gain Shadow Step: vanish and reappear up to 6″ away, no parting blows.',
+               units: [{ roles: ['fast'], addSkill: { kind: 'step', name: 'Shadow Step', cat: 'move', ap: 20, range: 6, cd: 2 } }] },
 };
 
 // a short effect label for each research, shown on its tech tree node (the detail panel has the full text)
@@ -116,14 +186,20 @@ const CHIPS = {
   bones1: '+15 % dmg', bones2: '+15 % dmg', plating1: '+1 armour', plating2: '+1 armour', swarm3: 'Pairs → 3',
   shroud: '+2 armour', necromancy: '+20 mana', greater: 'Summons 4 rnds', chain: '+1 jump', phylactery: 'Revive 2 rnds',
   bonetide: '+2 HP / model', darkarts: '+10 mana / rnd', horde: '+1 summon', plague: 'Drain 1 / model',
+  drill: 'Unlocks Shieldwall', stables: 'Unlocks Outriders', vigil: 'Unlocks Grave Guard', pact: 'Unlocks Wraiths', circle: 'Unlocks Necromancers',
+  steel3: '+15 % dmg', plate3: '+2 armour', bones3: '+15 % dmg', plating3: '+1 armour',
+  whetstones: 'M-a-a +10 % dmg', padded: 'Crossbows +1 arm', hardy: 'Peasants +4 HP', picks: 'Mining 9 AP', masonry: 'Bldg +15 % HP', hoardings: 'Tower fire +1', horses: 'Outriders +1″',
+  dust: 'Warband +10 % dmg', ossified: 'Warriors +1 arm', hollow: 'Archers +0.6″', conduits: 'Wells +1', bonemason: 'Bldg +15 % HP', dread: 'Spire fire +1', spectral: 'Wraiths +1″',
+  shielddrill: '+Lock Shields', firearrows: '+Fire Volley', sweeping: 'Hero +Sweep', boneshields: '+Grave Wall', bonespears: '+Bone Spear', shadowwalk: 'Wraiths +Step',
 };
 for (const [id, c] of Object.entries(CHIPS)) if (TECH[id]) TECH[id].chip = c;
 for (const [id, t] of Object.entries(TECH)) t.id = id;
 
 // tier gates: these roles train only once the HQ reached that tech
+// elite squads need their own unlock research (each needs the HQ's Tier 2 first)
 export const GATES = {
-  kingdom: { tank: 'castle', fast: 'castle' },
-  undead: { tank: 'mausoleum', fast: 'mausoleum', mage: 'mausoleum' },
+  kingdom: { tank: 'drill', fast: 'stables' },
+  undead: { tank: 'vigil', fast: 'pact', mage: 'circle' },
 };
 // tech buildings need the HQ's tier 2
 export const BUILDING_GATES = { forge: 'castle', chapel: 'castle', pit: 'mausoleum', sanctum: 'mausoleum' };
@@ -145,6 +221,8 @@ export function techUnit(base, faction, role, tk) {
   for (const id of keyList(tk)) for (const e of TECH[id]?.units || []) {
     if (!e.roles.includes(role)) continue;
     if (e.hpPer) d.hpPer += e.hpPer;
+    if (e.move) d.move = Math.round((d.move + e.move) * 100) / 100;
+    if (e.addSkill && !(d.skills || []).some(k => k.kind === e.addSkill.kind)) d.skills = (d.skills || []).concat([{ ...e.addSkill }]);
     if (e.armor) d.armor += e.armor;
     if (e.defends) d.defends = (d.defends || 0) + e.defends;
     if (e.dmgMult && d.attack) d.attack.dmg = Math.round(d.attack.dmg * e.dmgMult * 1000) / 1000;
@@ -184,9 +262,11 @@ export function techBuilding(base, type, tk) {
       if (e.name) d.name = { ...d.name, [faction]: e.name };
       if (e.workMult) d.work = Math.max(1, Math.round(d.work * e.workMult));
       if (e.hpMult) d.hpMult = (d.hpMult || 1) * e.hpMult;
+      if (e.fireAdd) d.fireAdd = (d.fireAdd || 0) + e.fireAdd;
     }
   }
   if (d.hpMult) { d.hp = Math.round(d.hp * d.hpMult); delete d.hpMult; }
+  if (d.fireAdd) { if (d.fire) d.fire.dmg += d.fireAdd; delete d.fireAdd; }   // after any tier's fire
   bCache.set(k, d);
   return d;
 }
