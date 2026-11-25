@@ -101,9 +101,9 @@ const LOB = (ap, dmg, range, radius = 1.5) => ({ kind: 'lob', ap, dmg, range, ra
 //  rally  : a circle around the hero; allies inside gain a defend and hit harder this round
 // cat: skill category -> colour (move = green, attack = red, defense = blue)
 const CHARGE = (ap, dmg, len, cd = 1) => ({ kind: 'charge', name: 'Charge', cat: 'move', ap, wind: 8, dmg, len, cd });
-const BLAST = (ap, dmg, range, radius, cd = 2) => ({ kind: 'blast', name: 'Bone Blast', cat: 'attack', ap, dmg, range, radius, cd });
+const BLAST = (ap, dmg, range, radius, cd = 2) => ({ kind: 'blast', name: 'Bone Blast', cat: 'attack', ranged: true, ap, dmg, range, radius, cd });
 //  storm  : a big lobbed volley onto a circle at the aim point; arcs over walls
-const STORM = (ap, dmg, range, radius, cd = 2) => ({ kind: 'storm', name: 'Arrow Storm', cat: 'attack', ap, dmg, range, radius, cd });
+const STORM = (ap, dmg, range, radius, cd = 2) => ({ kind: 'storm', name: 'Arrow Storm', cat: 'attack', ranged: true, ap, dmg, range, radius, cd });
 const RALLY = (ap, radius, cd = 2, armor = 0, dmgMult = 1.25) => ({ kind: 'rally', name: 'Rally', cat: 'defense', ap, radius, defends: 1, dmgMult, armor, cd });
 //  mighty : a heavy, wide swing in front of the hero that stuns everyone it hits for `stun` AP
 const MIGHTY = (ap, dmg, reach, cosHalf, stun, cd = 2) => ({ kind: 'mighty', name: 'Mighty Swing', cat: 'attack', ap, dmg, reach, cosHalf, stun, cd });
@@ -112,7 +112,7 @@ const MIGHTY = (ap, dmg, reach, cosHalf, stun, cd = 2) => ({ kind: 'mighty', nam
 const SUMMON = (ap, mana, range, count) => ({ kind: 'summon', name: 'Summon Warband', cat: 'defense', ap, mana, range, count, radius: 1.6, cd: 0 });
 //  thunder: strikes the first enemy at the aim point (line of sight), then jumps to the nearest
 //           enemy not yet struck within `jump`, up to `jumps` times, x`decay` damage per jump
-const THUNDER = (ap, mana, dmg, range, jumps, jump, decay) => ({ kind: 'thunder', name: 'Dark Thunder', cat: 'attack', ap, mana, dmg, range, jumps, jump, decay, radius: 1, cd: 0 });
+const THUNDER = (ap, mana, dmg, range, jumps, jump, decay) => ({ kind: 'thunder', name: 'Dark Thunder', cat: 'attack', ranged: true, ap, mana, dmg, range, jumps, jump, decay, radius: 1, cd: 0 });
 //  explode: one of your summoned squads near the aim point bursts: every enemy within `radius`
 //           takes `base + perModel x its models`; the summoned squad is gone
 const EXPLODE = (ap, mana, range, radius, base, perModel) => ({ kind: 'explode', name: 'Corpse Explosion', cat: 'attack', ap, mana, range, radius, base, perModel, cd: 0 });
@@ -125,7 +125,7 @@ const STEP = (ap, range, cd = 2) => ({ kind: 'step', name: 'Shadow Step', cat: '
 //  wall   : until the round ends, hits from the front 120 degrees deal 30%
 const WALL = (name, ap = 15, cd = 1) => ({ kind: 'wall', name, cat: 'defense', ap, mult: 0.3, cosHalf: 0.5, cd });
 //  pierce : a bolt line that hits every target along it (walls still stop it)
-const PIERCE = (ap, dmg, range, width = 0.7, cd = 2) => ({ kind: 'pierce', name: 'Piercing Bolt', cat: 'attack', ap, dmg, range, width, cd });
+const PIERCE = (ap, dmg, range, width = 0.7, cd = 2) => ({ kind: 'pierce', name: 'Piercing Bolt', cat: 'attack', ranged: true, ap, dmg, range, width, cd });
 //  raise  : friendly squads in a circle around the caster regain one fallen model each
 const RAISE = (ap, radius, cd = 3) => ({ kind: 'raise', name: 'Raise', cat: 'defense', ap, radius, cd });
 
@@ -141,7 +141,7 @@ export const FACTIONS = {
       hero:    { name: 'The Chosen', role: 'hero', models: 1, hpPer: 260, armor: 9, tier: 5, look: 'lord', vision: 12, defends: 2, attack: STRIKE(25, 18, 1.6), skills: [LEAP(20, 7, 2, 12, 1.6, 'Leap Strike'), RALLY(20, 5, 2, 4, 1), MIGHTY(30, 28, 2.6, 0.2, 25)] },
       tank:    { name: 'Shieldwall', role: 'tank', models: 3, hpPer: 68, armor: 12, tier: 4, look: 'shield', vision: 9, defends: 2, attack: STRIKE(30, 4, 1.3), skills: [WALL('Lock Shields')] },
       fighter: { name: 'Men-at-arms', role: 'fighter', parry: true, models: 4, hpPer: 40, armor: 7, tier: 5, look: 'sword', vision: 9, defends: 1, attack: STRIKE(25, 5, 1.5) },
-      ranged:  { name: 'Crossbows', role: 'ranged', models: 4, hpPer: 30, armor: 3, tier: 5, look: 'crossbow', vision: 11, defends: 1, attack: VOLLEY(30, 4, 14), skills: [PIERCE(35, 5, 16)] },
+      ranged:  { name: 'Crossbows', role: 'ranged', models: 4, hpPer: 30, armor: 3, tier: 5, look: 'crossbow', vision: 11, defends: 1, attack: VOLLEY(30, 4, 14), melee: STRIKE(25, 2, 1.2), skills: [PIERCE(35, 5, 16)] },
       fast:    { name: 'Outriders', role: 'fast', models: 3, hpPer: 48, armor: 5, tier: 6, look: 'rider', vision: 11, defends: 1, attack: STRIKE(45, 13, 1.7), skills: [CHARGE(35, 9, 9)] },
       builder: { name: 'Peasants', role: 'builder', models: 2, hpPer: 28, armor: 2, tier: 5, look: 'peasant', vision: 8, defends: 0, attack: STRIKE(25, 2, 1.2) },
     },
@@ -155,16 +155,16 @@ export const FACTIONS = {
   undead: {
     name: 'Undead Legion', short: 'UND', colorCss: '#9b59d0',
     units: {
-      hero:    { name: 'Lich', role: 'hero', models: 1, hpPer: 180, armor: 5, tier: 3, look: 'necro', vision: 12, defends: 1, magic: true, attack: VOLLEY(25, 10, 10, 0.6),
+      hero:    { name: 'Lich', role: 'hero', models: 1, hpPer: 180, armor: 5, tier: 3, look: 'necro', vision: 12, defends: 1, magic: true, attack: VOLLEY(25, 10, 10, 0.6), melee: STRIKE(25, 7, 1.4),
                  mana: { max: 100, start: 60, regen: 25 }, skills: [SUMMON(20, 40, 4, 2), THUNDER(15, 25, 14, 11, 3, 3.5, 0.7), EXPLODE(10, 20, 9, 2.5, 8, 3)] },
       tank:    { name: 'Grave Guard', role: 'tank', models: 3, hpPer: 42, armor: 9, tier: 4, look: 'graveguard', vision: 9, defends: 2, attack: STRIKE(30, 3.2, 1.3), skills: [WALL('Grave Wall')] },
       fighter: { name: 'Skeleton Warriors', role: 'fighter', parry: true, models: 5, hpPer: 18, armor: 3, tier: 5, look: 'skeleton', vision: 9, defends: 1, attack: STRIKE(25, 2.4, 1.5) },
       // the swarm: fragile, quick, cheap, trained two squads at a time (`pair`; a later upgrade: three)
       swarm:   { name: 'Skeleton Warband', role: 'swarm', pair: 2, compact: 0.8, models: 5, hpPer: 14, armor: 2, tier: 3, look: 'skeleton', vision: 9, defends: 0, attack: STRIKE(25, 2.8, 1.4) },
-      ranged:  { name: 'Bone Archers', role: 'ranged', models: 4, hpPer: 20, armor: 1, tier: 5, look: 'archer', vision: 11, defends: 1, attack: VOLLEY(30, 2.4, 14, 0.9), skills: [STORM(35, 4, 15, 2.2)] },
+      ranged:  { name: 'Bone Archers', role: 'ranged', models: 4, hpPer: 20, armor: 1, tier: 5, look: 'archer', vision: 11, defends: 1, attack: VOLLEY(30, 2.4, 14, 0.9), melee: STRIKE(25, 1.2, 1.2), skills: [STORM(35, 4, 15, 2.2)] },
       fast:    { name: 'Wraiths', role: 'fast', models: 3, hpPer: 28, armor: 3, tier: 6, look: 'wraith', vision: 11, defends: 1, ghost: true, attack: STRIKE(45, 9, 1.7), skills: [CHARGE(35, 5.6, 9)] },
       // a weaker caster troop: bolts, a weaker Dark Thunder, a one-squad summon
-      mage:    { name: 'Necromancers', role: 'mage', models: 2, hpPer: 20, armor: 1, tier: 4, look: 'necro', vision: 10, defends: 1, magic: true, attack: VOLLEY(25, 4, 9, 0.5),
+      mage:    { name: 'Necromancers', role: 'mage', models: 2, hpPer: 20, armor: 1, tier: 4, look: 'necro', vision: 10, defends: 1, magic: true, attack: VOLLEY(25, 4, 9, 0.5), melee: STRIKE(25, 1.5, 1.2),
                  mana: { max: 60, start: 40, regen: 15 }, skills: [THUNDER(15, 20, 6, 10, 2, 3, 0.7), SUMMON(20, 35, 4, 1)] },
     },
     // Souls: fed by death on graveyards (grave ground spreads around undead buildings); Soul Wells give a
@@ -259,6 +259,11 @@ export function squadRadius(def, models) {
 
 export function unitDef(faction, role, tk = '') { return techUnit(FACTIONS[faction].units[role], faction, role, tk); }
 export const isMelee = def => def.attack.kind === 'strike';
+// the melee attack a squad strikes with: its basic attack, or a shooter's / caster's fallback (`melee`),
+// used when it is locked in melee and on its own Melee order
+export const meleeOf = def => def.attack.kind === 'strike' ? def.attack : def.melee || null;
+// skills that shoot (tagged ranged): unusable while locked in melee
+export const isRangedSkill = sk => !!(sk && sk.ranged);
 export const skillsOf = def => def.skills || [];
 export const skillOf = (def, kind) => (def.skills || []).find(k => k.kind === kind) || null;
 export const SKILL_KINDS = ['charge', 'blast', 'rally', 'storm', 'sweep', 'leap', 'step', 'wall', 'pierce', 'raise', 'mighty', 'summon', 'thunder', 'explode'];

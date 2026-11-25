@@ -41,7 +41,7 @@ function genUnits() {
     out.push(table(['Role', 'Name', 'Models', 'HP/model', 'HP', 'Armour', 'Tier', 'Move "/rnd', 'Vision', 'Defends', 'Radius', 'Attack', 'AP', 'Dmg/model', 'Full squad/hit', 'Reach / range', 'Hits per 100 AP', 'Flags', 'Train cost', 'Train rnds'],
       rolesOf(f).map(r => { const d = U[r], a = d.attack; return [r, d.name, d.models, d.hpPer, d.models * d.hpPer, d.armor, d.tier, speed(d.tier), d.vision, d.defends, n1(squadRadius(d, d.models) * 100) / 100, a.kind, a.ap, a.dmg, n1(rawHit(d) * 100) / 100,
         a.kind === 'strike' ? `reach ${a.reach}" + lunge ${speed(d.tier) * RULES.strikeLunge / 100}" (one target)` : `range ${a.range}", width ${a.width}"`, Math.floor(RULES.ap / a.ap),
-        [d.parry ? 'parry' : '', d.ghost ? 'ghost' : '', d.mana ? `mage: mana ${d.mana.start}/${d.mana.max}, +${d.mana.regen}/rnd` : '', d.summoned ? `summoned (lasts ${RULES.summonTtl} rnds, not trainable)` : ''].filter(Boolean).join(', ') || '-', r === 'hero' || d.summoned ? '-' : FACTIONS[f].train[r], r === 'hero' || d.summoned ? '-' : RULES.trainRounds[r]]; })));
+        [d.parry ? 'parry' : '', d.ghost ? 'ghost' : '', d.melee ? `melee when locked: strike ${d.melee.dmg}/model, ${d.melee.ap} AP, reach ${d.melee.reach}"` : '', d.mana ? `mage: mana ${d.mana.start}/${d.mana.max}, +${d.mana.regen}/rnd` : '', d.summoned ? `summoned (lasts ${RULES.summonTtl} rnds, not trainable)` : ''].filter(Boolean).join(', ') || '-', r === 'hero' || d.summoned ? '-' : FACTIONS[f].train[r], r === 'hero' || d.summoned ? '-' : RULES.trainRounds[r]]; })));
     out.push('');
   }
   return out.join('\n');

@@ -2,7 +2,7 @@
 import { RULES, FACTIONS, BUILDINGS, trainCost, skillOf, pairOf, squadRadius } from '../js/data/units.js';
 import { createGame, addSquad, defOf, radiusOf, emptyOrders, emptyPlan, apFor } from '../js/sim/state.js';
 import { resolveRound, damageAfter, engagedWith, losCut } from '../js/sim/resolve.js';
-import { cpUsage, validateOrders } from '../js/sim/orders.js';
+import { cpUsage, validateOrders, actionCost } from '../js/sim/orders.js';
 import { aiOrders, aiMemory, aiPersonality } from '../js/ai/ai.js';
 import { legacyOrders, legacyMemory } from '../js/ai/legacy.js';
 import { PERSONALITIES, SKILL, BRUTAL_INCOME, pickPersonality } from '../js/ai/personalities.js';
@@ -1630,6 +1630,45 @@ test('no building within 16" of an enemy building your side has seen', () => {
 
 test('every research has a short effect chip for the tech tree', () => {
   for (const t of Object.values(TECH)) ok(t.chip && t.chip.length <= 20, t.id + ': ' + t.chip);
+});
+
+console.log('M8 shooters locked in melee');
+
+test('a shooter locked in melee: its planned volley becomes a melee strike at the enemy it fights', () => {
+  const s = arena([[0, 'ranged', 20, 16], [1, 'fighter', 22.6, 16], [1, 'fighter', 30, 16]]);
+  ok(engagedWith(s.squads[0], s.squads).length, 'engaged');
+  const o = holdAll(s); o[0].squads.q1 = plan([{ kind: 'volley', x: 30, z: 16 }]);
+  const ev = events(resolveRound(s, o).log);
+  ok(ev.some(e => e.type === 'toMelee' && e.id === 'q1' && e.from === 'volley' && e.t === 'q2'), 'converted');
+  const hit = ev.find(e => e.type === 'hit' && e.src === 'q1');
+  eq(hit.kind, 'strike'); eq(hit.dst, 'q2');
+  eq(hit.raw, Math.round(FACTIONS.kingdom.units.ranged.melee.dmg * 4 * RULES.strikeMult), 'its weaker melee attack');
+});
+
+test('ranged skills (tagged) turn into strikes while locked in melee, and cost nothing', () => {
+  const s = arena([[0, 'ranged', 20, 16], [1, 'fighter', 22.6, 16]]);
+  const o = holdAll(s); o[0].squads.q1 = plan([{ kind: 'pierce', x: 30, z: 16 }]);
+  const r = resolveRound(s, o);
+  ok(events(r.log).some(e => e.type === 'toMelee' && e.from === 'pierce'), 'converted');
+  ok(!(r.state.squads.find(q => q.id === 'q1').cd || {}).pierce, 'no cooldown spent');
+  ok(FACTIONS.undead.units.hero.skills.find(k => k.kind === 'thunder').ranged && !FACTIONS.undead.units.hero.skills.find(k => k.kind === 'summon').ranged, 'Dark Thunder is ranged, Summon is not');
+});
+
+test('not engaged: volleys fire as usual; shooters may also order a melee Strike', () => {
+  const s = arena([[0, 'ranged', 20, 16], [1, 'fighter', 24, 16]]);
+  let o = holdAll(s); o[0].squads.q1 = plan([{ kind: 'volley', x: 24, z: 16 }]);
+  ok(!events(resolveRound(s, o).log).some(e => e.type === 'toMelee'), 'no conversion');
+  o = holdAll(s); o[0].squads.q1 = plan([{ kind: 'strike', t: 'q2', x: 24, z: 16 }]);
+  const v = validateOrders(s, 0, o[0]);
+  eq(v.squads.q1.actions[0].kind, 'strike', 'a melee order is allowed');
+  eq(actionCost(s.squads[0], v.squads.q1.actions[0]), FACTIONS.kingdom.units.ranged.melee.ap);
+  ok(events(resolveRound(s, o).log).some(e => e.type === 'hit' && e.src === 'q1' && e.kind === 'strike'), 'it strikes (with a lunge)');
+});
+
+test('stance shooters locked in melee strike back; auto skills skip ranged skills', () => {
+  const s = arena([[1, 'ranged', 20, 16], [0, 'fighter', 22.6, 16]]);
+  const plan1 = buildStancePlan(s, s.squads[0], s.squads.filter(q => q.owner === 0));
+  ok(plan1.actions.some(a => a.kind === 'strike') && !plan1.actions.some(a => a.kind === 'volley' || a.kind === 'storm'), JSON.stringify(plan1.actions.map(a => a.kind)));
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

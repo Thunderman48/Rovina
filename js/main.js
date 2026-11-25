@@ -1,6 +1,6 @@
 // Rovina game controller.
 import * as THREE from 'three';
-import { RULES, FACTIONS, ROLE_ORDER, isMelee, isShooter, skillOf, skillsOf, cdOf, SELF_SKILLS, isMage } from './data/units.js';
+import { RULES, FACTIONS, ROLE_ORDER, isMelee, isShooter, skillOf, skillsOf, cdOf, SELF_SKILLS, isMage, meleeOf } from './data/units.js';
 import { createGame, defOf, radiusOf, apFor } from './sim/state.js';
 import { planCost, actionCost } from './sim/orders.js';
 import { resolveRound, arcHits, losCut, inCover, clampAim, engagedWith } from './sim/resolve.js';
@@ -623,11 +623,11 @@ class Game {
   // place an order of the current mode at a table point
   orderAt(kind, q, x, z, skKind = null) {
     if (kind === 'move') return this.planner.addMove(q.id, x, z);
-    if (kind === 'attack') {
-      if (defOf(q).attack.kind !== 'strike') return this.planner.addAttack(q.id, x, z);
+    if (kind === 'attack' || kind === 'melee') {
+      if (kind === 'attack' && defOf(q).attack.kind !== 'strike') return this.planner.addAttack(q.id, x, z);
       const tg = this.strikePick(q, x, z);
       if (!tg) { this.toast('Strike: drop it on an enemy squad or building', true); return false; }
-      return this.planner.addAttack(q.id, tg.x, tg.z, tg.id, tg.r);
+      return this.planner.addAttack(q.id, tg.x, tg.z, tg.id, tg.r, kind === 'melee');
     }
     if (kind === 'skill') return this.planner.addSkill(q.id, skKind || this.modeSkill, x, z);
     if (kind === 'overwatch') { const ok = this.planner.setOverwatch(q.id, x, z); this.mode = 'move'; return ok; }
@@ -661,7 +661,7 @@ class Game {
     if (knob) {
       if (knob.startsWith('skill')) { this.drag = { kind: 'skill', sk: skillsOf(defOf(q))[+knob.slice(5)].kind, id: q.id, knob: true, knobKey: knob }; return true; }
       if (knob === 'build' || knob === 'gather') { this.drag = { kind: knob + 'knob', id: q.id, knob: true, knobKey: knob }; return true; }
-      const kind = knob === 'attack' && this.mode === 'overwatch' ? 'overwatch' : knob;
+      const kind = knob === 'attack' && (this.mode === 'overwatch' || this.mode === 'melee') ? this.mode : knob;
       this.drag = { kind, id: q.id, knob: true, knobKey: knob };
       return true;
     }
@@ -766,8 +766,8 @@ class Game {
         return { html: `Rally<small>allies in the circle: +1 defend${sk.armor ? `, +${sk.armor} armour` : ''}${sk.dmgMult > 1 ? `, hit ${Math.round((sk.dmgMult - 1) * 100)}% harder` : ''} this round</small>` };
       }
     }
-    // basic attack
-    const at = def.attack, dmg = at.dmg * q.models;
+    // basic attack (kind 'melee': a shooter's own melee strike)
+    const at = kind === 'melee' && meleeOf(def) ? meleeOf(def) : def.attack, dmg = at.dmg * q.models;
     if (at.kind === 'strike') {
       // target attack: snaps to the enemy nearest the aim point; reach and lunge rings around the squad
       const lunge = def.tier * RULES.moveFactor * RULES.strikeLunge;
@@ -932,7 +932,7 @@ class Game {
     // every button is coloured by category: green = move/speed, red = attack, blue = defence/buffs
     const b = (act, ic, label, sub, on = false, dis = false, cat = 'move') => `<button class="act cat-${cat}${on ? ' on' : ''}" data-act="${act}" ${dis ? 'disabled' : ''}>${icon(ic, 20)}${label}<small>${sub}</small></button>`;
     const mage = isMage(def), mana = mage ? this.planner.manaLeft(q) : 0;
-    const skBtn = sks.map(sk => { const cd = cdOf(q, sk.kind); const sub = mage ? `${sk.mana} mana · ${sk.ap} AP` : cd > 0 ? `recharging ${cd}` : this.planner.skillUsed(q.id, sk.kind) ? 'used' : `${sk.ap} AP`; return b('skill:' + sk.kind, SKILL_IC[sk.kind], sk.name, sub, this.mode === 'skill' && this.modeSkill === sk.kind, !this.planner.skillReady(q, sk.kind) || left < sk.ap, sk.cat); }).join('');
+    const skBtn = sks.map(sk => { const cd = cdOf(q, sk.kind); const sub = mage ? `${sk.mana} mana · ${sk.ap} AP` : cd > 0 ? `recharging ${cd}` : this.planner.skillUsed(q.id, sk.kind) ? 'used' : `${sk.ap} AP`; return b('skill:' + sk.kind, SKILL_IC[sk.kind], sk.name, (sk.ranged ? (engaged ? 'ranged · locked: strikes' : 'ranged · ') : '') + sub, this.mode === 'skill' && this.modeSkill === sk.kind, !this.planner.skillReady(q, sk.kind) || left < sk.ap, sk.cat); }).join('');
     const msk = this.mode === 'skill' ? skillOf(def, this.modeSkill) : null;
     const melee = at.kind === 'strike';
     const prepBtn = melee
@@ -940,9 +940,10 @@ class Game {
       : b('mode:overwatch', 'overwatch', 'Overwatch', plan?.overwatch ? 'set · aim again' : `${RULES.overwatchCost} AP`, this.mode === 'overwatch' || !!plan?.overwatch, !plan?.overwatch && left < RULES.overwatchCost, 'defense');
     const hints = {
       move: '<b>Drag the green knob</b> to draw a path (or tap the table). The ring shows how far it can still go.' + (engaged ? ' <b>Engaged:</b> stepping away costs 30 AP and gives the enemy a free hit.' : ''),
-      attack: `<b>Drag the red knob</b> to aim the ${atkName.toLowerCase()}. It hits whatever is in the shape when it lands, so aim where enemies <b>will be</b>.` + (at.kind === 'volley' ? ' Walls block volleys; forests give cover.' : at.kind === 'lob' ? ' Lobs arc over walls.' : ''),
+      attack: (!melee && engaged ? '<b>Locked in melee:</b> its shots and ranged skills turn into melee strikes at the enemy it is fighting (unless it disengages first). ' : '') + `<b>Drag the red knob</b> to aim the ${atkName.toLowerCase()}. It hits whatever is in the shape when it lands, so aim where enemies <b>will be</b>.` + (at.kind === 'volley' ? ' Walls block volleys; forests give cover.' : at.kind === 'lob' ? ' Lobs arc over walls.' : ''),
       skill: msk ? `<b>${esc(msk.name)}:</b> ${SKILL_HELP[msk.kind]} ${mage ? `Costs ${msk.mana} mana (${mana} left); a mage can cast again this round while it has AP and mana.` : `Then it recharges for ${msk.cd} round${msk.cd > 1 ? 's' : ''}.`}` : '',
       goal: '<b>Tap the table</b> where this squad should advance to. Over the next rounds it marches there, fighting the nearest enemy (squad or building) it meets on the way, then guards that spot.',
+      melee: `<b>Drag the red knob onto an enemy:</b> a melee Strike for ${Math.round((meleeOf(def)?.dmg || 0) * q.models * RULES.strikeMult)} (reach ${meleeOf(def)?.reach}″, with a short lunge). Weaker than its shots, but it works while locked in melee.`,
       overwatch: '<b>Drag the red knob</b> to point the overwatch cone. The squad fires once at the first enemy that moves inside it, at any speed tier.',
     };
     dock.innerHTML = `<div class="dk-head"><div><div class="nm">${esc(def.name)}${engaged ? ' <span class="eng">Engaged</span>' : ''}</div><div class="sub">Tier ${def.tier + (plan?.upgrades || 0)} · ${q.models}/${def.models} models · ${q.hp} HP · ${ctl}</div>${def.passive ? `<div class="sub pv" title="${esc(def.passive.desc)}">✦ <b>${esc(def.passive.name)}</b> (passive): ${esc(def.passive.desc)}</div>` : ''}${q.rend ? `<div class="sub dbf">Rended ×${q.rend.n}: −${Math.round(q.rend.n * q.rend.dmg * 100)} % damage and AP</div>` : ''}</div>
@@ -950,7 +951,8 @@ class Game {
       <div class="dk-ap">${apBlocks(q, plan, false)}</div>
       <div class="dk-btns">
         ${b('mode:move', 'move', 'Move', `${(left * def.tier * RULES.moveFactor).toFixed(1)}″ left`, this.mode === 'move', left < 1, 'move')}
-        ${b('mode:attack', melee ? 'attack' : 'shoot', atkName, `${at.ap} AP`, this.mode === 'attack', left < at.ap, 'attack')}
+        ${b('mode:attack', melee ? 'attack' : 'shoot', atkName, `${at.ap} AP${!melee && engaged ? ' · strikes' : ''}`, this.mode === 'attack', left < at.ap, 'attack')}
+        ${!melee && meleeOf(def) ? b('mode:melee', 'attack', 'Melee', `${meleeOf(def).ap} AP`, this.mode === 'melee', left < meleeOf(def).ap, 'attack') : ''}
         ${skBtn}
         ${prepBtn}
         ${b('defend', 'defend', 'Defend', `${RULES.defendCost} AP · ${plan?.defends || 0}`, false, left < RULES.defendCost, 'defense')}
@@ -1126,6 +1128,7 @@ class Game {
       else if (e.type === 'queueDrop' && e.owner === this.me) lines.push({ T: e.T, html: `Build queue: ${esc(BUILDINGS[e.btype].name[this.faction(e.owner)])} dropped (${esc(e.why)})` });
       else if (e.type === 'spawn' && e.owner === this.me) lines.push({ T: e.T, html: e.summon ? `<b class="t${e.owner}">A summoned Skeleton Warband</b> rises from the ground` : `<b class="t${e.owner}">New ${esc(FACTIONS[this.faction(e.owner)].units[e.role].name)}</b> join your army` });
       else if (e.type === 'bdown') lines.push({ T: e.T, html: `${name(e.id)} is destroyed` });
+      else if (e.type === 'toMelee') lines.push({ T: e.T, html: `${name(e.id)} is locked in melee: its ${e.from === 'volley' ? 'volley' : esc(skillOf(defOf(tl.squads.find(x => x.id === e.id)), e.from)?.name || e.from)} becomes a melee strike at ${name(e.t)}` });
       else if (e.type === 'pushed' && tl.squads.find(x => x.id === e.id)?.owner === this.me) lines.push({ T: e.T, html: `${name(e.id)} makes way for ${name(e.bid)}` });
       else if (e.type === 'shrine') lines.push({ T: e.T, html: e.owner === this.me ? 'You claim a resource site' : e.owner < 0 ? 'A resource site is freed' : 'The enemy claims a resource site' });
       else if (e.type === 'income' && e.owner === this.me) {
@@ -1434,6 +1437,7 @@ const HELP = {
 <li><b>Two kinds of attack.</b> <b>Area attacks</b> (volleys, lobs and most skills) are <b>skillshots</b>: they hit whatever is inside the shape when they land. The shape charges up during its wind-up, so enemies can walk out of it, and yours can dodge.</li>
 <li><b>Passives</b> (✦): every unit type has one always-on ability, shown in its squad panel: ${['kingdom', 'undead'].flatMap(f => Object.values(FACTIONS[f].units).filter(u => u.passive && !u.summoned).map(u => `<b>${u.name}</b> ${u.passive.name} (${u.passive.desc.replace(/\.$/, '')})`)).join('; ')}. A squad hit by Warbands shows ✂ with its Rend stacks.</li>
 <li><b>Strike</b> (the melee attack) is a <b>target attack</b>: drop it on one enemy squad or building. If the target has stepped out of reach when the blow lands, the squad <b>lunges</b> at it (up to ${RULES.strikeLunge} AP of movement at its speed; not while it is locked in melee with another enemy). It hits only that target, for ${Math.round((RULES.strikeMult - 1) * 100)}% more than the listed damage.</li>
+<li><b>Locked in melee</b> (an enemy melee squad touching it): shooters and casters can't shoot. Their volleys and <b>ranged</b> skills (Piercing Bolt, Arrow Storm, Bone Blast, Dark Thunder; marked "ranged" on their buttons) turn into a weaker <b>melee Strike</b> at the enemy they fight. They also have a <b>Melee</b> button to strike on purpose.</li>
 <li><b>Volley</b>: a line that walls stop; forests give <b>cover</b> (half damage).</li>
 <li><b>Skills</b> are coloured by type (${G(GREEN)} movement, ${G(RED)} attack, ${G(BLUE)} defence and buffs) and recharge for a round or two. Heroes have three, one of each colour.</li>
 <li><b>Defend</b>: each defend halves one hit. <b>Parry</b> (fighters): blocks the next melee hit and strikes back. <b>Overwatch</b> (shooters): fires once at the first enemy that moves inside the cone, in any tier. <b>Act earlier</b> moves a squad up a tier.</li>

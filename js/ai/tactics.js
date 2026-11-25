@@ -5,7 +5,7 @@
 //  - Micro (by skill): focus fire shared between squads (kill what can be killed, the most dangerous
 //    first, without overkill), ranged squads kite melee, hurt squads pull back toward safety, skills via
 //    autoSkills, parry / defends on spare AP, aiming ahead of moving targets.
-import { RULES, isShooter } from '../data/units.js';
+import { RULES, isShooter, meleeOf } from '../data/units.js';
 import { emptyPlan, defOf, radiusOf, apFor } from '../sim/state.js';
 import { meleePlan, trimPath } from '../sim/stances.js';
 import { obstacles, navKey, bonusCp } from '../sim/base.js';
@@ -89,6 +89,11 @@ export function tactics(K, P, skill, mem, inf, tasks, o, rnd) {
     const auto = autoSkills(s, q, t, K.enemies, mine, plan, left, L);
     left = auto.left;
     if (auto.charged) { /* the charge and its swings are planned */ }
+    else if (isShooter(def) && meleeOf(def) && engagedWith(q, K.enemies).length) {
+      // locked in melee: its shots would turn into strikes anyway, so strike the one it is fighting
+      const foe = engagedWith(q, K.enemies).sort((a, b) => a.hp - b.hp)[0];
+      left = meleePlan(s, q, foe, plan, left);
+    }
     else if (isShooter(def)) {
       const melee = opts.filter(e => !isShooter(defOf(e))).sort((a, b) => dist(q.x, q.z, a.x, a.z) - dist(q.x, q.z, b.x, b.z))[0];
       const mgap = melee ? dist(q.x, q.z, melee.x, melee.z) - radiusOf(melee) - radiusOf(q) : 99;

@@ -9,7 +9,7 @@
 //  first enemy that moves in the front cone, in any tier), cover (forests halve volleys),
 //  line of sight (walls and rocks stop volleys; lobs arc over), skill cooldowns.
 // Produces the new state and a log used for scrubbable playback.
-import { RULES, isMelee, isShooter, skillOf, cdOf, gatherSlotsOf, isMage, unitDef } from '../data/units.js';
+import { RULES, isMelee, isShooter, skillOf, cdOf, gatherSlotsOf, isMage, unitDef, meleeOf, isRangedSkill } from '../data/units.js';
 import { dist, norm, segRect, segCircle } from './geom.js';
 import { clone, defOf, radiusOf, modelsFor, speedOf } from './state.js';
 import { validateOrders, actionCost } from './orders.js';
@@ -350,7 +350,7 @@ export function resolveRound(state0, ordersIn) {
   // from it, cut short by terrain, buildings and friends), then hit if it is in reach. A dead target:
   // the nearest enemy already in reach takes the hit instead.
   function strike(r, st) {
-    const q = r.q, at = r.def.attack, rq = radiusOf(q);
+    const q = r.q, at = meleeOf(r.def), rq = radiusOf(q);
     const gapTo = e => edgeFrom(e, q.x, q.z) - rq;
     let tg = st.tg ? unitAt(st.tg) : null;
     if (tg && tg.hp <= 0) {
@@ -383,8 +383,8 @@ export function resolveRound(state0, ordersIn) {
 
   // ---- one AP of an action ---------------------------------------------------------
   function step(r, moves, moved) {
-    const q = r.q, a = r.actions[r.idx];
-    const def = r.def;
+    const q = r.q, def = r.def;
+    let a = r.actions[r.idx];
     // stunned: nothing advances (no movement, no wind-up) until the stun has run out
     if (q.stun > 0) {
       if (!r.stunned) { r.stunned = true; ev({ type: 'stunned', id: q.id, ap: q.stun }); }
@@ -392,6 +392,17 @@ export function resolveRound(state0, ordersIn) {
       if (r.stun0 > 0) r.stun0--;
       if (!q.stun) { delete q.stun; r.stunned = false; ev({ type: 'unstun', id: q.id }); }
       return;
+    }
+    // locked in melee: a shot (volley / lob) or a ranged skill becomes a melee strike at the nearest enemy
+    // it is engaged with (nothing is spent on the skill: no mana, no cooldown)
+    if (r.el === 0 && meleeOf(def) && (a.kind === 'volley' || a.kind === 'lob' || isRangedSkill(skillOf(def, a.kind)))) {
+      const foes = engagedWith(q, living());
+      if (foes.length) {
+        const e = foes.sort((x, y) => dist(q.x, q.z, x.x, x.z) - dist(q.x, q.z, y.x, y.z))[0];
+        const from = a.kind;
+        a = r.actions[r.idx] = { kind: 'strike', t: e.id, x: e.x, z: e.z, cost: meleeOf(def).ap, from };
+        ev({ type: 'toMelee', id: q.id, from, t: e.id });
+      }
     }
     if (r.el === 0) {
       r.st = { phase: 'go' };

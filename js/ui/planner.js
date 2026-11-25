@@ -1,5 +1,5 @@
 // Draft orders for this round + predictions for drawing them.
-import { RULES, isMelee, isShooter, skillOf, skillsOf, cdOf, isMage, trainsOf } from '../data/units.js';
+import { RULES, isMelee, isShooter, skillOf, skillsOf, cdOf, isMage, trainsOf, meleeOf } from '../data/units.js';
 import { emptyOrders, emptyPlan, defOf, radiusOf, apFor } from '../sim/state.js';
 import { planCost, actionCost, cpUsage, SKILL_KINDS } from '../sim/orders.js';
 import { clampAim, engagedWith } from '../sim/resolve.js';
@@ -170,14 +170,16 @@ export class Planner {
   }
 
   // t: the Strike's target id (melee), tr: its radius (for the plan drawing)
-  addAttack(id, x, z, t = null, tr = 1) {
+  // melee: a shooter's own melee strike (its `melee` attack) instead of its shot
+  addAttack(id, x, z, t = null, tr = 1, melee = false) {
     const q = this.squad(id), def = defOf(q);
-    if (this.plan(id) && this.apLeft(q) < def.attack.ap) { this.g.toast(`Not enough AP (${def.attack.ap} needed)`, true); return false; }
+    const at = melee && meleeOf(def) ? meleeOf(def) : def.attack;
+    if (this.plan(id) && this.apLeft(q) < at.ap) { this.g.toast(`Not enough AP (${at.ap} needed)`, true); return false; }
     const plan = this.ensure(id); if (!plan) return false;
-    if (this.apLeft(q) < def.attack.ap) { this.g.toast(`Not enough AP (${def.attack.ap} needed)`, true); return false; }
-    plan.actions.push(def.attack.kind === 'strike' && t ? { kind: 'strike', t, x, z, tr } : { kind: def.attack.kind, x, z });
+    if (this.apLeft(q) < at.ap) { this.g.toast(`Not enough AP (${at.ap} needed)`, true); return false; }
+    plan.actions.push(at.kind === 'strike' && t ? { kind: 'strike', t, x, z, tr } : { kind: at.kind, x, z });
     plan.hist.push('a');
-    this.g.confirm(q, { strike: 'Strike', volley: 'Volley', lob: 'Lob' }[def.attack.kind]);
+    this.g.confirm(q, { strike: melee ? 'Melee strike' : 'Strike', volley: 'Volley', lob: 'Lob' }[at.kind]);
     this.g.changed();
     return true;
   }

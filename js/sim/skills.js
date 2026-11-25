@@ -2,7 +2,7 @@
 // have "auto skills" on (q.auto !== false). Adds skill actions to `plan` and returns
 // { left: AP left, charged: the squad charged into (its strikes are already added) or null }.
 //  t: the squad's current target (a squad, or a target-like object { x, z, isHq? }); lead: aim offset
-import { RULES, isShooter, skillOf, cdOf, isMage } from '../data/units.js';
+import { RULES, isShooter, skillOf, cdOf, isMage, isRangedSkill } from '../data/units.js';
 import { defOf, radiusOf } from './state.js';
 import { losCut, engagedWith } from './resolve.js';
 import { dist } from './geom.js';
@@ -21,6 +21,7 @@ export function autoSkills(s, q, t, enemies, mine, plan, left, lead = null) {
   const ready = kind => {
     const k = skillOf(def, kind);
     if (!k || left < k.ap) return null;
+    if (engaged.length && isRangedSkill(k)) return null;   // locked in melee: no shooting skills
     return (isMage(def) ? mana >= k.mana : cdOf(q, kind) === 0 && !used.has(kind)) ? k : null;
   };
   const cast = (kind, x, z) => { const k = skillOf(def, kind); plan.actions.push({ kind, x, z }); left -= k.ap; used.add(kind); if (isMage(def)) mana -= k.mana; };

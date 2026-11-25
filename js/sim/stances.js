@@ -6,7 +6,7 @@
 //            RULES.advanceEngage; otherwise march on: to its target point if it has one (then guard
 //            there), else on the enemy HQ (searching its possible spots while unknown)
 //  retreat : fall back to the nearest own Mine / Soul Well (else the HQ) and guard there
-import { RULES, isMelee, isShooter } from '../data/units.js';
+import { RULES, isMelee, isShooter, meleeOf } from '../data/units.js';
 import { defOf, radiusOf, emptyPlan, apFor } from './state.js';
 import { obstacles, navKey, hitRadius, edgeGap, footOf } from './base.js';
 import { builderIdleTarget, closestOn } from './builders.js';
@@ -16,6 +16,7 @@ import { HQ_X, mirrorOn } from '../data/maps.js';
 import { Nav, pathAP, walkAP } from './nav.js';
 import { dist } from './geom.js';
 import { coverOf, coverSpots } from './cover.js';
+import { engagedWith } from './resolve.js';
 
 const GUARD_RANGE = 8;
 
@@ -51,12 +52,12 @@ export function nearestEnemy(s, q, enemies, maxGap = 1e9) {
 // lead: optional {x,z} offset to aim where it is expected to be.
 export function meleePlan(s, q, e, plan, left, lead = null) {
   const def = defOf(q);
-  const r = radiusOf(q);
-  const strike = def.attack.ap;
+  const r = radiusOf(q), mel = meleeOf(def);
+  const strike = mel.ap;
   // walk to the target's edge: a squad's base, or the nearest point of a building's real footprint
   const foot = e.foot || (e.type ? e : null);
   const to = foot ? closestOn(foot, q.x, q.z) : e;
-  const want = r + (foot ? 0 : e.r ?? radiusOf(e)) + def.attack.reach * 0.55; // stop well inside reach
+  const want = r + (foot ? 0 : e.r ?? radiusOf(e)) + mel.reach * 0.55; // stop well inside reach
   const d = dist(q.x, q.z, to.x, to.z);
   let fromX = q.x, fromZ = q.z;
   if (d > want) {
@@ -127,6 +128,9 @@ export function buildStancePlan(s, q, enemies) {
   const attack = t => {
     const sk = skills(t, left); left = sk.left;
     if (sk.charged) { fillDefends(plan, left); return plan; }
+    // a shooter locked in melee fights back with its melee attack (its shots would turn into strikes anyway)
+    const locked = isShooter(def) && meleeOf(def) && engagedWith(q, enemies);
+    if (locked && locked.length) { left = meleePlan(s, q, locked[0], plan, left); fillDefends(plan, left); return plan; }
     if (isShooter(def)) {
       const range = def.attack.range, d = edgeGap(t, q.x, q.z);
       if (d > range - 0.3) {
@@ -194,6 +198,11 @@ function guardPlan(s, q, enemies, plan, left, skills = (t, l) => ({ left: l, cha
   if (st === 'hold') { fillDefends(plan, left); return plan; }
   const near = enemies.length ? nearestEnemy(s, q, enemies) : null;
   if (!enemies.length) { left = coverMove(s, q, plan, left, RULES.coverSeek, null); fillDefends(plan, left); return plan; }
+  const locked = isShooter(def) && meleeOf(def) ? engagedWith(q, enemies) : [];
+  if (locked.length) {   // locked in melee: strike back (shots and shooting skills are off)
+    left = skills(locked[0], left).left;
+    left = meleePlan(s, q, locked[0], plan, left); fillDefends(plan, left); return plan;
+  }
   if (isShooter(def)) {
     const range = def.attack.range;
     const t = nearestEnemy(s, q, enemies, range);
