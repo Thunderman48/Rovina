@@ -560,3 +560,33 @@ button { font-family: inherit; color: inherit; cursor: pointer; touch-action: ma
   .tt-detail:not(.on) { display: none; }
 }
 .tt-node > :first-child { grid-row: span 3; align-self: start; margin-top: 1px; }
+
+/* ---------- results screen (after the battle) ---------- */
+.res-card { width: min(720px, calc(100vw - 24px)); max-height: 92vh; display: flex; flex-direction: column; padding: 18px; }
+.res-why { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
+.res-body { overflow-y: auto; min-height: 0; }
+.res-sum { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.res-sum th { text-align: right; font-size: 13px; padding: 4px 8px; vertical-align: bottom; }
+.res-sum th small { display: block; color: var(--muted); font-weight: 500; font-size: 11px; }
+.res-sum td { padding: 4px 8px; border-top: 1px solid var(--line); text-align: right; color: var(--text); }
+.res-sum td:first-child { text-align: left; color: var(--muted); }
+.res-sum td.best { font-weight: 800; }
+.res-key { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: baseline; }
+.res-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 8px; }
+.res-legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--text); margin: 2px 0 6px; }
+.res-legend i, .res-tip i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+.res-chart { margin: 6px 0 10px; }
+.res-ct { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 2px; }
+.res-plot { position: relative; width: 100%; }
+.res-plot svg { display: block; width: 100%; height: auto; touch-action: pan-y; }
+.res-grid { stroke: rgba(255,255,255,.08); stroke-width: 1; }
+.res-ax { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.res-cross { stroke: rgba(255,255,255,.35); stroke-width: 1; }
+.res-tip { position: absolute; top: 0; padding: 6px 9px; border-radius: 10px; background: #0f0d0b; border: 1px solid var(--line); font-size: 12px; color: var(--text); pointer-events: none; display: flex; flex-direction: column; gap: 2px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.res-tls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 4px; }
+.res-tl h4 { margin: 0 0 6px; font-size: 13px; }
+.res-tli { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 0; border-top: 1px solid var(--line); color: var(--text); }
+.res-tli b { color: var(--muted); font-weight: 600; min-width: 34px; font-variant-numeric: tabular-nums; }
+.res-tli.none { color: var(--muted); }
+.res-foot { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+@media (max-width: 520px) { .res-tls { grid-template-columns: 1fr; } .res-card { padding: 14px; } .res-sum { font-size: 12px; } }

@@ -31,6 +31,7 @@ try { for (const k of Object.keys(localStorage)) if (k.startsWith('tiers-v4-')) 
     <div class="top-r">
       <div class="eco" id="t-sup"></div>
       <div class="cp" id="t-cp" title="Command points: squads you can give exact orders to this round"></div>
+      <button class="ib hidden" id="b-res" title="Battle results"></button>
       <button class="ib" id="b-tech" title="Tech tree (T)"></button>
       <button class="ib" id="b-help" title="How to play">?</button>
       <button class="ib" id="b-menu" title="Menu">≡</button>
@@ -148,6 +149,8 @@ try { for (const k of Object.keys(localStorage)) if (k.startsWith('tiers-v4-')) 
   </div>
 </div>
 
+
+<!-- used when an online opponent leaves; a finished battle shows the results screen (js/ui/results.js) -->
 <div id="over" class="overlay hidden">
   <div class="card"><h2 id="over-title">Victory</h2><p id="over-msg"></p><button class="ready" onclick="location.reload()">Play again</button></div>
 </div>

@@ -1472,6 +1472,39 @@ state. Income multiplier is 1 for both.
 
 ---
 
+## 15b. Results screen and battle statistics (`js/sim/stats.js`, `js/ui/results.js`)
+Since 2026-11-26. **Recorded by the sim** at the end of every round (`recordStats`, called last in
+`resolveRound`), so it is deterministic, part of the state, the same for both online players, and
+readable by tools: `s.stats = { rounds: [{ r, p: [side0, side1] }], tech: [[{ id, r }], ...] }`. Each side
+is an array in `STAT_KEYS` order (compact, since the host sends the state every round; about 11 KB for a
+90-round game); read with `statOf(entry, p, key)` / `statSeries(s, key, p)`.
+
+| Key | Meaning (per side, for that round) |
+|---|---|
+| `income` | this round's income: the `income` event's amount + gathering + souls from deaths − decay |
+| `bank` / `spent` | resource at the end of the round / spent this round (start bank + income − end bank; refunds lower it; never below 0) |
+| `earned` / `spentTotal` | cumulative income / spending |
+| `pop` / `squads` | population (§10.2) / army squads alive (no peasants or summons) |
+| `trained` / `lost` / `kills` | cumulative squads trained (`spawn`, no summons or revived heroes) / own squads destroyed / enemy squads destroyed (summoned skeletons count for neither) |
+| `models` | cumulative enemy models killed (`lost` of hits by this side) |
+| `buildings` / `built` / `razed` | finished buildings standing / cumulative finished (incl. instant ones) / enemy buildings destroyed |
+| `research` | research finished; `stats.tech[p]` lists each with its round |
+| `dmgUnits` / `dmgBuildings` | cumulative damage dealt to enemy squads / buildings (by the hit's source owner; tower and HQ fire included) |
+
+**The results screen** opens when the battle ends (instead of the old Victory card):
+- **Header:** the result, the reason, the rounds played, the AI level.
+- **Summary table:** both sides; the better value of each row in bold.
+- **Graph tabs**, each a line chart per round with one line per side (blue: you, orange: the other side):
+  - **Economy:** income a round, total earned.
+  - **Units:** population, army squads.
+  - **Kills:** squads, models.
+  - **Buildings:** standing, enemy destroyed.
+  - **Research:** done, plus a timeline of what each side researched and when.
+  - **Damage:** to squads, to buildings.
+- **Reading the graphs:** hover or tap shows the round's values.
+- **Buttons:** "View the battlefield" closes it, and a Results button (in the Tech tree button's place) reopens it; "Play again".
+- **Fog:** the enemy's numbers are shown in full once the battle is over (as in RTS score screens).
+
 ## 16. Balance status
 
 <!-- BALANCE -->
@@ -1645,6 +1678,7 @@ Balance report 2026-11-26 · 8 seeds x 2 orders per map x 2 (new AI on each side
 | Durability | every `hpPer` and `BUILDINGS.<type>.hp` (×2 on 2026-11-24, ×1.5 on 2026-11-26; The Chosen 260 kept), heals (Monolith 12, Field Hospital 9, Mass Graves +6, Reassemble 3), HP research (Hardy Peasants +6, Bone Tide +3), tier HQ HP in `tech.js`; AI `PRIOR` 450 in `js/ai/learning.js` | how many rounds a fight lasts |
 | Ranged squads | `VOLLEY(ap, dmg, ...)` of Crossbows / Bone Archers (40 AP: 2 volleys a round; 2.7 / 1.9 a model since 2026-11-26), their skills, Free Yeomanry `attackAp` 35 | the ranged share of damage (78 % of all damage before the cut) |
 | Movement (inches per 100 AP) | `FACTIONS.<f>.units.<role>.move` (default tier × `RULES.moveFactor` × 100: Crossbows 4.8, Wraiths 9); tech `move` effects | how far a squad walks; tier only sets initiative |
+| Battle statistics (results screen) | `STAT_KEYS` / `recordStats` in `js/sim/stats.js`; the screen and its tabs in `js/ui/results.js` (`TABS`) | what is recorded each round and which graphs are shown (no effect on play) |
 | Population and upkeep | `FACTIONS.<f>.units.<role>.pop` (the `POP` table in `units.js`: 1 / 2 / 3; heroes, builders, summons 0), `RULES.armyCap` (pop cap 50; maps + capBonus × 1.5), `RULES.upkeepPerPop` 0.3, `RULES.upkeepFree` 8 | army size and how much a big army slows the economy |
 | Cancel refund | `RULES.siteRefund` 0.75 | refund for cancelling an unfinished building |
 | Unit unlock research | `GATES` and the `drill` / `stables` / `vigil` / `pact` / `circle` items in `js/data/tech.js` | when elite squads appear |

@@ -20,6 +20,7 @@ import { obstacles, navKey, hitRadius, bdef, applyQueue, startQueues, graveAt, s
 import { approachSpot, closestOn } from './builders.js';
 import { coverOf, coverMult } from './cover.js';
 import { Nav } from './nav.js';
+import { statsOwners, recordStats } from './stats.js';
 import { BUILDINGS, FACTIONS, trainCost } from '../data/units.js';
 import { addSquad, freeSpot } from './state.js';
 
@@ -81,6 +82,7 @@ export function engagedWith(q, squads) {
 export function resolveRound(state0, ordersIn) {
   const s = clone(state0);
   const round = s.round;
+  const statOwners = statsOwners(s), statBank = s.supply.slice();   // for the results screen
   updateIntel(s);
   const orders = [0, 1].map(p => validateOrders(s, p, ordersIn[p]));
   const log = { round, segments: [] };
@@ -1100,6 +1102,7 @@ export function resolveRound(state0, ordersIn) {
   else if (lost[1]) s.winner = 0;
   // no round limit: the battle goes on until an HQ falls
   log.segments.push(seg);
+  recordStats(s, log.segments.flatMap(g => g.events), statOwners, statBank, round);
   s.round++;
   return { state: s, log };
 }

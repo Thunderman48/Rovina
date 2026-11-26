@@ -27,6 +27,8 @@ It is a static site with no build step and no server, so it runs on GitHub Pages
   population (1–3 pop; heroes and peasants are free) against a cap of 50 (more on big maps), and every
   pop above 8 costs upkeep from your income, like Dawn of War. Unfinished buildings can be cancelled
   for a 75 % refund.
+* **Results screen** after the battle: a summary of both sides and graphs per round for economy,
+  units, kills, buildings, research and damage dealt.
 * **A long tech tree:** elite squads need their own unlock research after Tier 2, weapon and armour
   lines go up to level III with rising costs, and many small upgrades and a few ability upgrades
   (Lock Shields, Fire Volley, Bone Spear, Shadow Step...) fill the tree. Movement is its own stat

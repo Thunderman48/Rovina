@@ -23,6 +23,7 @@ import { BaseUI } from './ui/baseui.js';
 import { ProductionUI } from './ui/production.js';
 import { TechTreeUI } from './ui/techtree.js';
 import { EconomyUI } from './ui/economy.js';
+import { ResultsUI } from './ui/results.js';
 import { TECH } from './data/tech.js';
 import { OnlineUI } from './ui/online.js';
 import { SettingsUI } from './ui/settings.js';
@@ -123,8 +124,10 @@ class Game {
     $('o-close').onclick = () => $('opts').classList.add('hidden');
     $('o-tech').onclick = () => { $('opts').classList.add('hidden'); this.openTechTree(); };
     $('b-tech').onclick = () => this.openTechTree();
+    $('b-res').onclick = () => this.openResults();
     $('t-sup').onclick = e => { if (e.target.closest('.ec.gold, .ec.souls')) this.openEconomy(); };
     $('b-tech').innerHTML = icon('tech', 18);
+    $('b-res').innerHTML = icon('goal', 18);
     $('o-quit').onclick = () => { try { this.net?.send({ t: 'bye' }); } catch {} setTimeout(() => location.reload(), 150); };
     this.initSettings();
     if (/statue/.test(location.search)) this.setAnim('statue', false);
@@ -373,11 +376,7 @@ class Game {
     for (const [id, v] of this.views) if (!this.state.squads.some(q => q.id === id)) { v.destroy(); this.views.delete(id); this.labels.get(id)?.remove(); this.labels.delete(id); }
     if (this.state.winner !== null) {
       const w = this.state.winner;
-      $('over-title').textContent = w === this.me ? 'Victory' : w === -1 ? 'Draw' : 'Defeat';
-      const enemyHq = BUILDINGS.hq.name[this.faction(this.ai)], myHq = BUILDINGS.hq.name[this.faction(this.me)];
-      $('over-msg').textContent = w === -1 ? 'Both sides are spent: the battle ends in a draw.'
-        : w === this.me ? `The enemy ${enemyHq} has fallen.` : `Your ${myHq} has fallen.`;
-      $('over').classList.remove('hidden');
+      this.openResults(true);   // the results screen: summary and graphs (js/ui/results.js)
       sfx(w === this.me ? 'victory' : 'defeat');
     }
     this.beginPlanning();
@@ -1360,7 +1359,7 @@ class Game {
   }
 }
 
-Object.assign(Game.prototype, BaseUI, ProductionUI, OnlineUI, SettingsUI, TechTreeUI, EconomyUI);
+Object.assign(Game.prototype, BaseUI, ProductionUI, OnlineUI, SettingsUI, TechTreeUI, EconomyUI, ResultsUI);
 
 const CAT_HEX = { move: '#34c759', attack: '#ff3b30', defense: '#3fa9ff' };
 const STANCE_TIP = {
@@ -1465,6 +1464,7 @@ const HELP = {
 <li><b>Production queues.</b> One build queue for your base (up to ${RULES.queueMaxBuild}) and a training queue at every HQ / Barracks (up to ${RULES.queueMax}). Each item is <b>paid when it starts</b>; if you can't afford it, no builder is free or the army is at its cap, the queue <b>waits</b> (amber dot). The <b>Production</b> bar above your squad cards shows every queue: tap an icon to remove it (tap the squad in training twice to stop it for a refund), drag one sideways to reorder.</li>
 <li><b>Barracks / Ossuaries</b> train fighters, shooters and fast squads in 2 rounds, tanks in 3. <b>Towers</b> see far and shoot. <b>Banners</b> (Kingdom): +1 command point. <b>Monoliths</b> (Undead): graves and a small heal. <b>Walls</b> block paths and volleys. Population cap: ${RULES.armyCap} pop (more on the big maps): most squads cost 1–3 pop, heroes, peasants and summons nothing. Every pop above ${RULES.upkeepFree} costs <b>upkeep</b> (${RULES.upkeepPerPop} a pop, from your round income). You start with nothing: the first income comes at the end of round 1. An unfinished building can be cancelled for a ${Math.round(RULES.siteRefund * 100)} % refund.</li>
 <li><b>Tech tree</b> (🜲 button, or T): research is done at your HQ and in tech buildings, in the same queue as training (paid when it starts; the building does nothing else meanwhile). <b>Tier 2</b> (Castle / Mausoleum, at the HQ) opens the <b>unit unlocks</b> at the Barracks / Ossuary (each elite squad needs its own: Shieldwall Drill, Outrider Stables; Grave Vigil, Wraith Pact, Necromancer Circle), the ability upgrades (new skills such as Lock Shields, Fire Volley, Bone Spear, Shadow Step) and the tech buildings (Blacksmith and Chapel / Charnel Pit and Dark Sanctum). <b>Tier 3</b> (Citadel / Necropolis) unlocks the strongest research. At each tier you pick <b>one of two doctrines</b>: the other is locked for the rest of the battle. Weapon and armour lines go up to level III, each level dearer than the last; many small upgrades (+1 armour, +10 % damage, faster mining...) cost little. Research stays even if the building that did it falls.</li>
+<li><b>Results:</b> when the battle ends, the results screen compares both sides (resources, squads trained and lost, kills, buildings, research, damage) with a graph per round for each. Close it to look at the battlefield; the results button in the top bar opens it again.</li>
 </ul>`,
   fog: () => `
 <p>The table is covered in <b>fog</b>: thick mist where you have never been, a thin haze where you have been but can't see right now. You only see enemies your squads and buildings can see: within their vision, not behind walls or rocks, and not deep in a forest (a squad inside a forest is only seen from close by). Hidden enemies show as faded <b>last seen</b> markers, and enemy buildings stay where you last saw them.</p>

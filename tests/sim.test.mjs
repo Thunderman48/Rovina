@@ -11,6 +11,7 @@ import { MATCHUPS } from '../js/ai/matchups.js';
 import { canSee, visibleTo } from '../js/sim/vision.js';
 import { popCost, soulDecayOf, incomeParts, edgeDist, placeError, addBuilding, incomeOf, obstacles, startQueues, armySize, spreadGraves, finishTech, techError, gateOf, validateQueue, bdef, bname, tkOf, ruleOf, bonusCp } from '../js/sim/base.js';
 import { TECH } from '../js/data/tech.js';
+import { statOf, statSeries } from '../js/sim/stats.js';
 import { Planner } from '../js/ui/planner.js';
 import { builderPlan } from '../js/sim/builders.js';
 import { coverOf, coverMult } from '../js/sim/cover.js';
@@ -1806,6 +1807,43 @@ test('durability x1.5 (The Chosen excepted); ranged squads fire 2 volleys a roun
   const o = holdAll(s);
   o[0].squads.q1 = plan([{ kind: 'volley', x: 18, z: 10 }, { kind: 'volley', x: 18, z: 10 }, { kind: 'volley', x: 18, z: 10 }]);
   eq(validateOrders(s, 0, o[0]).squads.q1.actions.filter(a => a.kind === 'volley').length, 2, 'only 2 volleys fit in 100 AP');
+});
+
+console.log('M11 results screen stats');
+
+test('stats: one entry a round for both sides; kills, losses, models and damage match the events', () => {
+  const s = arena([[0, 'fighter', 20, 16], [1, 'swarm', 22.4, 16, { hp: 1 }]]);
+  const o = holdAll(s);
+  o[0].squads.q1 = plan([{ kind: 'strike', t: 'q2', x: 22.4, z: 16 }]);
+  const r = resolveRound(s, o), ev = events(r.log);
+  eq(r.state.stats.rounds.length, 1); eq(r.state.stats.rounds[0].p.length, 2);
+  const A = r.state.stats.rounds[0];
+  ok(ev.some(e => e.type === 'down' && e.id === 'q2'), 'the Warband falls');
+  eq(statOf(A, 0, 'kills'), 1); eq(statOf(A, 1, 'lost'), 1); eq(statOf(A, 0, 'lost'), 0);
+  eq(statOf(A, 0, 'models'), ev.filter(e => e.type === 'hit' && e.src === 'q1').reduce((n, e) => n + (e.lost || 0), 0));
+  eq(statOf(A, 0, 'dmgUnits'), ev.filter(e => e.type === 'hit' && e.src === 'q1').reduce((n, e) => n + e.dmg, 0));
+  const inc = ev.find(e => e.type === 'income' && e.owner === 0);
+  eq(statOf(A, 0, 'bank'), r.state.supply[0]); eq(statOf(A, 0, 'income'), inc.amount);
+  const r2 = resolveRound(r.state, holdAll(r.state));
+  eq(r2.state.stats.rounds.length, 2); eq(statOf(r2.state.stats.rounds[1], 0, 'kills'), 1, 'cumulative');
+  eq(JSON.stringify(resolveRound(s, o).state.stats), JSON.stringify(r.state.stats), 'deterministic');
+  eq(JSON.stringify(JSON.parse(JSON.stringify(r2.state)).stats), JSON.stringify(r2.state.stats), 'survives a clone');
+});
+
+test('stats: research with its round, finished buildings, training and spending', () => {
+  const s = arena([[0, 'builder', 7, 4]]);
+  const k = s.buildings.find(b => b.owner === 0 && b.type === 'hq');
+  addBuilding(s, 0, 'tower', 7, 7, 0, false).build = 10;
+  const o = holdAll(s); o[0].squads.q1 = plan([{ kind: 'work', x: 7, z: 7, ap: 60 }]);
+  o[0].queue = { trains: { [k.id]: ['tech:plough'] } };
+  let r = resolveRound(s, o).state;
+  const A = r.stats.rounds[0];
+  eq(statOf(A, 0, 'built'), 1, 'the tower was finished');
+  eq(statOf(A, 0, 'spent'), TECH.plough.cost, 'paid for the research');
+  r = resolveRound(r, holdAll(r)).state;
+  eq(JSON.stringify(r.stats.tech[0]), JSON.stringify([{ id: 'plough', r: s.round }]), 'Heavy Plough (1 round) finished in the first round');
+  eq(statSeries(r, 'research', 0).join(), '1,1');
+  eq(r.stats.rounds.map(e => e.r).join(), [s.round, s.round + 1].join(), 'entries carry their round number');
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);
