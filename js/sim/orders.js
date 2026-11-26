@@ -1,7 +1,7 @@
 // Order costs and validation (shared by the planner UI, the AI and the resolver).
 import { RULES, isMelee, isShooter, skillOf, cdOf, isMage, meleeOf, SKILL_KINDS as SK } from '../data/units.js';
 import { defOf, emptyPlan, apFor } from './state.js';
-import { validateQueue, bonusCp } from './base.js';
+import { validateQueue, bonusCp , canReinforce } from './base.js';
 
 export const STANCES = ['guard', 'hold', 'advance', 'retreat'];
 
@@ -17,7 +17,7 @@ export function actionCost(q, a) {
   }
 }
 export const SKILL_KINDS = SK;
-export function prepaidCost(plan) { return upgradeCost(plan.upgrades || 0) + (plan.defends || 0) * RULES.defendCost + (plan.parry ? RULES.parryCost : 0) + (plan.overwatch ? RULES.overwatchCost : 0); }
+export function prepaidCost(plan) { return upgradeCost(plan.upgrades || 0) + (plan.defends || 0) * RULES.defendCost + (plan.parry ? RULES.parryCost : 0) + (plan.overwatch ? RULES.overwatchCost : 0) + (plan.reinforce || 0) * RULES.reinforceAp; }
 export function planCost(q, plan) { return prepaidCost(plan) + plan.actions.reduce((n, a) => n + actionCost(q, a), 0); }
 
 const num = v => (typeof v === 'number' && isFinite(v) ? v : 0);
@@ -28,6 +28,7 @@ export function sanitizePlan(q, plan) {
   p.upgrades = Math.max(0, Math.min(RULES.maxUpgrades, plan.upgrades | 0));
   p.defends = Math.max(0, Math.min(RULES.maxDefends, plan.defends | 0));
   if (plan.parry && def.parry) p.parry = true;
+  if (canReinforce(q)) p.reinforce = Math.max(0, Math.min(RULES.reinforceMax, plan.reinforce | 0));
   if (plan.overwatch && isShooter(def) && (def.slots || []).some(sl => sl.kind === 'overwatch')) p.overwatch = { x: num(plan.overwatch.x), z: num(plan.overwatch.z) };
   let used = prepaidCost(p);
   const budget = apFor(q);

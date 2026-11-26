@@ -38,6 +38,8 @@ It is a static site with no build step and no server, so it runs on GitHub Pages
   Wells plus souls from deaths on their graves, and banked souls above 80 decay.
 * **Locked in melee:** shooters and casters can't shoot or use ranged skills while an enemy melee
   squad is on them; their shots become a weaker melee strike on their own (no melee by hand).
+* **Fewer, bigger squads you keep alive:** squads have 6–10 models; pull a hurt squad back to one of your
+  buildings (Undead: onto your graves) and Reinforce it model by model instead of training a new one.
 * **Clear unit kits:** every squad has the same actions (move, attack, defend, act earlier), a few
   skills (normal squads 2, elites 3, heroes 3; some unlocked by research) and passives (heroes 2), each
   with its own icon, shown as three rows in the order panel.

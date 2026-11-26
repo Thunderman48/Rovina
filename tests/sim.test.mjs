@@ -9,7 +9,7 @@ import { PERSONALITIES, SKILL, BRUTAL_INCOME, pickPersonality } from '../js/ai/p
 import { fightRatio } from '../js/ai/combat.js';
 import { MATCHUPS } from '../js/ai/matchups.js';
 import { canSee, visibleTo } from '../js/sim/vision.js';
-import { popCost, soulDecayOf, incomeParts, edgeDist, placeError, addBuilding, incomeOf, obstacles, startQueues, armySize, spreadGraves, finishTech, techError, gateOf, validateQueue, bdef, bname, tkOf, ruleOf, bonusCp } from '../js/sim/base.js';
+import { canReinforce, reinforceCost, reinforceSpotError, popCost, soulDecayOf, incomeParts, edgeDist, placeError, addBuilding, incomeOf, obstacles, startQueues, armySize, spreadGraves, finishTech, techError, gateOf, validateQueue, bdef, bname, tkOf, ruleOf, bonusCp } from '../js/sim/base.js';
 import { TECH } from '../js/data/tech.js';
 import { statOf, statSeries } from '../js/sim/stats.js';
 import { Planner } from '../js/ui/planner.js';
@@ -45,6 +45,8 @@ function arena(list) {
 }
 const orders = (squads = {}, stances = {}) => ({ squads, stances });
 const plan = (actions, extra = {}) => ({ ...emptyPlan(), actions, ...extra });
+// a squad with fewer models (and so the smaller base of the old 4-model squads): for tests that depend on exact spacing
+const few = (f, r, n) => ({ models: n, hp: n * FACTIONS[f].units[r].hpPer });
 const holdAll = s => { const o = [orders(), orders()]; for (const q of s.squads) o[q.owner].stances[q.id] = 'hold'; return o; };
 const events = log => log.segments.flatMap(sg => sg.events.map(e => ({ ...e, seg: sg })));
 
@@ -133,7 +135,7 @@ test('a strike with no enemy within reach + lunge and none near its aim point wh
 });
 
 test('a strike lunges at a target that stepped out of reach (up to strikeLunge AP of movement)', () => {
-  const s = arena([[0, 'fighter', 20, 16], [1, 'fighter', 24.4, 16]]);
+  const s = arena([[0, 'fighter', 20, 16, few('kingdom', 'fighter', 4)], [1, 'fighter', 24.4, 16, few('undead', 'fighter', 4)]]);
   const o = holdAll(s);
   // the target stands just out of reach and walks 1" further away before the blow lands (not engaged)
   o[0].squads.q1 = plan([{ kind: 'strike', t: 'q2', x: 24.4, z: 16 }]);
@@ -156,7 +158,7 @@ test('a faster squad that runs far enough escapes even the lunge', () => {
 });
 
 test('locked in melee with another enemy: no lunge, the strike hits the enemy it is locked with', () => {
-  const s = arena([[0, 'fighter', 20, 16], [1, 'fighter', 20, 18.2], [1, 'fighter', 24.5, 16]]);
+  const s = arena([[0, 'fighter', 20, 16, few('kingdom', 'fighter', 4)], [1, 'fighter', 20, 18.2, few('undead', 'fighter', 4)], [1, 'fighter', 24.5, 16, few('undead', 'fighter', 4)]]);
   const o = holdAll(s);
   o[0].squads.q1 = plan([{ kind: 'strike', t: 'q3', x: 24.5, z: 16 }]);
   const { state, log } = resolveRound(s, o);
@@ -175,7 +177,7 @@ test('a strike at a hidden squad id hits the enemy in reach instead', () => {
 });
 
 test('a strike whose target is beyond reach + lunge chases it instead of swinging at nothing', () => {
-  const s = arena([[0, 'fighter', 20, 16], [1, 'fighter', 26.5, 16]]);
+  const s = arena([[0, 'fighter', 20, 16, few('kingdom', 'fighter', 4)], [1, 'fighter', 26.5, 16, few('undead', 'fighter', 4)]]);
   const o = holdAll(s);
   o[0].squads.q1 = plan([{ kind: 'strike', t: 'q2', x: 26.5, z: 16 }, { kind: 'strike', t: 'q2', x: 26.5, z: 16 }]);
   const { state, log } = resolveRound(s, o);
@@ -623,8 +625,9 @@ test('Corpse Explosion bursts a summoned squad and hits the enemies around it (n
 });
 
 test('summoned skeletons are Skeleton Warbands with a timed life', () => {
-  const U = FACTIONS.undead.units, { role, summoned, pop: p1, ...rest } = U.summon, { role: r2, pair, pop: p2, ...sw } = U.swarm;
-  eq(JSON.stringify(rest), JSON.stringify(sw), 'same name, models, HP, armour, tier, look, attack');
+  const U = FACTIONS.undead.units, { role, summoned, pop: p1, models: m1, ...rest } = U.summon, { role: r2, pair, pop: p2, models: m2, ...sw } = U.swarm;
+  eq(JSON.stringify(rest), JSON.stringify(sw), 'same name, HP, armour, tier, look, attack');
+  eq(m1 + '/' + m2, '5/10', 'summons stay 5 models while trained Warbands have 10 (2026-11-26)');
   ok(summoned && role === 'summon' && U.summon.pair === undefined, 'a summon, not a pair');
   eq(U.summon.name, 'Skeleton Warband');
 });
@@ -712,10 +715,10 @@ test('stance squads use their skills on their own unless auto skills is switched
   eq(r.state.squads[0].auto, false, 'switched off by order');
 });
 
-test('the Skeleton Warband: trains in pairs over 2 rounds, 5 models x 21 HP, armour 2, a smaller base, slow', () => {
+test('the Skeleton Warband: trains in pairs over 2 rounds, 10 models x 21 HP, armour 2, a smaller base, slow', () => {
   const U = FACTIONS.undead.units;
-  eq(U.swarm.pair, 2); eq(U.swarm.models, 5); eq(U.swarm.hpPer, 21); eq(U.swarm.armor, 2); eq(U.swarm.tier, 3, 'tier 3: 3.6" a round'); eq(U.swarm.attack.dmg, 2.8); eq(U.fighter.name, 'Skeleton Warriors');
-  eq(RULES.trainRounds.swarm, 2); eq(FACTIONS.undead.train.swarm, 20);
+  eq(U.swarm.pair, 2); eq(U.swarm.models, 10); eq(U.swarm.hpPer, 21); eq(U.swarm.armor, 2); eq(U.swarm.tier, 3, 'tier 3: 3.6" a round'); eq(U.swarm.attack.dmg, 2.8); eq(U.fighter.name, 'Skeleton Warriors');
+  eq(RULES.trainRounds.swarm, 2); eq(FACTIONS.undead.train.swarm, 40);
   ok(squadRadius(U.swarm, 5) < squadRadius({ ...U.swarm, compact: undefined }, 5) * 0.81, 'a compact base');
   const s = arena([[1, 'fighter', 40, 4]]); s.supply[1] = 100;
   const crypt = s.buildings.find(b => b.owner === 1 && b.type === 'hq');
@@ -723,8 +726,8 @@ test('the Skeleton Warband: trains in pairs over 2 rounds, 5 models x 21 HP, arm
   eq(r.state.squads.filter(q => q.owner === 1 && q.role === 'swarm').length, 0, 'not yet after one round');
   r = resolveRound(r.state, [orders(), { squads: {}, stances: {} }]);
   eq(r.state.squads.filter(q => q.owner === 1 && q.role === 'swarm').length, 2, 'two squads from one training');
-  eq(armySize(r.state, 1), 3, 'both count toward the cap');
-  const full = arena([[1, 'fighter', 40, 4]]); full.supply[1] = 100; full.board.cap = 2;
+  eq(armySize(r.state, 1), 6, 'both count toward the cap (2 pop each, the Warriors 2)');
+  const full = arena([[1, 'fighter', 40, 4]]); full.supply[1] = 100; full.board.cap = 5;
   eq(startQueues(full, 1, { tq: { [crypt.id]: ['swarm'] } }).trains[crypt.id][0].wait, 'cap', 'needs room for both');
 });
 
@@ -998,13 +1001,13 @@ test('training queue: each squad is paid when it starts, and they come out one a
 });
 
 test('an unaffordable front item waits and nothing behind it jumps ahead', () => {
-  const s = k(); s.supply[0] = 25;
+  const s = k(); s.supply[0] = 51;
   const b = addBuilding(s, 0, 'barracks', 6, 4, 0, true);
   const fc = startQueues(s, 0, { tq: { [b.id]: ['ranged', 'fighter'] } });
   eq(fc.trains[b.id][0].wait, 'gold'); eq(fc.trains[b.id][0].need, 1); eq(fc.trains[b.id][1].wait, 'line');
   let r = resolveRound(s, [qo({ trains: { [b.id]: ['ranged', 'fighter'] } }), ob()]);
   let B = r.state.buildings.find(x => x.id === b.id);
-  eq(B.train, null, 'the crossbows wait (25 < 26) and the fighter (24) does not jump ahead'); eq(r.state.supply[0], 25 + incomeOf(r.state, 0));
+  eq(B.train, null, 'the crossbows wait (51 < 52) and the fighter (48) does not jump ahead'); eq(r.state.supply[0], 51 + incomeOf(r.state, 0));
   r = resolveRound(r.state, [ob(), ob()]);
   eq(r.state.buildings.find(x => x.id === b.id).train.role, 'ranged', 'starts once income arrives');
 });
@@ -1297,7 +1300,7 @@ test('a side loses only when its HQ falls (no squads and no barracks is not a lo
 
 test('Necromancers: a weaker caster troop with mana; its summon raises one squad', () => {
   const N = FACTIONS.undead.units.mage;
-  ok(N && N.mana && N.models === 2); eq(FACTIONS.undead.units.hero.name, 'Lich');
+  ok(N && N.mana && N.models === 4); eq(FACTIONS.undead.units.hero.name, 'Lich');
   const s = arena([[1, 'mage', 30, 16]]);
   const o = holdAll(s); o[1].squads.q1 = plan([{ kind: 'summon', x: 27, z: 16 }]);
   const r = resolveRound(s, o);
@@ -1505,9 +1508,9 @@ test('AI: combat prediction favours the bigger and the better army', () => {
   ok(fightRatio(B, A) < 0.8, 'and the other way round');
   ok(fightRatio(A.slice(0, 1), A.slice(0, 2)) < fightRatio(A.slice(0, 2), A.slice(0, 1)), 'more of the same is stronger');
   // the matchup table (combat simulator): consistent both ways, and since 2026-11-26 (ranged cut, sturdier
-  // units, stronger Kingdom melee) Men-at-arms beat a Warband pair at equal cost
+  // units, stronger Kingdom melee, bigger squads) Men-at-arms and a Warband pair are close at equal cost
   ok(Math.abs(MATCHUPS['kingdom>undead'].ranged.fighter + MATCHUPS['undead>kingdom'].fighter.ranged) < 0.05, 'the table is symmetric');
-  ok(MATCHUPS['kingdom>undead'].fighter.swarm > 0, 'Men-at-arms beat the Warband');
+  ok(Math.abs(MATCHUPS['kingdom>undead'].fighter.swarm) < 0.3, 'Men-at-arms and a Warband pair are close at equal cost: ' + MATCHUPS['kingdom>undead'].fighter.swarm);
 });
 
 test('AI: difficulty is skill; only Brutal cheats (+30 % income)', () => {
@@ -1536,7 +1539,7 @@ test('AI: every personality builds, researches and attacks', () => {
   for (const f of ['kingdom', 'undead']) for (const P of PERSONALITIES[f]) {
     const fac = f === 'kingdom' ? ['kingdom', 'undead'] : ['undead', 'kingdom'];
     // a personality on the back foot may not attack in one game: it must in at least one of two
-    const games = [2, 3].map(seed => aiGame(seed, fac, 'twinrivers', 60, [{ personality: P.id }, {}]));
+    const games = [2, 3].map(seed => aiGame(seed, fac, 'twinrivers', 80, [{ personality: P.id }, {}]));
     for (const { s } of games) {
       const built = (s.buildings || []).filter(b => b.owner === 0).length;
       ok(built >= 3 || s.winner !== null, P.id + ' builds (' + built + ')');
@@ -1677,7 +1680,7 @@ test('a shooter locked in melee: its planned volley becomes a melee strike at th
   ok(ev.some(e => e.type === 'toMelee' && e.id === 'q1' && e.from === 'volley' && e.t === 'q2'), 'converted');
   const hit = ev.find(e => e.type === 'hit' && e.src === 'q1');
   eq(hit.kind, 'strike'); eq(hit.dst, 'q2');
-  eq(hit.raw, Math.round(FACTIONS.kingdom.units.ranged.melee.dmg * 4 * RULES.strikeMult), 'its weaker melee attack');
+  eq(hit.raw, Math.round(FACTIONS.kingdom.units.ranged.melee.dmg * s.squads[0].models * RULES.strikeMult), 'its weaker melee attack');
 });
 
 test('ranged skills (tagged) turn into strikes while locked in melee, and cost nothing', () => {
@@ -1727,21 +1730,21 @@ test('Crossbows a bit weaker, the Lich hits harder', () => {
 
 console.log('M9 population, upkeep, longer tree, movement');
 
-test('population: squads cost pop (Warband pair 2, Men-at-arms 2, Shieldwall 3; heroes, peasants, summons free)', () => {
-  eq(popCost('undead', 'swarm'), 2); eq(popCost('kingdom', 'fighter'), 2); eq(popCost('kingdom', 'tank'), 3);
+test('population: squads cost pop (Warband pair 4, Men-at-arms 4, Shieldwall 6; heroes, peasants, summons free)', () => {
+  eq(popCost('undead', 'swarm'), 4); eq(popCost('kingdom', 'fighter'), 4); eq(popCost('kingdom', 'tank'), 6);
   eq(popCost('kingdom', 'hero'), 0); eq(popCost('kingdom', 'builder'), 0);
   const s = arena([[0, 'fighter', 10, 10], [0, 'tank', 10, 14], [0, 'hero', 10, 18], [0, 'builder', 10, 22]]);
-  eq(armySize(s, 0), 5);
-  const full = arena([[0, 'fighter', 10, 10]]); full.board.cap = 3;
+  eq(armySize(s, 0), 10);
+  const full = arena([[0, 'fighter', 10, 10]]); full.board.cap = 7;
   const bar = addBuilding(full, 0, 'barracks', 6, 4, 0, true); full.supply[0] = 500;
-  eq(startQueues(full, 0, { tq: { [bar.id]: ['fighter'] } }).trains[bar.id][0].wait, 'cap', '2 + 2 > 3');
+  eq(startQueues(full, 0, { tq: { [bar.id]: ['fighter'] } }).trains[bar.id][0].wait, 'cap', '4 + 4 > 7');
 });
 
 test('upkeep: income drops with population above the free amount, never below 0', () => {
   const s = arena([]);
   for (let i = 0; i < 10; i++) addSquad(s, 0, 'fighter', 8 + (i % 5) * 3, 6 + Math.floor(i / 5) * 3);
   const P = incomeParts(s, 0);
-  eq(P.pop, 20); eq(P.upkeep, Math.min(P.hq, Math.floor((20 - RULES.upkeepFree) * RULES.upkeepPerPop)));
+  eq(P.pop, 40); eq(P.upkeep, Math.min(P.hq, Math.floor((40 - RULES.upkeepFree) * RULES.upkeepPerPop)));
   eq(incomeOf(s, 0), P.hq - P.upkeep);
   for (let i = 0; i < 30; i++) addSquad(s, 0, 'tank', 20 + (i % 6) * 3, 8 + Math.floor(i / 6) * 3);
   eq(incomeOf(s, 0), 0, 'upkeep never takes more than the flat income');
@@ -1797,7 +1800,7 @@ test('Keep training: locking a second building keeps the first lock (planner dra
   const P = new Planner({ state: s, me: 0, changed() {} });
   P.setRepeat(A, 'fighter'); P.setRepeat(B, 'ranged');
   eq(JSON.stringify(P.draft.repeat), JSON.stringify({ [A.id]: 'fighter', [B.id]: 'ranged' }));
-  eq(P.armyNext(), armySize(s, 0) + 4, 'both repeat starts counted (2 + 2 pop), no throw');
+  eq(P.armyNext(), armySize(s, 0) + 8, 'both repeat starts counted (4 + 4 pop), no throw');
   eq(popCost('kingdom', undefined), 0); eq(popCost('kingdom', 'nope'), 0);
   eq(P.supplyLeft(), 500 - trainCost('kingdom', 'fighter') - trainCost('kingdom', 'ranged'), 'the bank forecast pays both repeat starts');
   const r = resolveRound(s, [{ squads: {}, stances: {}, ...P.final() }, orders()]).state;
@@ -1903,7 +1906,7 @@ test('kits: new skills work (Shield Bash stuns, Trample hits around, Wheel Away 
   const m0 = s.squads[0].mana;
   o = holdAll(s); o[1].squads.q1 = plan([{ kind: 'raise', x: 20, z: 16 }]);
   const rr = resolveRound(s, o).state;
-  eq(rr.squads.find(q => q.id === 'q2').models, 4, 'Raise brings a model back');
+  eq(rr.squads.find(q => q.id === 'q2').models, 5, 'Raise brings 2 models back');
   ok(rr.squads.find(q => q.id === 'q1').mana < m0 + FACTIONS.undead.units.mage.mana.regen, 'paid mana');
 });
 
@@ -1937,6 +1940,54 @@ test('contact fight: a melee squad whose move is stopped by an enemy strikes it 
   const ev = events(resolveRound(s, o).log);
   ok(ev.some(e => e.type === 'contact' && e.id === 'q1' && e.t === 'q2'), 'contact');
   ok(ev.some(e => e.type === 'hit' && e.src === 'q1' && e.dst === 'q2'), 'it fights');
+});
+
+console.log('M13 bigger squads, reinforcing');
+
+test('bigger squads: twice the models, cost and pop (heroes, peasants unchanged; summons stay 5 models)', () => {
+  const K = FACTIONS.kingdom.units, U = FACTIONS.undead.units;
+  eq([K.fighter.models, K.ranged.models, K.tank.models, K.fast.models, K.builder.models, K.hero.models].join(), '8,8,6,6,2,1');
+  eq([U.fighter.models, U.swarm.models, U.ranged.models, U.tank.models, U.fast.models, U.mage.models, U.summon.models].join(), '10,10,8,6,6,4,5');
+  eq(FACTIONS.kingdom.train.fighter, 48); eq(FACTIONS.undead.train.swarm, 40); eq(popCost('kingdom', 'fighter'), 4);
+  // the Warband still pays back more souls than it costs when it dies on your graves
+  ok(U.swarm.models * RULES.soulPerModel > FACTIONS.undead.train.swarm / U.swarm.pair, 'Warband souls back > cost');
+});
+
+test('reinforcing: near an own building (Kingdom) a squad buys back models for its share of the cost', () => {
+  const s = arena([[0, 'fighter', 8, 16]]); s.supply[0] = 100;
+  const q = s.squads[0]; q.hp = 3 * 60; q.models = 3;
+  const c = reinforceCost('kingdom', 'fighter');
+  eq(c, 6, '48 gold / 8 models');
+  const r = resolveRound(s, [{ squads: { q1: { ...plan([]), reinforce: 2 } }, stances: {} }, orders()]);
+  const e = events(r.log).find(x => x.type === 'reinforce');
+  ok(e && e.models === 2 && e.cost === 12, 'two models, 12 gold');
+  eq(r.state.squads[0].models, 5);
+  eq(r.state.supply[0], 100 - 12 + incomeOf(r.state, 0));
+  // asking for more than the max is clamped; AP is prepaid
+  eq(validateOrders(s, 0, { squads: { q1: { ...plan([]), reinforce: 5 } }, stances: {} }).squads.q1.reinforce, RULES.reinforceMax);
+});
+
+test('reinforcing: not out of range, not while engaged, not heroes / peasants / summons; limited by the bank', () => {
+  const far = arena([[0, 'fighter', 30, 16]]); far.supply[0] = 100; far.squads[0].hp = 120; far.squads[0].models = 2;
+  ok(reinforceSpotError(far, far.squads[0]), 'out of range');
+  ok(!events(resolveRound(far, [{ squads: { q1: { ...plan([]), reinforce: 2 } }, stances: {} }, orders()]).log).some(x => x.type === 'reinforce'), 'nothing happens far away');
+  const eng = arena([[0, 'fighter', 8, 16], [1, 'fighter', 10.9, 16]]); eng.supply[0] = 100; eng.squads[0].hp = 120; eng.squads[0].models = 2;
+  const o = holdAll(eng); o[0].squads.q1 = { ...plan([]), reinforce: 2 };
+  ok(!events(resolveRound(eng, o).log).some(x => x.type === 'reinforce'), 'not while engaged');
+  ok(!canReinforce({ role: 'hero' }) && !canReinforce({ role: 'builder' }) && !canReinforce({ role: 'summon', ttl: 2 }), 'heroes, peasants, summons');
+  const poor = arena([[0, 'fighter', 8, 16]]); poor.supply[0] = 7; poor.squads[0].hp = 120; poor.squads[0].models = 2;
+  const e = events(resolveRound(poor, [{ squads: { q1: { ...plan([]), reinforce: 2 } }, stances: {} }, orders()]).log).find(x => x.type === 'reinforce');
+  eq(e?.models, 1, 'only what the bank pays for');
+});
+
+test('reinforcing: the Undead on their own graves; squads on Retreat or Guard with no orders refill by themselves', () => {
+  const s = arena([[1, 'swarm', 41, 16]]); s.supply[1] = 50;   // beside the Crypt: on its graves
+  const q = s.squads[0]; q.hp = 4 * 21; q.models = 4; q.stance = 'guard';
+  ok(!reinforceSpotError(s, q), 'on graves');
+  const r = resolveRound(s, [orders(), orders()]);
+  ok(events(r.log).some(x => x.type === 'reinforce' && x.id === q.id && x.models === 2), 'Guard squad refills by itself');
+  const off = arena([[1, 'swarm', 20, 16]]); off.squads[0].hp = 84; off.squads[0].models = 4;
+  ok(reinforceSpotError(off, off.squads[0]), 'off graves: no');
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

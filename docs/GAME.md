@@ -572,10 +572,10 @@ Ossuary) and Necromancers (Mausoleum; trained at the Crypt only). Everything els
 | Role | Name | Models | HP/model | HP | Armour | Tier (initiative) | Move "/rnd | Pop | Vision | Defends | Radius | Attack | AP | Dmg/model | Full squad/hit | Reach / range | Hits per 100 AP | Flags | Train cost | Train rnds |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | hero | The Chosen | 1 | 260 | 260 | 9 | 5 | 6 | 0 | 12 | 2 | 0.65 | strike | 25 | 18 | 20.7 | reach 1.6" + lunge 1.8" (one target) | 4 | - | - | - |
-| tank | Shieldwall | 3 | 102 | 306 | 12 | 4 | 4.8 | 3 | 9 | 2 | 1.227 | strike | 30 | 4.8 | 16.56 | reach 1.3" + lunge 1.44" (one target) | 3 | parry | 30 | 3 |
-| fighter | Men-at-arms | 4 | 60 | 240 | 7 | 5 | 6 | 2 | 9 | 1 | 1.34 | strike | 25 | 6 | 27.6 | reach 1.5" + lunge 1.8" (one target) | 4 | parry | 24 | 2 |
-| ranged | Crossbows | 4 | 45 | 180 | 3 | 5 | 4.8 | 2 | 11 | 1 | 1.34 | volley | 40 | 2.7 | 10.8 | range 14", width 0.7" | 2 | melee when locked: strike 2/model, 25 AP, reach 1.2" | 26 | 2 |
-| fast | Outriders | 3 | 72 | 216 | 6 | 6 | 7.2 | 3 | 11 | 1 | 1.347 | strike | 45 | 13 | 44.85 | reach 1.7" + lunge 2.16" (one target) | 2 | - | 30 | 2 |
+| tank | Shieldwall | 6 | 102 | 612 | 12 | 4 | 4.8 | 6 | 9 | 2 | 1.5290000000000001 | strike | 30 | 4.8 | 33.12 | reach 1.3" + lunge 1.44" (one target) | 3 | parry | 60 | 3 |
+| fighter | Men-at-arms | 8 | 60 | 480 | 7 | 5 | 6 | 4 | 9 | 1 | 1.6880000000000002 | strike | 25 | 6 | 55.2 | reach 1.5" + lunge 1.8" (one target) | 4 | parry | 48 | 2 |
+| ranged | Crossbows | 8 | 45 | 360 | 3 | 5 | 4.8 | 4 | 11 | 1 | 1.6880000000000002 | volley | 40 | 2.7 | 21.6 | range 14", width 0.7" | 2 | melee when locked: strike 2/model, 25 AP, reach 1.2" | 52 | 2 |
+| fast | Outriders | 6 | 72 | 432 | 6 | 6 | 7.2 | 6 | 11 | 1 | 1.649 | strike | 45 | 13 | 89.7 | reach 1.7" + lunge 2.16" (one target) | 2 | - | 60 | 2 |
 | builder | Peasants | 2 | 42 | 84 | 2 | 5 | 6 | 0 | 8 | 0 | 1.094 | strike | 25 | 2 | 4.6 | reach 1.2" + lunge 1.8" (one target) | 4 | - | 10 | 1 |
 
 **Undead Legion** (`FACTIONS.undead.units`)
@@ -583,12 +583,12 @@ Ossuary) and Necromancers (Mausoleum; trained at the Crypt only). Everything els
 | Role | Name | Models | HP/model | HP | Armour | Tier (initiative) | Move "/rnd | Pop | Vision | Defends | Radius | Attack | AP | Dmg/model | Full squad/hit | Reach / range | Hits per 100 AP | Flags | Train cost | Train rnds |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | hero | Lich | 1 | 270 | 270 | 5 | 3 | 3.6 | 0 | 12 | 1 | 0.65 | volley | 25 | 13 | 13 | range 10", width 0.6" | 4 | melee when locked: strike 8/model, 25 AP, reach 1.4", mage: mana 60/100, +25/rnd | - | - |
-| tank | Grave Guard | 3 | 63 | 189 | 9 | 4 | 4.8 | 3 | 9 | 2 | 1.227 | strike | 30 | 3.2 | 11.04 | reach 1.3" + lunge 1.44" (one target) | 3 | parry | 16 | 3 |
-| fighter | Skeleton Warriors | 5 | 27 | 135 | 3 | 5 | 6 | 1 | 9 | 1 | 1.439 | strike | 25 | 2.4 | 13.8 | reach 1.5" + lunge 1.8" (one target) | 4 | parry | 9 | 2 |
-| swarm | Skeleton Warband | 5 | 21 | 105 | 2 | 3 | 3.6 | 1 | 9 | 0 | 1.151 | strike | 25 | 2.8 | 16.1 | reach 1.4" + lunge 1.08" (one target) | 4 | - | 20 | 2 |
-| ranged | Bone Archers | 4 | 30 | 120 | 1 | 5 | 6 | 1 | 11 | 1 | 1.34 | volley | 40 | 1.9 | 7.6 | range 14", width 0.9" | 2 | melee when locked: strike 1.2/model, 25 AP, reach 1.2" | 13 | 2 |
-| fast | Wraiths | 3 | 42 | 126 | 3 | 6 | 9 | 2 | 11 | 1 | 1.347 | strike | 45 | 11 | 37.95 | reach 1.7" + lunge 2.7" (one target) | 2 | ghost | 16 | 2 |
-| mage | Necromancers | 2 | 30 | 60 | 1 | 4 | 4.8 | 2 | 10 | 1 | 1.094 | volley | 25 | 4 | 8 | range 9", width 0.5" | 4 | melee when locked: strike 1.5/model, 25 AP, reach 1.2", mage: mana 40/60, +15/rnd | 22 | 2 |
+| tank | Grave Guard | 6 | 63 | 378 | 9 | 4 | 4.8 | 6 | 9 | 2 | 1.5290000000000001 | strike | 30 | 3.2 | 22.08 | reach 1.3" + lunge 1.44" (one target) | 3 | parry | 32 | 3 |
+| fighter | Skeleton Warriors | 10 | 27 | 270 | 3 | 5 | 6 | 2 | 9 | 1 | 1.828 | strike | 25 | 2.4 | 27.6 | reach 1.5" + lunge 1.8" (one target) | 4 | parry | 18 | 2 |
+| swarm | Skeleton Warband | 10 | 21 | 210 | 2 | 3 | 3.6 | 2 | 9 | 0 | 1.463 | strike | 25 | 2.8 | 32.2 | reach 1.4" + lunge 1.08" (one target) | 4 | - | 40 | 2 |
+| ranged | Bone Archers | 8 | 30 | 240 | 1 | 5 | 6 | 2 | 11 | 1 | 1.6880000000000002 | volley | 40 | 1.9 | 15.2 | range 14", width 0.9" | 2 | melee when locked: strike 1.2/model, 25 AP, reach 1.2" | 26 | 2 |
+| fast | Wraiths | 6 | 42 | 252 | 3 | 6 | 9 | 4 | 11 | 1 | 1.649 | strike | 45 | 11 | 75.9 | reach 1.7" + lunge 2.7" (one target) | 2 | ghost | 32 | 2 |
+| mage | Necromancers | 4 | 30 | 120 | 1 | 4 | 4.8 | 4 | 10 | 1 | 1.34 | volley | 25 | 4 | 16 | range 9", width 0.5" | 4 | melee when locked: strike 1.5/model, 25 AP, reach 1.2", mage: mana 40/60, +15/rnd | 44 | 2 |
 | summon | Skeleton Warband | 5 | 21 | 105 | 2 | 3 | 3.6 | 0 | 9 | 0 | 1.151 | strike | 25 | 2.8 | 16.1 | reach 1.4" + lunge 1.08" (one target) | 4 | summoned (lasts 3 rnds, not trainable) | - | - |
 
 <!-- /GEN:units -->
@@ -628,27 +628,27 @@ measured from the squad's edge; "Full squad/hit" includes `strikeMult` for strik
 | Kingdom | The Chosen | Rally | `rally` | defense | 20 | 2 | - | - | radius 5, defends 1, dmgMult 1, armor 4 |
 | Kingdom | The Chosen | Mighty Swing (🔒 Champion's Swing) | `mighty` | attack | 30 | 2 | - | 28 x 1 = 28 | dmg 28, reach 2.6, cosHalf 0.2, stun 25 |
 | Kingdom | Shieldwall | Lock Shields | `wall` | defense | 15 | 1 | - | - | mult 0.3, cosHalf 0.5 |
-| Kingdom | Shieldwall | Shield Bash | `mighty` | attack | 25 | 2 | - | 3 x 3 = 9 | dmg 3, reach 1.4, cosHalf 0.5, stun 15 |
+| Kingdom | Shieldwall | Shield Bash | `mighty` | attack | 25 | 2 | - | 3 x 6 = 18 | dmg 3, reach 1.4, cosHalf 0.5, stun 15 |
 | Kingdom | Men-at-arms | Lock Shields (🔒 Shield Drill) | `wall` | defense | 15 | 1 | - | - | mult 0.3, cosHalf 0.5 |
-| Kingdom | Crossbows | Piercing Bolt (🔒 Piercing Bolts) | `pierce` | attack | 35 | 2 | - | 3.6 x 4 = 14.4 | ranged true, dmg 3.6, range 16, width 0.7 |
-| Kingdom | Outriders | Charge | `charge` | move | 35 | 1 | - | 9 x 3 = 27 | wind 8, dmg 9, len 9 |
-| Kingdom | Outriders | Trample | `sweep` | attack | 30 | 2 | - | 5 x 3 = 15 | dmg 5, reach 1 |
+| Kingdom | Crossbows | Piercing Bolt (🔒 Piercing Bolts) | `pierce` | attack | 35 | 2 | - | 3.6 x 8 = 28.8 | ranged true, dmg 3.6, range 16, width 0.7 |
+| Kingdom | Outriders | Charge | `charge` | move | 35 | 1 | - | 9 x 6 = 54 | wind 8, dmg 9, len 9 |
+| Kingdom | Outriders | Trample | `sweep` | attack | 30 | 2 | - | 5 x 6 = 30 | dmg 5, reach 1 |
 | Kingdom | Outriders | Wheel Away | `step` | move | 20 | 2 | - | - | range 6 |
 | Undead Legion | Lich | Summon Warband | `summon` | defense | 20 | - (mage) | 40 | - | range 4, count 2, radius 1.6 |
 | Undead Legion | Lich | Dark Thunder | `thunder` | attack | 15 | - (mage) | 25 | 17 x 1 = 17 | ranged true, dmg 17, range 11, jumps 3, jump 3.5, decay 0.7, radius 1 |
 | Undead Legion | Lich | Corpse Explosion | `explode` | attack | 10 | - (mage) | 20 | - | range 9, radius 2.5, base 8, perModel 3 |
 | Undead Legion | Grave Guard | Grave Wall | `wall` | defense | 15 | 1 | - | - | mult 0.3, cosHalf 0.5 |
-| Undead Legion | Grave Guard | Bone Bash | `mighty` | attack | 25 | 2 | - | 2.5 x 3 = 7.5 | dmg 2.5, reach 1.4, cosHalf 0.5, stun 15 |
+| Undead Legion | Grave Guard | Bone Bash | `mighty` | attack | 25 | 2 | - | 2.5 x 6 = 15 | dmg 2.5, reach 1.4, cosHalf 0.5, stun 15 |
 | Undead Legion | Skeleton Warriors | Grave Wall (🔒 Bone Shields) | `wall` | defense | 15 | 1 | - | - | mult 0.3, cosHalf 0.5 |
-| Undead Legion | Skeleton Warband | Pounce | `charge` | move | 30 | 2 | - | 3 x 5 = 15 | wind 8, dmg 3, len 4 |
+| Undead Legion | Skeleton Warband | Pounce | `charge` | move | 30 | 2 | - | 3 x 10 = 30 | wind 8, dmg 3, len 4 |
 | Undead Legion | Skeleton Warband | Frenzy | `rally` | defense | 15 | 2 | - | - | radius 0.1, defends 1, dmgMult 1.25, armor 0 |
-| Undead Legion | Bone Archers | Arrow Storm (🔒 Storm of Bones) | `storm` | attack | 35 | 2 | - | 3.2 x 4 = 12.8 | ranged true, dmg 3.2, range 15, radius 2.2 |
-| Undead Legion | Wraiths | Charge | `charge` | move | 35 | 1 | - | 6.8 x 3 = 20.4 | wind 8, dmg 6.8, len 9 |
-| Undead Legion | Wraiths | Dread Wail | `mighty` | attack | 30 | 3 | - | 2 x 3 = 6 | dmg 2, reach 1.6, cosHalf -1, stun 12 |
+| Undead Legion | Bone Archers | Arrow Storm (🔒 Storm of Bones) | `storm` | attack | 35 | 2 | - | 3.2 x 8 = 25.6 | ranged true, dmg 3.2, range 15, radius 2.2 |
+| Undead Legion | Wraiths | Charge | `charge` | move | 35 | 1 | - | 6.8 x 6 = 40.8 | wind 8, dmg 6.8, len 9 |
+| Undead Legion | Wraiths | Dread Wail | `mighty` | attack | 30 | 3 | - | 2 x 6 = 12 | dmg 2, reach 1.6, cosHalf -1, stun 12 |
 | Undead Legion | Wraiths | Shadow Step (🔒 Shadow Walk) | `step` | move | 20 | 2 | - | - | range 6 |
-| Undead Legion | Necromancers | Dark Thunder | `thunder` | attack | 15 | - (mage) | 20 | 6 x 2 = 12 | ranged true, dmg 6, range 10, jumps 2, jump 3, decay 0.7, radius 1 |
+| Undead Legion | Necromancers | Dark Thunder | `thunder` | attack | 15 | - (mage) | 20 | 6 x 4 = 24 | ranged true, dmg 6, range 10, jumps 2, jump 3, decay 0.7, radius 1 |
 | Undead Legion | Necromancers | Summon Warband | `summon` | defense | 20 | - (mage) | 35 | - | range 4, count 1, radius 1.6 |
-| Undead Legion | Necromancers | Raise | `raise` | defense | 30 | - (mage) | 30 | - | radius 4 |
+| Undead Legion | Necromancers | Raise | `raise` | defense | 30 | - (mage) | 30 | - | radius 4, models 2 |
 <!-- /GEN:skills -->
 
 Lock Shields / Grave Wall: `mult` 0.3 = damage taken from the front arc, `cosHalf` 0.5 = ±60°.
@@ -667,10 +667,10 @@ Damage per round = hits per 100 AP x damageAfter(dmg per model x models (x strik
 | Unit | Raw/hit | vs 0 | vs 3 | vs 5 | vs 8 | vs 11 | vs 12 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | The Chosen | 20.7 | 84 | 72 | 68 | 60 | 52 | 52 |
-| Shieldwall | 16.56 | 51 | 42 | 39 | 36 | 33 | 30 |
-| Men-at-arms | 27.6 | 112 | 96 | 88 | 80 | 72 | 68 |
-| Crossbows | 10.8 | 22 | 18 | 18 | 16 | 14 | 14 |
-| Outriders | 44.85 | 90 | 78 | 72 | 64 | 58 | 56 |
+| Shieldwall | 33.12 | 99 | 87 | 78 | 72 | 63 | 63 |
+| Men-at-arms | 55.2 | 220 | 192 | 176 | 156 | 144 | 140 |
+| Crossbows | 21.6 | 44 | 38 | 34 | 30 | 28 | 28 |
+| Outriders | 89.7 | 180 | 156 | 144 | 128 | 116 | 112 |
 | Peasants | 4.6 | 20 | 16 | 16 | 12 | 12 | 12 |
 
 **Undead Legion: damage per 100 AP against armour**
@@ -678,37 +678,37 @@ Damage per round = hits per 100 AP x damageAfter(dmg per model x models (x strik
 | Unit | Raw/hit | vs 0 | vs 3 | vs 5 | vs 8 | vs 11 | vs 12 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Lich | 13 | 52 | 44 | 40 | 36 | 32 | 32 |
-| Grave Guard | 11.04 | 33 | 30 | 27 | 24 | 21 | 21 |
-| Skeleton Warriors | 13.8 | 56 | 48 | 44 | 40 | 36 | 36 |
-| Skeleton Warband | 16.1 | 64 | 56 | 52 | 44 | 40 | 40 |
-| Bone Archers | 7.6 | 16 | 14 | 12 | 10 | 10 | 10 |
-| Wraiths | 37.95 | 76 | 66 | 60 | 54 | 48 | 48 |
-| Necromancers | 8 | 32 | 28 | 24 | 24 | 20 | 20 |
+| Grave Guard | 22.08 | 66 | 57 | 54 | 48 | 42 | 42 |
+| Skeleton Warriors | 27.6 | 112 | 96 | 88 | 80 | 72 | 68 |
+| Skeleton Warband | 32.2 | 128 | 112 | 104 | 92 | 84 | 80 |
+| Bone Archers | 15.2 | 30 | 26 | 24 | 22 | 20 | 20 |
+| Wraiths | 75.9 | 152 | 132 | 122 | 108 | 98 | 94 |
+| Necromancers | 16 | 64 | 56 | 52 | 44 | 40 | 40 |
 | Skeleton Warband | 16.1 | 64 | 56 | 52 | 44 | 40 | 40 |
 
 **Attacks needed: Kingdom (rows, full squad, no losses) vs Undead Legion (columns, full HP, no defends)** (rounds = attacks / hits per 100 AP)
 
 | Attacker \ Target | Lich | Grave Guard | Skeleton Warriors | Skeleton Warband | Bone Archers | Wraiths | Necromancers | Skeleton Warband |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| The Chosen | 16 (4 r) | 14 (3.5 r) | 8 (2 r) | 6 (1.5 r) | 6 (1.5 r) | 7 (1.8 r) | 3 (0.8 r) | 6 (1.5 r) |
-| Shieldwall | 21 (7 r) | 18 (6 r) | 10 (3.3 r) | 7 (2.3 r) | 8 (2.7 r) | 9 (3 r) | 4 (1.3 r) | 7 (2.3 r) |
-| Men-at-arms | 13 (3.3 r) | 10 (2.5 r) | 6 (1.5 r) | 5 (1.3 r) | 5 (1.3 r) | 6 (1.5 r) | 3 (0.8 r) | 5 (1.3 r) |
-| Crossbows | 30 (15 r) | 27 (13.5 r) | 15 (7.5 r) | 11 (5.5 r) | 12 (6 r) | 14 (7 r) | 6 (3 r) | 11 (5.5 r) |
-| Outriders | 8 (4 r) | 7 (3.5 r) | 4 (2 r) | 3 (1.5 r) | 3 (1.5 r) | 4 (2 r) | 2 (1 r) | 3 (1.5 r) |
-| Peasants | 68 (17 r) | 63 (15.8 r) | 34 (8.5 r) | 27 (6.8 r) | 30 (7.5 r) | 32 (8 r) | 15 (3.8 r) | 27 (6.8 r) |
+| The Chosen | 16 (4 r) | 27 (6.8 r) | 15 (3.8 r) | 12 (3 r) | 12 (3 r) | 14 (3.5 r) | 6 (1.5 r) | 6 (1.5 r) |
+| Shieldwall | 11 (3.7 r) | 17 (5.7 r) | 10 (3.3 r) | 7 (2.3 r) | 8 (2.7 r) | 9 (3 r) | 4 (1.3 r) | 4 (1.3 r) |
+| Men-at-arms | 7 (1.8 r) | 10 (2.5 r) | 6 (1.5 r) | 5 (1.3 r) | 5 (1.3 r) | 6 (1.5 r) | 3 (0.8 r) | 3 (0.8 r) |
+| Crossbows | 16 (8 r) | 26 (13 r) | 15 (7.5 r) | 11 (5.5 r) | 12 (6 r) | 14 (7 r) | 6 (3 r) | 6 (3 r) |
+| Outriders | 4 (2 r) | 7 (3.5 r) | 4 (2 r) | 3 (1.5 r) | 3 (1.5 r) | 4 (2 r) | 2 (1 r) | 2 (1 r) |
+| Peasants | 68 (17 r) | 126 (31.5 r) | 68 (17 r) | 53 (13.3 r) | 60 (15 r) | 63 (15.8 r) | 30 (7.5 r) | 27 (6.8 r) |
 
 **Attacks needed: Undead Legion (rows, full squad, no losses) vs Kingdom (columns, full HP, no defends)** (rounds = attacks / hits per 100 AP)
 
 | Attacker \ Target | The Chosen | Shieldwall | Men-at-arms | Crossbows | Outriders | Peasants |
 | --- | --- | --- | --- | --- | --- | --- |
-| Lich | 29 (7.3 r) | 39 (9.8 r) | 24 (6 r) | 17 (4.3 r) | 22 (5.5 r) | 7 (1.8 r) |
-| Grave Guard | 33 (11 r) | 44 (14.7 r) | 30 (10 r) | 18 (6 r) | 27 (9 r) | 9 (3 r) |
-| Skeleton Warriors | 26 (6.5 r) | 34 (8.5 r) | 24 (6 r) | 15 (3.8 r) | 20 (5 r) | 7 (1.8 r) |
-| Skeleton Warband | 24 (6 r) | 31 (7.8 r) | 20 (5 r) | 13 (3.3 r) | 18 (4.5 r) | 6 (1.5 r) |
-| Bone Archers | 52 (26 r) | 62 (31 r) | 40 (20 r) | 26 (13 r) | 36 (18 r) | 12 (6 r) |
-| Wraiths | 10 (5 r) | 13 (6.5 r) | 9 (4.5 r) | 6 (3 r) | 8 (4 r) | 3 (1.5 r) |
-| Necromancers | 44 (11 r) | 62 (15.5 r) | 40 (10 r) | 26 (6.5 r) | 36 (9 r) | 12 (3 r) |
-| Skeleton Warband | 24 (6 r) | 31 (7.8 r) | 20 (5 r) | 13 (3.3 r) | 18 (4.5 r) | 6 (1.5 r) |
+| Lich | 29 (7.3 r) | 77 (19.3 r) | 48 (12 r) | 33 (8.3 r) | 44 (11 r) | 7 (1.8 r) |
+| Grave Guard | 18 (6 r) | 44 (14.7 r) | 30 (10 r) | 19 (6.3 r) | 26 (8.7 r) | 5 (1.7 r) |
+| Skeleton Warriors | 14 (3.5 r) | 36 (9 r) | 24 (6 r) | 15 (3.8 r) | 21 (5.3 r) | 4 (1 r) |
+| Skeleton Warband | 12 (3 r) | 31 (7.8 r) | 20 (5 r) | 13 (3.3 r) | 18 (4.5 r) | 3 (0.8 r) |
+| Bone Archers | 26 (13 r) | 62 (31 r) | 44 (22 r) | 28 (14 r) | 36 (18 r) | 6 (3 r) |
+| Wraiths | 5 (2.5 r) | 14 (7 r) | 9 (4.5 r) | 6 (3 r) | 8 (4 r) | 2 (1 r) |
+| Necromancers | 24 (6 r) | 62 (15.5 r) | 40 (10 r) | 26 (6.5 r) | 36 (9 r) | 6 (1.5 r) |
+| Skeleton Warband | 24 (6 r) | 62 (15.5 r) | 40 (10 r) | 26 (6.5 r) | 36 (9 r) | 6 (1.5 r) |
 
 <!-- /GEN:derived -->
 
@@ -731,12 +731,12 @@ Builders: Kingdom up to 10 peasant squads (not in the army cap); Undead 0 (build
 | Role | Kingdom cost | Undead Legion cost | Rounds | Trained at |
 | --- | --- | --- | --- | --- |
 | builder | 10 | - | 1 | Keep (Kingdom only) |
-| tank | 30 | 16 | 3 | Barracks / Ossuary |
-| fighter | 24 | 9 | 2 | Barracks / Ossuary |
-| swarm | - | 20 | 2 | Crypt and Ossuary (Undead only; a pair per training) |
-| ranged | 26 | 13 | 2 | Barracks / Ossuary |
-| fast | 30 | 16 | 2 | Barracks / Ossuary |
-| mage | - | 22 | 2 | Ossuary (Undead only) |
+| tank | 60 | 32 | 3 | Barracks / Ossuary |
+| fighter | 48 | 18 | 2 | Barracks / Ossuary |
+| swarm | - | 40 | 2 | Crypt and Ossuary (Undead only; a pair per training) |
+| ranged | 52 | 26 | 2 | Barracks / Ossuary |
+| fast | 60 | 32 | 2 | Barracks / Ossuary |
+| mage | - | 44 | 2 | Ossuary (Undead only) |
 
 Souls: every model that dies (either side, not summoned skeletons) on the undead side's grave ground pays 3 souls (a hero: 15); graveyards: hq 10", barracks 6", tower 6", monolith 6", wall 6", pit 6", sanctum 6", well 10" (a new site spreads 50 % at once and the rest by the end of the round; the Crypt starts at 10"). Pairs: Skeleton Warband x2.
 
@@ -744,14 +744,14 @@ Souls: every model that dies (either side, not summoned skeletons) on the undead
 
 | Role | Name | Tier rule | Models | Cost (per squad) | Souls back (per squad) | Back / cost |
 | --- | --- | --- | --- | --- | --- | --- |
-| tank | Grave Guard | high (cost may change) | 3 | 16 | 9 | 0.6x |
-| fighter | Skeleton Warriors | low (cost fixed) | 5 | 9 | 15 | 1.7x |
-| swarm | Skeleton Warband | low (cost fixed) | 5 | 10 | 15 | 1.5x |
-| ranged | Bone Archers | low (cost fixed) | 4 | 13 | 12 | 0.9x |
-| fast | Wraiths | high (cost may change) | 3 | 16 | 9 | 0.6x |
-| mage | Necromancers | high (cost may change) | 2 | 22 | 6 | 0.3x |
+| tank | Grave Guard | high (cost may change) | 6 | 32 | 18 | 0.6x |
+| fighter | Skeleton Warriors | low (cost fixed) | 10 | 18 | 30 | 1.7x |
+| swarm | Skeleton Warband | low (cost fixed) | 10 | 20 | 30 | 1.5x |
+| ranged | Bone Archers | low (cost fixed) | 8 | 26 | 24 | 0.9x |
+| fast | Wraiths | high (cost may change) | 6 | 32 | 18 | 0.6x |
+| mage | Necromancers | high (cost may change) | 4 | 44 | 12 | 0.3x |
 
-Flat income: Crypt 6 a round, Soul Well 6 a round each. Kingdom deaths on undead graves pay the same per model (Kingdom Shieldwall 9, Men-at-arms 12, Crossbows 12, Outriders 9).
+Flat income: Crypt 6 a round, Soul Well 6 a round each. Kingdom deaths on undead graves pay the same per model (Kingdom Shieldwall 18, Men-at-arms 24, Crossbows 24, Outriders 18).
 <!-- /GEN:economy -->
 
 ### 10.2 Rules
@@ -851,6 +851,36 @@ Flat income: Crypt 6 a round, Soul Well 6 a round each. Kingdom deaths on undead
 - **Population cap** (replaced the 30-squad army cap on 2026-11-25): `RULES.armyCap` = **50 pop** + the
   map's `capBonus` × 1.5 (Twin Rivers / Highland +6, Great Field +12). Squads cost their unit's pop
   (§10.2); **heroes, builders and summoned skeletons cost 0**; squads in training count (pop × pair).
+
+### 10.2b Fewer, bigger squads and reinforcing (since 2026-11-26)
+**Why:** simulation showed that every resource the economy pays out becomes a new squad (about one a round;
+a trained squad lived a median of 11 rounds; ~100 squads trained and ~60 killed per side per game). Smaller
+caps, a slower economy, summon caps, rising costs or morale didn't change that (the money just went
+elsewhere). Fewer, bigger squads plus reinforcing did: in AI games squads trained per game **101 → 45**, trained
+squads killed **63 → 24**, a squad's life **11 → 16 rounds**, the army a median of **4 squads**, so the 3 command
+points and the hero control most of it.
+
+**Bigger squads:** every trainable squad has **twice the models** (per-model stats unchanged), **costs twice as
+much** and takes **twice the pop**: Men-at-arms 8 models / 48 gold / 4 pop, Crossbows 8 / 52 / 4, Shieldwall
+6 / 60 / 6, Outriders 6 / 60 / 6; Skeleton Warriors 10 / 18 / 2, Warband 10 a squad / 40 a pair / 2 each,
+Bone Archers 8 / 26 / 2, Grave Guard 6 / 32 / 6, Wraiths 6 / 32 / 4, Necromancers 4 / 44 / 4. Heroes and
+peasants are unchanged; **summoned skeletons stay 5 models** (free bodies don't double). Raise brings back 2
+models. Bases grow with √models; formations use 4-wide ranks for 9+ models. The pop cap (50) is unchanged,
+so the same strength now fits in half the squads (upkeep follows pop). The Warband still returns more souls
+than it costs on your graves (10 models × 3 = 30 for 20).
+
+**Reinforcing** (`plan.reinforce`, `reinforceSpotError` / `reinforceCost` / `canReinforce` in
+`js/sim/base.js`, end of round in `resolve.js` before income):
+- **Order:** "Reinforce" in the Actions row, up to **`RULES.reinforceMax` = 2** models a round, **`reinforceAp` = 20 AP**
+  each (prepaid, like defends). Squads with no orders on **Retreat** or **Guard** reinforce by themselves (up to 2).
+- **Where (checked at the end of the round):** Kingdom: the squad's edge within **`reinforceRange` = 6″** of an
+  own finished building (any except a Palisade); Undead: the squad's centre on its own graves. Never while
+  engaged in melee.
+- **Cost:** per model `ceil(train cost / (models × pair))` (Men-at-arms 6 gold, Crossbows 7, Shieldwall 10;
+  Warband 2 souls, Warriors 2, Necromancers 11), paid then, as many as the bank allows; nothing is paid if
+  the squad is out of place.
+- **Who:** trained squads only (not heroes, which revive; not peasants; not summons).
+- Event `reinforce` (float "+2 models", a log line); results-screen stat `reinforced`.
 
 ### 10.3 Production queues (`startQueues` in `js/sim/base.js`)
 Two kinds of persistent queue, stored in the state and kept across rounds with no new orders:
@@ -1470,6 +1500,13 @@ Squads are given tasks in this order; each squad gets one:
 | Research per idle HQ / tech building (healthy, round ≥ 6): the first allowed item of the personality's list | 20 + 35 × tech (−10 at the HQ, −10 at war) |
 | Army: one squad per idle training building | 60 + 30 × aggression (+25 at war, +30 when under 4 squads and threatened or past round 5, +20 if threatened) |
 
+- **Refill** (since 2026-11-26, `military.js`; checked before home defense): a squad below **60 %** of its models
+  falls back on Retreat (no hand orders) to a Mine / Soul Well / the HQ, where it reinforces by itself, until it
+  is back to **80 %** or 6 rounds have passed (then it fights on for 8 rounds before it can be pulled back again).
+  The economy keeps back the cost of those refills.
+- **Squad-count thresholds halved** with the bigger squads: first attacks (Warlord 2, Steward 4, Smith-King 3,
+  Bone Tide 3, Necrarch 3, Blight Lord 4 squads), healthy army 2+ squads; the "big army" attack bonus is now
+  **24+ pop** (was 18+ squads).
 - **Kingdom opening** (since 2026-11-26; both sides start at 0): a 2nd peasant first (priority 140 while
   it has fewer than 2 and isn't threatened), then the first Mine (125) before the first Barracks (118
   until a Mine stands, else 135).
@@ -1743,6 +1780,7 @@ Balance report 2026-11-26 · 8 seeds x 2 orders per map x 2 (new AI on each side
 | Global combat rules | `RULES` in `js/data/units.js` (table in §7 of the generated rules below) | armour constant, defend / cover / siege multipliers, engagement, parry, overwatch |
 | Economy per faction | `FACTIONS.<f>.eco` (`start`, `hq`, `gather`), `FACTIONS.<f>.train` (costs), `FACTIONS.<f>.buildings` (build list) | |
 | Buildings | `BUILDINGS` in `js/data/units.js` | cost, work, hp, armour, footprint, vision, fire, income, cp, site, souls, trains |
+| Squad size and reinforcing | `models` per unit (×2 on 2026-11-26), `FACTIONS.<f>.train` (×2), `POP` (×2), `FACTIONS.undead.units.summon.models` (5); `RULES.reinforceMax` 2, `reinforceAp` 20, `reinforceRange` 6; AI refill 60 % / 80 % in `js/ai/military.js` | how many squads an army has and how long they last |
 | Durability | every `hpPer` and `BUILDINGS.<type>.hp` (×2 on 2026-11-24, ×1.5 on 2026-11-26; The Chosen 260 kept), heals (Monolith 12, Field Hospital 9, Mass Graves +6, Reassemble 3), HP research (Hardy Peasants +6, Bone Tide +3), tier HQ HP in `tech.js`; AI `PRIOR` 450 in `js/ai/learning.js` | how many rounds a fight lasts |
 | Ranged squads | `VOLLEY(ap, dmg, ...)` of Crossbows / Bone Archers (40 AP: 2 volleys a round; 2.7 / 1.9 a model since 2026-11-26), their skills, Free Yeomanry `attackAp` 35 | the ranged share of damage (78 % of all damage before the cut) |
 | Movement (inches per 100 AP) | `FACTIONS.<f>.units.<role>.move` (default tier × `RULES.moveFactor` × 100: Crossbows 4.8, Wraiths 9); tech `move` effects | how far a squad walks; tier only sets initiative |
@@ -1841,6 +1879,9 @@ Balance report 2026-11-26 · 8 seeds x 2 orders per map x 2 (new AI on each side
 | `undeadMend` | `0.05` | undead: finished buildings regain this share of max HP every round |
 | `summonTtl` | `3` | rounds a summoned squad lasts |
 | `advanceEngage` | `10` |  |
+| `reinforceMax` | `2` |  |
+| `reinforceAp` | `20` |  |
+| `reinforceRange` | `6` |  |
 | `goalReach` | `1.5` |  |
 | `retreatReach` | `3` |  |
 | `trainRounds` | `{"builder":1,"swarm":2,"fighter":2,"ranged":2,"fast":2,"mage":2,"tank":3}` | rounds each role takes to train |
@@ -1954,6 +1995,7 @@ Whenever rules, numbers, the AI or maps change:
 | Movement separate from initiative | tabletop wargames (Move characteristic vs initiative) | how far a unit walks is its own stat | tier still decides who acts first |
 | Squad durability and time-to-kill (fights that last long enough to react) | Dawn of War (high squad HP, long melee brawls, ranged squads that suppress rather than delete) | sturdy squads and weaker ranged fire, so a fight takes several rounds | HP ×1.5 for units and buildings (2026-11-26; The Chosen excepted); ranged squads fire 2 volleys a round for 20 % less |
 | Melee units chase their target | most RTS games (attack orders follow the target; Dawn of War melee squads lock on) | a melee attack keeps after its target instead of swinging at air | a strike with nothing in reach + lunge becomes a move toward the target; at release it hits whatever enemy is in reach |
+| Reinforcing squads instead of replacing them; bigger squads | Dawn of War (squad reinforcement near HQ / buildings, squad size limits), tabletop wargames (units of 5–10 models that persist) | money keeps squads alive; few squads that matter | models bought back at the end of a round in reach of a building (Undead: on graves), at most 2 a round |
 | Unit kits: a few skills per unit (more for elites and heroes) plus passives, some unlocked by research | Warcraft III (units with 1–3 abilities, hero auras, abilities researched at buildings), Dawn of War (squad abilities and wargear upgrades) | a small, readable kit per unit; research unlocks abilities | fixed slot counts per class (normal 2, elite 3, hero 3); locked slots shown in the panel |
 | Melee units fight what they bump into | most RTS games (units auto-attack enemies they meet) | no idle squads in contact | the rest of the move becomes strikes at that enemy |
 | Production queues paid when the item starts | the queues of most RTS games (StarCraft II: 5 per building) | queue several items per building | payment at start, the queue waits when you can't pay |

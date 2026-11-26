@@ -16,7 +16,7 @@ import { validateOrders, actionCost } from './orders.js';
 import { buildStancePlan } from './stances.js';
 import { terrainFactor, pointBlocked, blocks, blocksMove, boardOf } from './nav.js';
 import { visibleTo, canSee, updateIntel } from './vision.js';
-import { obstacles, navKey, hitRadius, bdef, applyQueue, startQueues, graveAt, spreadGraves, finishTech, tkOf, ruleOf, spawnSpot, armyValue, incomeOf, incomeParts, soulDecayOf, edgeDist, gatherRate } from './base.js';
+import { obstacles, navKey, hitRadius, bdef, applyQueue, startQueues, graveAt, spreadGraves, finishTech, tkOf, ruleOf, spawnSpot, armyValue, incomeOf, incomeParts, soulDecayOf, edgeDist, gatherRate, canReinforce, reinforceCost, reinforceSpotError } from './base.js';
 import { approachSpot, closestOn } from './builders.js';
 import { coverOf, coverMult } from './cover.js';
 import { Nav } from './nav.js';
@@ -764,7 +764,7 @@ export function resolveRound(state0, ordersIn) {
           const od = defOf(o);
           if (od.models <= 1 || o.models >= od.models) continue;
           if (dist(q.x, q.z, o.x, o.z) > sk.radius + radiusOf(o)) continue;
-          o.hp = Math.min(od.models * od.hpPer, o.models * od.hpPer + od.hpPer);
+          o.hp = Math.min(od.models * od.hpPer, o.models * od.hpPer + od.hpPer * (sk.models || 1));
           o.models = modelsFor(o, o.hp);
           ids.push(o.id);
         }
@@ -1106,6 +1106,22 @@ export function resolveRound(state0, ordersIn) {
       s.revive[p] = null;
       ev({ type: 'revive', id: h.id, owner: p, x: r3(h.x), z: r3(h.z), hp: h.hp });
     }
+  }
+  // reinforcing (since 2026-11-26): a squad ordered to reinforce (plan.reinforce, up to RULES.reinforceMax), or a
+  // squad on Retreat or Guard with no orders, buys back fallen models when it ends the round at a reinforce spot and not
+  // engaged; each model costs its share of the training cost and is paid now (as many as the bank allows)
+  for (const p of [0, 1]) for (const q of s.squads.filter(x => x.owner === p && x.hp > 0 && canReinforce(x)).sort((a, b) => +a.id.slice(1) - +b.id.slice(1))) {
+    const pl = orders[p].squads[q.id];
+    const want = pl ? pl.reinforce || 0 : q.stance === 'retreat' || q.stance === 'guard' ? RULES.reinforceMax : 0;
+    const d = defOf(q);
+    if (!want || q.models >= d.models || reinforceSpotError(s, q) || engagedWith(q, s.squads).length) continue;
+    const cost = reinforceCost(q.faction, q.role, q.tk);
+    const n = Math.min(want, d.models - q.models, Math.floor(s.supply[p] / cost));
+    if (n <= 0) continue;
+    q.hp = Math.min(d.models * d.hpPer, q.hp + n * d.hpPer);
+    q.models = modelsFor(q, q.hp);
+    s.supply[p] -= n * cost;
+    ev({ type: 'reinforce', id: q.id, owner: p, models: n, cost: n * cost, hp: q.hp, now: q.models });
   }
   // income, itemised (the economy panel shows these parts): the flat income, plus what was gathered and
   // harvested this round; then the Undead's souls above RULES.soulKeep decay

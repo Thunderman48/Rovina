@@ -37,6 +37,22 @@ export function military(K, P, skill, posture, mem, inf) {
     for (const q of free().sort((a, b) => dist(a.x, a.z, rz.x, rz.z) - dist(b.x, b.z, rz.x, rz.z)).slice(0, 2)) tasks.set(q.id, { mode: 'advance', goal: { x: rz.x, z: rz.z }, role: 'revive' });
   }
 
+  // refill (since 2026-11-26): a squad below 60 % of its models falls back on Retreat (to a Mine / Soul Well /
+  // the HQ, where it reinforces by itself) until it is back to 80 % (or for 6 rounds at most)
+  mem.refill = mem.refill || {};
+  for (const q of K.army) {
+    if (q.role === 'hero' || q.ttl || tasks.has(q.id)) continue;   // (checked before defense, so hurt squads refill rather than defend)
+    const d = K.def(q), share = q.models / d.models, since = mem.refill[q.id];
+    mem.refillCd = mem.refillCd || {};
+    if (since === undefined && share < 0.6 && !(mem.refillCd[q.id] > K.round)) mem.refill[q.id] = K.round;
+    else if (since !== undefined && (share >= 0.8 || K.round - since >= 6)) {
+      delete mem.refill[q.id];
+      if (share < 0.8) mem.refillCd[q.id] = K.round + 8;   // couldn't refill in time (no money?): fight on for a while
+    }
+    if (mem.refill[q.id] !== undefined) tasks.set(q.id, { mode: 'advance', goal: home, role: 'refill', flee: true });
+  }
+  for (const id of Object.keys(mem.refill)) if (!K.army.some(q => q.id === id)) delete mem.refill[id];
+
   // defense: enough squads (by predicted strength) go to meet enemies close to home
   if (K.threats.length) {
     const c = centroid(K.threats);
@@ -52,7 +68,7 @@ export function military(K, P, skill, posture, mem, inf) {
   const scoutEvery = Math.round(14 / Math.max(0.2, skill.scout));
   const needScout = (!K.ehq && K.round >= 2) || (K.round - (mem.lastScout || 0) >= scoutEvery && K.round >= 8);
   let scout = mem.scoutId && K.army.find(q => q.id === mem.scoutId && !tasks.has(q.id));
-  if (needScout && !scout && K.army.length >= 3) {
+  if (needScout && !scout && K.army.length >= 2) {
     scout = free().filter(q => q.role !== 'hero' && q.role !== 'mage').sort((a, b) => K.def(b).move - K.def(a).move || power(a) - power(b))[0];
     if (scout) mem.scoutId = scout.id;
   }

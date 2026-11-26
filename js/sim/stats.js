@@ -17,9 +17,10 @@
 //               buildings destroyed)
 //   research : research finished (count)
 //   dmgUnits / dmgBuildings : cumulative damage dealt to enemy squads / buildings (tower fire included)
+//   reinforced : cumulative models bought back by reinforcing
 import { armySize } from './base.js';
 
-export const STAT_KEYS = ['income', 'bank', 'spent', 'earned', 'spentTotal', 'pop', 'squads', 'trained', 'lost', 'kills', 'models', 'buildings', 'built', 'razed', 'research', 'dmgUnits', 'dmgBuildings'];
+export const STAT_KEYS = ['income', 'bank', 'spent', 'earned', 'spentTotal', 'pop', 'squads', 'trained', 'lost', 'kills', 'models', 'buildings', 'built', 'razed', 'research', 'dmgUnits', 'dmgBuildings', 'reinforced'];
 const IDX = Object.fromEntries(STAT_KEYS.map((k, i) => [k, i]));
 // one value of side p in a round entry; the whole series of a key for side p
 export const statOf = (entry, p, key) => entry.p[p][IDX[key]] ?? 0;
@@ -46,7 +47,7 @@ export function recordStats(s, events, owners, bank0, round) {
     buildings: (s.buildings || []).filter(b => b.owner === p && b.hp > 0 && !b.build).length,
     built: last ? last[p].built : 0, razed: last ? last[p].razed : 0,
     research: (s.tech && s.tech[p] || []).length,
-    dmgUnits: last ? last[p].dmgUnits : 0, dmgBuildings: last ? last[p].dmgBuildings : 0,
+    dmgUnits: last ? last[p].dmgUnits : 0, dmgBuildings: last ? last[p].dmgBuildings : 0, reinforced: last ? last[p].reinforced : 0,
   }));
   for (const e of events) {
     if (e.type === 'spawn') owners.set(e.id, { owner: e.owner, summon: !!e.summon || e.role === 'summon' });
@@ -77,6 +78,7 @@ export function recordStats(s, events, owners, bank0, round) {
       case 'construct': if (e.done) side[e.owner].built++; break;
       case 'bdown': side[1 - e.owner].razed++; break;
       case 'researched': st.tech[e.owner].push({ id: e.tech, r: round }); break;
+      case 'reinforce': side[e.owner].reinforced += e.models; break;
     }
   }
   for (const p of [0, 1]) {

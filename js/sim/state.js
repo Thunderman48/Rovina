@@ -95,6 +95,6 @@ export const speedOf = q => defOf(q).move / RULES.ap;
 // AP a squad has this round: 100, less 5 % per Rend stack on it (the Warband's passive)
 export const apFor = q => Math.round(RULES.ap * (1 - (q && q.rend ? q.rend.n * q.rend.ap : 0)));
 export function emptyOrders() { return { squads: {}, stances: {} }; }
-export function emptyPlan() { return { actions: [], upgrades: 0, defends: 0, parry: false, overwatch: null }; }
+export function emptyPlan() { return { actions: [], upgrades: 0, defends: 0, parry: false, overwatch: null, reinforce: 0 }; }
 export const clone = o => JSON.parse(JSON.stringify(o));
 export const findSquad = (s, id) => s.squads.find(q => q.id === id) || null;

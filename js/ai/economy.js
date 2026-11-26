@@ -8,7 +8,7 @@ import { RULES, FACTIONS, trainsOf, pairOf, maxBuildersOf } from '../data/units.
 import { TECH, GATES } from '../data/tech.js';
 import { MATCHUPS } from './matchups.js';
 import { emptyPlan, defOf, apFor } from '../sim/state.js';
-import { popCost, placeError, BUILDINGS, trainCost, footprint, builderCount, armySize, bdef, buildQueue, siteTaken, seenBy, graveCircles, hasTech, techError, gateOf, tkOf, researching } from '../sim/base.js';
+import { canReinforce, reinforceCost, popCost, placeError, BUILDINGS, trainCost, footprint, builderCount, armySize, bdef, buildQueue, siteTaken, seenBy, graveCircles, hasTech, techError, gateOf, tkOf, researching } from '../sim/base.js';
 import { builderPlan, approachSpot } from '../sim/builders.js';
 import { dist } from '../sim/geom.js';
 import { learnedMult } from './learning.js';
@@ -37,6 +37,9 @@ export function economy(K, P, skill, posture, mem, orders) {
   const { s, p, fac } = K;
   const out = { builds: [], trains: [] };
   let supply = s.supply[p];
+  // keep enough back for the squads falling back to refill (they reinforce at the end of the round)
+  const refillCost = K.army.filter(q => q.stance === 'retreat' && canReinforce(q)).reduce((n, q) => n + Math.min(RULES.reinforceMax, K.def(q).models - q.models) * reinforceCost(q.faction, q.role, q.tk), 0);
+  supply = Math.max(0, supply - refillCost);
   const gold = fac === 'kingdom', rising = K.rising;
   const mine = K.myB, hq = K.hq;
   if (!hq) return out;
@@ -119,7 +122,7 @@ export function economy(K, P, skill, posture, mem, orders) {
   // souls above the decay threshold are lost a bit every round: spend them first
   const flush = rising && supply > RULES.soulKeep;
   // healthy: the strategy's predicted strength ratio (with the remembered enemy army) is not losing
-  const healthy = army >= 4 && (mem.ratio ?? 1) >= 0.9 && army >= K.enemies.filter(e => e.role !== 'builder').length * 0.7;
+  const healthy = army >= 2 && (mem.ratio ?? 1) >= 0.9 && army >= K.enemies.filter(e => e.role !== 'builder').length * 0.7;
   const atWar = posture === 'attack' || posture === 'defend';
   const site = gold ? 'mine' : 'well';
   const wantSites = gold ? 1 + Math.floor(P.greed * 2 + s.round / 14) : (P.wells || 2) + Math.floor(s.round / 16);
@@ -199,9 +202,9 @@ export function economy(K, P, skill, posture, mem, orders) {
       if (r === 'mage' && n('mage') >= Math.max(1, Math.floor(army / 5))) v *= 0.3;
       if (v > bv) { bv = v; best = r; }
     }
-    if (bv < topValue * 0.5 && supply < 120 && !threatened && army >= 4) continue;
+    if (bv < topValue * 0.5 && supply < 120 && !threatened && army >= 2) continue;
     const pr = popCost(fac, best, tk);
-    const pri = 60 + 30 * P.aggression + (atWar ? 25 : 0) + (flush ? 25 : 0) + (army < 4 && (threatened || s.round >= 6) ? 30 : 0) + (threatened ? 20 : 0);
+    const pri = 60 + 30 * P.aggression + (atWar ? 25 : 0) + (flush ? 25 : 0) + (army < 2 && (threatened || s.round >= 6) ? 30 : 0) + (threatened ? 20 : 0);
     req(pri, trainCost(fac, best), () => { if (armyN + pr > s.board.cap || usedB.has(b.id)) return false; usedB.add(b.id); out.trains.push({ bid: b.id, role: best }); armyN += pr; return true; }, true, 'army');
   }
 

@@ -163,7 +163,8 @@ export function buildStancePlan(s, q, enemies) {
     if (t) return attack(t);
     if (q.goal) {
       // march to its target point, then guard there (fight what comes close)
-      if (dist(q.x, q.z, q.goal.x, q.goal.z) > RULES.goalReach && walkTo(q.goal.x, q.goal.z)) return plan;
+      // (within goalReach + its own radius: big squads count as there even with a friend on the spot)
+      if (dist(q.x, q.z, q.goal.x, q.goal.z) > RULES.goalReach + radiusOf(q) && walkTo(q.goal.x, q.goal.z)) return plan;
       return guardPlan(s, q, enemies, plan, left, skills);
     }
     // no target point: march on the enemy HQ if we know where it is, else search its possible spots

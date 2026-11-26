@@ -30,6 +30,7 @@ import { SettingsUI } from './ui/settings.js';
 import { sfx, unlockAudio, soundOn, setSound, setVolume } from './audio/sfx.js';
 import { TEAM, TEAM_HEX, setTeams } from './ui/teams.js';
 import { BUILDINGS } from './data/units.js';
+import { canReinforce, reinforceCost, reinforceSpotError } from './sim/base.js';
 import { hitRadius, gatherRate, placeError, edgeDist } from './sim/base.js';
 import { BuildingView } from './render/buildings.js';
 import { FogLayer } from './render/fog.js';
@@ -965,6 +966,8 @@ class Game {
         ${b('mode:move', 'move', 'Move', `${(left * moveOf(def)).toFixed(1)}″ left`, this.mode === 'move', left < 1, 'move')}
         ${b('mode:attack', melee ? 'attack' : 'shoot', atkName, `${at.ap} AP${!melee && engaged ? ' · strikes' : ''}`, this.mode === 'attack', left < at.ap, 'attack')}
         ${b('defend', 'defend', 'Defend', `${RULES.defendCost} AP · ${plan?.defends || 0}`, false, left < RULES.defendCost, 'defense')}
+        ${canReinforce(q) ? (() => { const missing = def.models - q.models, n = plan?.reinforce || 0, c = reinforceCost(q.faction, q.role, q.tk), why = reinforceSpotError(this.state, q);
+          return b('reinforce', 'spawn', n ? `Reinforce +${n}` : 'Reinforce', missing <= 0 ? 'full strength' : why && !n ? (FACTIONS[q.faction].graves ? 'on your graves' : 'near a building') : `${c} ${esc(this.eco().name.toLowerCase())} each`, n > 0, missing <= 0 || n >= Math.min(RULES.reinforceMax, missing) || left < RULES.reinforceAp, 'defense'); })() : ''}
         ${b('tier', 'tierup', 'Act earlier', plan?.upgrades >= RULES.maxUpgrades ? 'max' : `${RULES.tierCost[plan?.upgrades || 0]} AP`, false, (plan?.upgrades || 0) >= RULES.maxUpgrades || left < RULES.tierCost[plan?.upgrades || 0])}
         ${b('undo', 'undo', 'Undo', '', false, !plan, 'none')}
         ${b('clear', 'release', 'Clear', 'back to stance', false, !plan, 'none')}
@@ -990,6 +993,7 @@ class Game {
     }
     else if (k === 'parry') { const p = this.planner.plan(q.id); if (p?.parry) { p.parry = false; p.hist.splice(p.hist.lastIndexOf('parry'), 1); if (!p.hist.length) this.planner.clear(q.id); } else this.planner.prepaid(q.id, 'parry'); }
     else if (k === 'defend') this.planner.prepaid(q.id, 'defends');
+    else if (k === 'reinforce') this.planner.prepaid(q.id, 'reinforce');
     else if (k === 'tier') this.planner.prepaid(q.id, 'upgrades');
     else if (k === 'undo') this.planner.undo(q.id);
     else if (k === 'clear') this.planner.clear(q.id);
@@ -1170,6 +1174,7 @@ class Game {
       else if (e.type === 'release' && e.kind === 'summon') lines.push({ T: e.T, html: `${name(e.id)} calls ${e.count > 1 ? e.count + ' squads' : 'a squad'} of skeletons from the ground` });
       else if (e.type === 'wallOn') lines.push({ T: e.T, html: `${name(e.id)} braces a shield wall` });
       else if (e.type === 'release' && e.kind === 'strike' && !e.hit.length) lines.push({ T: e.T, html: `${name(e.id)}: strike misses (${e.lunge ? `lunged ${e.lunge}″, ` : ''}${e.locked ? 'locked with an enemy out of reach' : `nearest enemy ${e.gap}″ away: it got out of reach`})` });
+      else if (e.type === 'reinforce') lines.push({ T: e.T, html: `${name(e.id)} is reinforced: +${e.models} model${e.models > 1 ? 's' : ''} (${e.cost} ${esc(this.eco().name.toLowerCase())})` });
       else if (e.type === 'contact') lines.push({ T: e.T, html: `${name(e.id)} runs into ${name(e.t)} and fights it` });
       else if (e.type === 'chase') lines.push({ T: e.T, html: `${name(e.id)} chases ${name(e.t)} (out of reach)` });
       else if (e.type === 'release' && e.kind === 'strike' && e.lunge > 0) lines.push({ T: e.T, html: `${name(e.id)} lunges ${e.lunge}″ at its target` });
@@ -1223,6 +1228,7 @@ class Game {
         else if (e.type === 'watchEnd') { const q = at(e.id); if (q) this.texts.add(q.x, q.z, 'Overwatch!', 'tag', 2.6); }
         else if (e.type === 'buff') { for (const id of e.ids) { const q = at(id); if (q) { this.texts.add(q.x, q.z, e.armor ? `Rallied +${e.armor} armour` : 'Rallied', 'ok', 2.4); this.pulse(q.x, q.z, radiusOf(q) + 0.4, COL.rally); } } }
         else if (e.type === 'release' && (e.kind === 'blast' || e.kind === 'storm')) this.pulse(e.ex, e.ez, skillOf(defOf(this.tl.squads.find(x => x.id === e.id)), e.kind).radius, COL[e.kind], true);
+        else if (e.type === 'reinforce') { const q = at(e.id); if (q) { this.texts.add(q.x, q.z, `+${e.models} model${e.models > 1 ? 's' : ''}`, 'ok', 2.6); this.pulse(q.x, q.z, radiusOf(q) + 0.3, 0x7dffb0); } }
         else if (e.type === 'release' && e.kind === 'strike' && e.miss) { const q = at(e.id); if (q) this.texts.add(q.x, q.z, 'Whiff', 'def', 2.2); }
         else if (e.type === 'release' && e.kind === 'thunder') this.lightning(e.chain);
         else if (e.type === 'release' && e.kind === 'explode') { this.pulse(e.ex, e.ez, 2.5, COL.explode, true); this.pulse(e.ex, e.ez, 2.8, COL.explode); this.texts.add(e.ex, e.ez, 'Corpse Explosion!', 'tag', 2.9); }
@@ -1406,7 +1412,7 @@ function apBlocks(q, plan, mini) {
   if (!plan) return mini ? '' : `<div class="free" style="width:100%">No orders: follows its stance</div>`;
   const total = RULES.ap;
   const parts = [];
-  const pre = (plan.upgrades ? RULES.tierCost.slice(0, plan.upgrades).reduce((a, b) => a + b, 0) : 0) + plan.defends * RULES.defendCost + (plan.parry ? RULES.parryCost : 0) + (plan.overwatch ? RULES.overwatchCost : 0);
+  const pre = (plan.upgrades ? RULES.tierCost.slice(0, plan.upgrades).reduce((a, b) => a + b, 0) : 0) + plan.defends * RULES.defendCost + (plan.parry ? RULES.parryCost : 0) + (plan.overwatch ? RULES.overwatchCost : 0) + (plan.reinforce || 0) * RULES.reinforceAp;
   if (pre) parts.push(`<${mini ? 'b' : 'div'} class="pre" style="width:${100 * pre / total}%;${mini ? 'background:#3fa9ff' : ''}">${mini ? '' : icon('defend', 12)}</${mini ? 'b' : 'div'}>`);
   for (const a of plan.actions) {
     const c = actionCost(q, a);
@@ -1453,6 +1459,7 @@ const HELP = {
   combat: () => `
 <ul>
 <li><b>Two kinds of attack.</b> <b>Area attacks</b> (volleys, lobs and most skills) are <b>skillshots</b>: they hit whatever is inside the shape when they land. The shape charges up during its wind-up, so enemies can walk out of it, and yours can dodge.</li>
+<li><b>Reinforce:</b> squads are big (6–10 models). A hurt squad that ends the round near one of your buildings (Undead: on your graves) and isn't fighting can buy back up to ${RULES.reinforceMax} fallen models (Reinforce in its Actions, ${RULES.reinforceAp} AP each, paid per model). Squads on Retreat or Guard with no orders refill by themselves.</li>
 <li><b>What a squad can do</b> comes in three groups (the squad panel shows them as three rows): <b>Actions</b> every squad has (Move, its attack: melee squads Strike, ranged squads shoot; Defend; Act earlier), <b>Skills</b> (normal squads 2, elite squads 3: Shieldwall, Outriders, Grave Guard, Wraiths, Necromancers; heroes 3), and <b>Passives</b> that are always on (heroes 2, everyone else 1). A skill slot marked 🔒 unlocks with a research (e.g. Shield Drill gives Men-at-arms Lock Shields). Ranged squads can't order a melee strike: their shots turn into strikes on their own while an enemy is on them. A melee squad that runs into an enemy while moving fights it with the rest of that move.</li>
 <li><b>Passives</b> (✦): always-on abilities, each with its own icon in the squad panel (tap one for its details): ${['kingdom', 'undead'].flatMap(f => Object.values(FACTIONS[f].units).filter(u => u.passive && !u.summoned).map(u => `<b>${u.name}</b> ${passivesOf(u).map(pv => `${pv.name} (${pv.desc.replace(/\.$/, '')})`).join(' and ')}`)).join('; ')}. A squad hit by Warbands shows ✂ with its Rend stacks.</li>
 <li><b>Strike</b> (the melee attack) is a <b>target attack</b>: drop it on one enemy squad or building. If the target has stepped out of reach when the blow lands, the squad <b>lunges</b> at it (up to ${RULES.strikeLunge} AP of movement at its speed; not while it is locked in melee with another enemy). If it can't reach its target, it hits whichever enemy is in reach (the one it is locked with first). If every enemy is already too far when the strike starts, the squad <b>chases</b> its target instead of swinging at air. It hits one target, for ${Math.round((RULES.strikeMult - 1) * 100)}% more than the listed damage.</li>

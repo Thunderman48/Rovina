@@ -580,13 +580,14 @@ export function poseMini(root, q, hop = 0, time = 0) {
 // Formation offsets (local space, +z = facing) for n models
 export function formation(n, look) {
   if (n <= 1) return [{ x: 0, z: 0 }];
-  if (look === 'rider') {
+  if (look === 'rider' && n <= 5) {
     const pts = [{ x: -0.56, z: 0.45 }, { x: 0.56, z: 0.45 }, { x: 0, z: -0.6 }, { x: -1.1, z: -0.6 }, { x: 1.1, z: -0.6 }];
     return pts.slice(0, n);
   }
-  const sp = look === 'wraith' ? 1.08 : 1.06;
+  const sp = look === 'rider' ? 1.12 : look === 'wraith' ? 1.08 : 1.06;
   if (n === 5) return [{ x: -0.74, z: 0.5 }, { x: 0.74, z: 0.5 }, { x: 0, z: 0 }, { x: -0.74, z: -0.5 }, { x: 0.74, z: -0.5 }];
-  const front = n <= 4 ? 2 : 3;
+  // ranks: 2 wide up to 4 models, 3 wide up to 8, 4 wide beyond (squads have up to 10 models since 2026-11-26)
+  const front = n <= 4 ? 2 : n <= 8 ? 3 : 4;
   const rows = Math.ceil(n / front);
   const out = [];
   for (let i = 0; i < n; i++) {

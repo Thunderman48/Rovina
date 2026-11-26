@@ -34,7 +34,8 @@ export function tactics(K, P, skill, mem, inf, tasks, o, rnd) {
   const reachOf = q => speedIn(q) + (isShooter(defOf(q)) ? defOf(q).attack.range : 2) + 1;
   const near = q => seen.filter(e => dist(q.x, q.z, e.x, e.z) - radiusOf(e) - radiusOf(q) < reachOf(q));
   let cp = RULES.cp + bonusCp(s, p);
-  const cands = K.army.filter(q => near(q).length).map(q => {
+  // squads falling back to refill stay on Retreat (no hand orders, so they reinforce at home)
+  const cands = K.army.filter(q => near(q).length && tasks.get(q.id)?.role !== 'refill').map(q => {
     const d = defOf(q), hurt = q.hp < d.models * d.hpPer * 0.35;
     const melee = seen.some(e => !isShooter(defOf(e)) && dist(q.x, q.z, e.x, e.z) - radiusOf(e) - radiusOf(q) < 3);
     const v = (hurt ? 3 : 0) + (isShooter(d) && melee && skill.kite ? 2.5 : 0) + power(q) / 20;

@@ -4,7 +4,7 @@ import { emptyOrders, emptyPlan, defOf, radiusOf, apFor } from '../sim/state.js'
 import { planCost, actionCost, cpUsage, SKILL_KINDS } from '../sim/orders.js';
 import { clampAim, engagedWith } from '../sim/resolve.js';
 import { Nav, pathAP, walkAP } from '../sim/nav.js';
-import { popCost, tkOf, obstacles, navKey, placeError, footprint, armySize, builderCount, BUILDINGS, trainCost, bdef, startQueues, trainsRole, itemCost, isTechItem, techError, gateOf, researchesAt } from '../sim/base.js';
+import { canReinforce, reinforceSpotError, reinforceCost, popCost, tkOf, obstacles, navKey, placeError, footprint, armySize, builderCount, BUILDINGS, trainCost, bdef, startQueues, trainsRole, itemCost, isTechItem, techError, gateOf, researchesAt } from '../sim/base.js';
 import { TECH } from '../data/tech.js';
 import { builderPlan, builderIdleTarget, gatherTarget } from '../sim/builders.js';
 import { gatherRate, hitRadius } from '../sim/base.js';
@@ -225,6 +225,16 @@ export class Planner {
       if (this.apLeft(q) < RULES.parryCost) { this.g.toast(`Not enough AP (${RULES.parryCost} needed)`, true); return false; }
       plan.parry = true; plan.hist.push('parry');
       this.g.confirm(q, 'Parry ready'); this.g.changed();
+      return true;
+    }
+    if (field === 'reinforce') {
+      const d = defOf(q);
+      if (!canReinforce(q)) return false;
+      if ((plan.reinforce || 0) >= Math.min(RULES.reinforceMax, d.models - q.models)) { this.g.toast(q.models >= d.models ? 'The squad is at full strength' : `At most ${RULES.reinforceMax} models a round`, true); return false; }
+      if (this.apLeft(q) < RULES.reinforceAp) { this.g.toast(`Not enough AP (${RULES.reinforceAp} needed)`, true); return false; }
+      plan.reinforce = (plan.reinforce || 0) + 1; plan.hist.push('reinforce');
+      const why = reinforceSpotError(this.s, q);
+      this.g.confirm(q, `Reinforce +${plan.reinforce}${why ? ' (' + why.toLowerCase() + ')' : ''}`); this.g.changed();
       return true;
     }
     const cost = field === 'defends' ? RULES.defendCost : RULES.tierCost[plan.upgrades] || 999;

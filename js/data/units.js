@@ -51,7 +51,10 @@ export const RULES = {
   summonTtl: 3,                 // rounds a summoned squad lasts (it crumbles at the end of the last one)
   // stances (js/sim/stances.js)
   advanceEngage: 10,            // advance: fight the nearest enemy squad or building within this gap, else march on
-  goalReach: 1.5,               // advance: within this of its target point the squad stops and guards there
+  reinforceMax: 2,              // reinforcing: models a squad can buy back a round (order plan.reinforce)
+  reinforceAp: 20,              // AP each reinforced model takes (prepaid, like defends)
+  reinforceRange: 6,            // Kingdom: the squad's edge within this of an own finished building (not a Palisade); Undead: on own graves
+  goalReach: 1.5,               // advance: within this (+ the squad's radius) of its target point the squad stops and guards there
   retreatReach: 3,              // retreat: within this of its fallback point the squad guards there
   // rounds a squad takes to train (it appears at the end of the last one)
   trainRounds: { builder: 1, swarm: 2, fighter: 2, ranged: 2, fast: 2, mage: 2, tank: 3 },
@@ -129,8 +132,8 @@ const STEP = (ap, range, cd = 2) => ({ kind: 'step', name: 'Shadow Step', cat: '
 const WALL = (name, ap = 15, cd = 1) => ({ kind: 'wall', name, cat: 'defense', ap, mult: 0.3, cosHalf: 0.5, cd });
 //  pierce : a bolt line that hits every target along it (walls still stop it)
 const PIERCE = (ap, dmg, range, width = 0.7, cd = 2) => ({ kind: 'pierce', name: 'Piercing Bolt', cat: 'attack', ranged: true, ap, dmg, range, width, cd });
-//  raise  : friendly squads in a circle around the caster regain one fallen model each
-const RAISE = (ap, radius, cd = 3) => ({ kind: 'raise', name: 'Raise', cat: 'defense', ap, radius, cd });
+//  raise  : friendly squads in a circle around the caster regain `models` fallen models each (2)
+const RAISE = (ap, radius, cd = 3, models = 2) => ({ kind: 'raise', name: 'Raise', cat: 'defense', ap, radius, models, cd });
 
 // The two factions play differently:
 //  Kingdom: plain all-rounders with decent stats, peasants who build and farm, a strong late farm economy.
@@ -143,18 +146,18 @@ export const FACTIONS = {
     units: {
       hero:    { name: 'The Chosen', role: 'hero', models: 1, hpPer: 260, armor: 9, tier: 5, look: 'lord', vision: 12, defends: 2, attack: STRIKE(25, 18, 1.6), skills: [LEAP(20, 7, 2, 12, 1.6, 'Leap Strike'), RALLY(20, 5, 2, 4, 1)],
                  slots: [{ kind: 'leap' }, { kind: 'rally' }, { kind: 'mighty', lock: 'sweeping' }] },
-      tank:    { name: 'Shieldwall', role: 'tank', parry: true, models: 3, hpPer: 102, armor: 12, tier: 4, look: 'shield', vision: 9, defends: 2, attack: STRIKE(30, 4.8, 1.3),
+      tank:    { name: 'Shieldwall', role: 'tank', parry: true, models: 6, hpPer: 102, armor: 12, tier: 4, look: 'shield', vision: 9, defends: 2, attack: STRIKE(30, 4.8, 1.3),
                  skills: [WALL('Lock Shields'), { ...MIGHTY(25, 3, 1.4, 0.5, 15, 2), name: 'Shield Bash' }], slots: [{ kind: 'wall' }, { kind: 'mighty' }, { kind: 'parry' }] },
-      fighter: { name: 'Men-at-arms', role: 'fighter', parry: true, models: 4, hpPer: 60, armor: 7, tier: 5, look: 'sword', vision: 9, defends: 1, attack: STRIKE(25, 6, 1.5), slots: [{ kind: 'parry' }, { kind: 'wall', lock: 'shielddrill' }] },
-      ranged:  { name: 'Crossbows', role: 'ranged', move: 4.8, models: 4, hpPer: 45, armor: 3, tier: 5, look: 'crossbow', vision: 11, defends: 1, attack: VOLLEY(40, 2.7, 14), melee: STRIKE(25, 2, 1.2), slots: [{ kind: 'overwatch' }, { kind: 'pierce', lock: 'firearrows' }] },
-      fast:    { name: 'Outriders', role: 'fast', models: 3, hpPer: 72, armor: 6, tier: 6, look: 'rider', vision: 11, defends: 1, attack: STRIKE(45, 13, 1.7),
+      fighter: { name: 'Men-at-arms', role: 'fighter', parry: true, models: 8, hpPer: 60, armor: 7, tier: 5, look: 'sword', vision: 9, defends: 1, attack: STRIKE(25, 6, 1.5), slots: [{ kind: 'parry' }, { kind: 'wall', lock: 'shielddrill' }] },
+      ranged:  { name: 'Crossbows', role: 'ranged', move: 4.8, models: 8, hpPer: 45, armor: 3, tier: 5, look: 'crossbow', vision: 11, defends: 1, attack: VOLLEY(40, 2.7, 14), melee: STRIKE(25, 2, 1.2), slots: [{ kind: 'overwatch' }, { kind: 'pierce', lock: 'firearrows' }] },
+      fast:    { name: 'Outriders', role: 'fast', models: 6, hpPer: 72, armor: 6, tier: 6, look: 'rider', vision: 11, defends: 1, attack: STRIKE(45, 13, 1.7),
                  skills: [CHARGE(35, 9, 9), { ...SWEEP(30, 5, 1, 2), name: 'Trample' }, { ...STEP(20, 6, 2), name: 'Wheel Away' }], slots: [{ kind: 'charge' }, { kind: 'sweep' }, { kind: 'step' }] },
       builder: { name: 'Peasants', role: 'builder', models: 2, hpPer: 42, armor: 2, tier: 5, look: 'peasant', vision: 8, defends: 0, attack: STRIKE(25, 2, 1.2) },
     },
     // Gold: a steady builder economy (keep, big farms worked by many peasants, mines on resource sites)
     eco: { res: 'gold', name: 'Gold', icon: 'gold', start: 0, hq: 6, gather: { farm: 8, mine: 10 } },
     buildings: ['barracks', 'tower', 'farm', 'mine', 'banner', 'wall', 'forge', 'chapel'],
-    train: { builder: 10, tank: 30, fighter: 24, ranged: 26, fast: 30 },
+    train: { builder: 10, tank: 60, fighter: 48, ranged: 52, fast: 60 },   // x2 with the bigger squads (2026-11-26)
     hqTrains: ['builder', 'fighter'],   // the Keep trains peasants and Men-at-arms
     maxBuilders: 10,
   },
@@ -164,17 +167,17 @@ export const FACTIONS = {
       hero:    { name: 'Lich', role: 'hero', models: 1, hpPer: 270, armor: 5, tier: 3, look: 'necro', vision: 12, defends: 1, magic: true, attack: VOLLEY(25, 13, 10, 0.6), melee: STRIKE(25, 8, 1.4),
                  mana: { max: 100, start: 60, regen: 25 }, skills: [SUMMON(20, 40, 4, 2), THUNDER(15, 25, 17, 11, 3, 3.5, 0.7), EXPLODE(10, 20, 9, 2.5, 8, 3)],
                  slots: [{ kind: 'summon' }, { kind: 'thunder' }, { kind: 'explode' }] },
-      tank:    { name: 'Grave Guard', role: 'tank', parry: true, models: 3, hpPer: 63, armor: 9, tier: 4, look: 'graveguard', vision: 9, defends: 2, attack: STRIKE(30, 3.2, 1.3),
+      tank:    { name: 'Grave Guard', role: 'tank', parry: true, models: 6, hpPer: 63, armor: 9, tier: 4, look: 'graveguard', vision: 9, defends: 2, attack: STRIKE(30, 3.2, 1.3),
                  skills: [WALL('Grave Wall'), { ...MIGHTY(25, 2.5, 1.4, 0.5, 15, 2), name: 'Bone Bash' }], slots: [{ kind: 'wall' }, { kind: 'mighty' }, { kind: 'parry' }] },
-      fighter: { name: 'Skeleton Warriors', role: 'fighter', parry: true, models: 5, hpPer: 27, armor: 3, tier: 5, look: 'skeleton', vision: 9, defends: 1, attack: STRIKE(25, 2.4, 1.5), slots: [{ kind: 'parry' }, { kind: 'wall', lock: 'boneshields' }] },
+      fighter: { name: 'Skeleton Warriors', role: 'fighter', parry: true, models: 10, hpPer: 27, armor: 3, tier: 5, look: 'skeleton', vision: 9, defends: 1, attack: STRIKE(25, 2.4, 1.5), slots: [{ kind: 'parry' }, { kind: 'wall', lock: 'boneshields' }] },
       // the swarm: fragile, quick, cheap, trained two squads at a time (`pair`; a later upgrade: three)
-      swarm:   { name: 'Skeleton Warband', role: 'swarm', pair: 2, compact: 0.8, models: 5, hpPer: 21, armor: 2, tier: 3, look: 'skeleton', vision: 9, defends: 0, attack: STRIKE(25, 2.8, 1.4),
+      swarm:   { name: 'Skeleton Warband', role: 'swarm', pair: 2, compact: 0.8, models: 10, hpPer: 21, armor: 2, tier: 3, look: 'skeleton', vision: 9, defends: 0, attack: STRIKE(25, 2.8, 1.4),
                  skills: [{ ...CHARGE(30, 3, 4, 2), name: 'Pounce' }, { ...RALLY(15, 0.1, 2, 0, 1.25), name: 'Frenzy' }], slots: [{ kind: 'charge' }, { kind: 'rally' }] },
-      ranged:  { name: 'Bone Archers', role: 'ranged', models: 4, hpPer: 30, armor: 1, tier: 5, look: 'archer', vision: 11, defends: 1, attack: VOLLEY(40, 1.9, 14, 0.9), melee: STRIKE(25, 1.2, 1.2), slots: [{ kind: 'overwatch' }, { kind: 'storm', lock: 'bonespears' }] },
-      fast:    { name: 'Wraiths', role: 'fast', move: 9, models: 3, hpPer: 42, armor: 3, tier: 6, look: 'wraith', vision: 11, defends: 1, ghost: true, attack: STRIKE(45, 11, 1.7),
+      ranged:  { name: 'Bone Archers', role: 'ranged', models: 8, hpPer: 30, armor: 1, tier: 5, look: 'archer', vision: 11, defends: 1, attack: VOLLEY(40, 1.9, 14, 0.9), melee: STRIKE(25, 1.2, 1.2), slots: [{ kind: 'overwatch' }, { kind: 'storm', lock: 'bonespears' }] },
+      fast:    { name: 'Wraiths', role: 'fast', move: 9, models: 6, hpPer: 42, armor: 3, tier: 6, look: 'wraith', vision: 11, defends: 1, ghost: true, attack: STRIKE(45, 11, 1.7),
                  skills: [CHARGE(35, 6.8, 9), { ...MIGHTY(30, 2, 1.6, -1, 12, 3), name: 'Dread Wail' }], slots: [{ kind: 'charge' }, { kind: 'step', lock: 'shadowwalk' }, { kind: 'mighty' }] },
       // a weaker caster troop: bolts, a weaker Dark Thunder, a one-squad summon
-      mage:    { name: 'Necromancers', role: 'mage', models: 2, hpPer: 30, armor: 1, tier: 4, look: 'necro', vision: 10, defends: 1, magic: true, attack: VOLLEY(25, 4, 9, 0.5), melee: STRIKE(25, 1.5, 1.2),
+      mage:    { name: 'Necromancers', role: 'mage', models: 4, hpPer: 30, armor: 1, tier: 4, look: 'necro', vision: 10, defends: 1, magic: true, attack: VOLLEY(25, 4, 9, 0.5), melee: STRIKE(25, 1.5, 1.2),
                  mana: { max: 60, start: 40, regen: 15 }, skills: [THUNDER(15, 20, 6, 10, 2, 3, 0.7), SUMMON(20, 35, 4, 1), { ...RAISE(30, 4, 0), mana: 30 }],
                  slots: [{ kind: 'thunder' }, { kind: 'summon' }, { kind: 'raise' }] },
     },
@@ -183,7 +186,7 @@ export const FACTIONS = {
     // a death economy: the Crypt (1) and Soul Wells (2) only keep it from stalling; deaths on graves pay the rest
     eco: { res: 'souls', name: 'Souls', icon: 'souls', start: 0, hq: 6, gather: {} },
     buildings: ['barracks', 'tower', 'well', 'monolith', 'wall', 'pit', 'sanctum'],
-    train: { tank: 16, fighter: 9, swarm: 20, ranged: 13, fast: 16, mage: 22 },
+    train: { tank: 32, fighter: 18, swarm: 40, ranged: 26, fast: 32, mage: 44 },   // x2 with the bigger squads (2026-11-26)
     // the cheap core squads (the owner's old tier rule is replaced: Undead costs may change, 2026-11-25)
     lowTier: ['swarm', 'fighter', 'ranged'],
     hqTrains: ['swarm', 'mage'],   // the Crypt raises the swarm and (from the Mausoleum) the Necromancers
@@ -230,15 +233,17 @@ for (const f of Object.keys(PASSIVES)) for (const [r, pv] of Object.entries(PASS
   u.passive = u.passives[0];   // the sim's per-squad passive checks; heroes' second passive is an aura (resolve.js)
 }
 // population (army cap) each squad takes, and its movement: inches per 100 AP (tier stays initiative only;
-// the default movement is the old tier x 1.2")
-const POP = { hero: 0, builder: 0, summon: 0, swarm: 1, fighter: 2, ranged: 2, mage: 2, fast: 3, tank: 3 };
+// the default movement is the old tier x 1.2"). Squads have twice the models since 2026-11-26 (fewer, bigger
+// squads), so their pop doubled too: the same cap holds the same strength in half the squads
+const POP = { hero: 0, builder: 0, summon: 0, swarm: 2, fighter: 4, ranged: 4, mage: 4, fast: 6, tank: 6 };
 for (const f of Object.keys(FACTIONS)) for (const [r, u] of Object.entries(FACTIONS[f].units)) {
-  if (u.pop === undefined) u.pop = f === 'undead' && (r === 'fighter' || r === 'ranged') ? 1 : POP[r] ?? 1;
+  if (u.pop === undefined) u.pop = f === 'undead' && (r === 'fighter' || r === 'ranged') ? 2 : POP[r] ?? 1;
   if (u.move === undefined) u.move = Math.round(u.tier * RULES.moveFactor * RULES.ap * 100) / 100;
 }
-FACTIONS.undead.units.fast.pop = 2;   // Wraiths
+FACTIONS.undead.units.fast.pop = 4;   // Wraiths
 FACTIONS.undead.units.summon = { ...FACTIONS.undead.units.swarm, role: 'summon', summoned: true };
 delete FACTIONS.undead.units.summon.pair;
+FACTIONS.undead.units.summon.models = 5;   // summons stay small: free bodies don't double with the trained squads
 FACTIONS.undead.units.summon.pop = 0;   // summoned squads take no population
 
 // Buildings. Builders put them up: `work` is the builder AP needed to finish one.

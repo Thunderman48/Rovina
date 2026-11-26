@@ -211,6 +211,18 @@ export function builderCount(s, p) { return s.squads.filter(q => q.owner === p &
 // squads counted against the army cap: builders (their own cap) and summoned squads don't count
 export const inArmy = q => !isBuilder(q) && !q.ttl;
 // population a role takes when trained (a pair / three of a swarm counts each squad)
+// ---- reinforcing (Dawn of War style, since 2026-11-26): a squad buys back fallen models ----
+// who can: trained squads (not heroes, peasants or summoned skeletons)
+export const canReinforce = q => q && q.role !== 'hero' && q.role !== 'builder' && q.role !== 'summon' && !q.ttl;
+// resource per model: its share of the training cost
+export const reinforceCost = (fac, role, tk = '') => { const d = unitDef(fac, role, tk); return Math.ceil(trainCost(fac, role) / (d.models * pairOf(fac, role, tk))); };
+// '' when the squad stands where it can reinforce, else why not: Kingdom within RULES.reinforceRange of an own
+// finished building (not a Palisade); Undead on their own graves
+export function reinforceSpotError(s, q) {
+  if (FACTIONS[q.faction].graves) return graveAt(s, q.owner, q.x, q.z) ? '' : 'Must stand on your graves';
+  const r = squadRadius(unitDef(q.faction, q.role, q.tk), q.models);
+  return (s.buildings || []).some(b => b.owner === q.owner && b.hp > 0 && !b.build && b.type !== 'wall' && edgeDist(b, q.x, q.z) - r <= RULES.reinforceRange) ? '' : `Must end within ${RULES.reinforceRange}″ of one of your buildings`;
+}
 // (an unknown role costs 0, so a bad draft never throws inside a UI render)
 export const popCost = (fac, role, tk = '') => FACTIONS[fac]?.units[role] ? (unitDef(fac, role, tk).pop || 0) * pairOf(fac, role, tk) : 0;
 // the side's population: its army squads plus the squads in training (builders, heroes and summons are free)

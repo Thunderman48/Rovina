@@ -27,9 +27,10 @@ export function strategy(K, P, skill, mem) {
   if (threat.length) U.defend = 0.6 + 1.5 * Math.min(2, fightRatio(threat, K.army.filter(q => K.hq && Math.hypot(q.x - K.hq.x, q.z - K.hq.z) < 16)));
   const ready = K.round >= P.firstAttack.round && K.army.length >= P.firstAttack.army;
   const want = P.attackRatio + skill.edge;
+  // a big army (24+ pop, about the old 18 squads) and a maxed-out one (the bank can't buy more) lean to attacking
   // near the population cap the bank can't buy more army: use it (maxed-out armies attack, as in most RTS AIs)
   const maxed = armySize(K.s, K.p) >= K.s.board.cap * 0.85;
-  if (ready) U.attack = P.aggression * Math.min(2.2, atkRatio / want) + (K.army.length >= 18 ? 0.4 : 0) + (K.round >= 30 ? 0.3 : 0) + (maxed ? 0.6 : 0);
+  if (ready) U.attack = P.aggression * Math.min(2.2, atkRatio / want) + (armySize(K.s, K.p) >= 24 ? 0.4 : 0) + (K.round >= 30 ? 0.3 : 0) + (maxed ? 0.6 : 0);
   if (K.army.some(q => q.role === 'fast') && K.known.some(b => b.type === 'mine' || b.type === 'well' || b.type === 'farm')) U.harass = 0.45 * P.aggression + 0.1;
   let best = 'build';
   for (const [k, v] of Object.entries(U)) if (v > U[best]) best = k;
