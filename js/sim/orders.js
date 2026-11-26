@@ -28,7 +28,7 @@ export function sanitizePlan(q, plan) {
   p.upgrades = Math.max(0, Math.min(RULES.maxUpgrades, plan.upgrades | 0));
   p.defends = Math.max(0, Math.min(RULES.maxDefends, plan.defends | 0));
   if (plan.parry && def.parry) p.parry = true;
-  if (plan.overwatch && isShooter(def)) p.overwatch = { x: num(plan.overwatch.x), z: num(plan.overwatch.z) };
+  if (plan.overwatch && isShooter(def) && (def.slots || []).some(sl => sl.kind === 'overwatch')) p.overwatch = { x: num(plan.overwatch.x), z: num(plan.overwatch.z) };
   let used = prepaidCost(p);
   const budget = apFor(q);
   if (used > budget) return emptyPlan();
@@ -43,7 +43,8 @@ export function sanitizePlan(q, plan) {
       a = { kind: 'move', pts, ap: Math.max(1, Math.round(num(a0.ap))) };
     } else if (a0.kind === 'wait') a = { kind: 'wait', ap: Math.max(1, Math.round(num(a0.ap))) };
     else if (a0.kind === 'work' && q.role === 'builder') a = { kind: 'work', x: num(a0.x), z: num(a0.z), ap: Math.max(1, Math.round(num(a0.ap))) };
-    else if (a0.kind === 'strike' && meleeOf(def)) a = { kind: 'strike', x: num(a0.x), z: num(a0.z), ...(typeof a0.t === 'string' && a0.t.length <= 16 ? { t: a0.t } : {}) };
+    // the Strike is the melee units' attack; ranged units and casters only strike on their own while engaged
+    else if (a0.kind === 'strike' && def.attack.kind === 'strike') a = { kind: 'strike', x: num(a0.x), z: num(a0.z), ...(typeof a0.t === 'string' && a0.t.length <= 16 ? { t: a0.t } : {}) };
     // an old area swing order (the legacy AI, older clients) becomes a strike at its aim point
     else if (a0.kind === 'swing' && def.attack.kind === 'strike') a = { kind: 'strike', x: num(a0.x), z: num(a0.z) };
     else if (a0.kind === def.attack.kind) a = { kind: a0.kind, x: num(a0.x), z: num(a0.z) };

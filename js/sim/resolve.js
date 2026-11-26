@@ -171,7 +171,21 @@ export function resolveRound(state0, ordersIn) {
   // passives on the attacker's side: Berserk (low HP: more damage), Rend stacks on it (less damage)
   const pv = q => (q && !q.type ? defOf(q).passive : null) || null;
   const lowHp = q => { const d = defOf(q); return q.hp < d.models * d.hpPer * pv(q).below; };
-  const outMult = q => (pv(q)?.kind === 'berserk' && lowHp(q) ? pv(q).dmg : 1) * (q.rend ? 1 - q.rend.n * q.rend.dmg : 1);
+  // heroes' second passive is an aura on other squads' damage: Inspiring Presence (own squads near The
+  // Chosen x1.1), Dread Aura (enemy squads near the Lich x0.9); edge-to-edge distance
+  const auraMult = q => {
+    let m = 1;
+    for (const h of s.squads) {
+      if (h === q || h.hp <= 0 || h.role !== 'hero') continue;
+      for (const a of defOf(h).passives || []) {
+        if (a.kind !== 'inspire' && a.kind !== 'dread') continue;
+        if ((a.kind === 'inspire') !== (h.owner === q.owner)) continue;
+        if (dist(h.x, h.z, q.x, q.z) - radiusOf(h) - radiusOf(q) <= a.radius) m *= a.mult;
+      }
+    }
+    return m;
+  };
+  const outMult = q => (pv(q)?.kind === 'berserk' && lowHp(q) ? pv(q).dmg : 1) * (q.rend ? 1 - q.rend.n * q.rend.dmg : 1) * (q.type ? 1 : auraMult(q));
   const atkDmg = (r, base) => base * r.q.models * r.mult * outMult(r.q);
   const RANGED_KINDS = ['volley', 'pierce', 'lob', 'storm', 'blast', 'thunder'];
 
@@ -528,6 +542,18 @@ export function resolveRound(state0, ordersIn) {
     }
     r.el += 1;
     const st = r.st;
+    // contact fight (since 2026-11-26): a melee squad whose move was stopped by an enemy it walked into
+    // spends the rest of that move's AP on strikes at it, instead of standing still
+    if (a.kind === 'move' && st.contact && !st.fought) {
+      st.fought = true;
+      const sAp = meleeOf(def).ap, n = Math.floor((a.cost - r.el) / sAp), e = unitAt(st.contact);
+      if (n > 0 && e && e.hp > 0) {
+        const ins = []; for (let i = 0; i < n; i++) ins.push({ kind: 'strike', t: e.id, x: e.x, z: e.z, cost: sAp });
+        r.actions.splice(r.idx + 1, 0, ...ins);
+        a.cost = r.el;
+        ev({ type: 'contact', id: q.id, t: e.id, strikes: n });
+      }
+    }
     if (a.kind === 'move' && st.phase === 'go') {
       // stepping away from an engaged enemy: stand and disengage first, taking parting blows
       if (!st.checked) {
@@ -790,7 +816,11 @@ export function resolveRound(state0, ordersIn) {
       let nx = cx, nz = cz, ok = clear(nx, nz);
       // walked into contact with an enemy squad: stop here, the fight is on
       if (!ok && !ethereal && all.some(o => o.owner !== q.owner && dist(cx, cz, o.x, o.z) < rq + radiusOf(o) && dist(q.x, q.z, o.x, o.z) <= rq + radiusOf(o) + RULES.engageGap + 0.05)) {
-        st.pts = []; st.phase = 'arrived'; continue;
+        st.pts = []; st.phase = 'arrived';
+        // a melee squad fights what it ran into with the rest of the move (step: contact fight)
+        const foe = all.filter(o => o.owner !== q.owner && dist(cx, cz, o.x, o.z) < rq + radiusOf(o)).sort((a, b) => dist(q.x, q.z, a.x, a.z) - dist(q.x, q.z, b.x, b.z))[0];
+        if (foe && defOf(q).attack.kind === 'strike' && q.role !== 'builder' && q.stance !== 'retreat') st.contact = foe.id;
+        continue;
       }
       if (!ok) {
         // sidestep around whatever is in the way: keep to one side (switching sides only after

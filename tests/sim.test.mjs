@@ -1,5 +1,5 @@
 // Headless tests for the simulation. Run: node tests/sim.test.mjs
-import { RULES, FACTIONS, BUILDINGS, trainCost, skillOf, pairOf, squadRadius, moveOf } from '../js/data/units.js';
+import { RULES, FACTIONS, BUILDINGS, trainCost, skillOf, pairOf, squadRadius, moveOf, unitDef, slotsOf, passivesOf, unitClass } from '../js/data/units.js';
 import { createGame, addSquad, defOf, radiusOf, emptyOrders, emptyPlan, apFor } from '../js/sim/state.js';
 import { resolveRound, damageAfter, engagedWith, losCut } from '../js/sim/resolve.js';
 import { cpUsage, validateOrders, actionCost } from '../js/sim/orders.js';
@@ -435,6 +435,7 @@ test('overwatch fires once at an enemy moving into the front cone, even in anoth
 
 test('Arrow Storm hits a circle, then recharges', () => {
   const s = arena([[1, 'ranged', 22, 8], [0, 'fighter', 22, 19]]);
+  finishTech(s, 1, 'bonespears');   // Arrow Storm is a locked slot until Storm of Bones
   const o = holdAll(s);
   o[1].squads.q1 = plan([{ kind: 'volley', x: 22, z: 19 }, { kind: 'storm', x: 22, z: 19 }]);
   const { state, log } = resolveRound(s, o);
@@ -444,13 +445,15 @@ test('Arrow Storm hits a circle, then recharges', () => {
   ok(state.squads.find(q => q.id === 'q1').cd.storm > 0, 'storm goes on cooldown');
 });
 
-test('only fighters can parry', () => {
+test('parry is a skill of fighters and elite tanks (Shieldwall parries); Crossbows cannot parry', () => {
   const s = arena([[0, 'tank', 20, 16], [1, 'fighter', 22.2, 16]]);
   const o = holdAll(s);
   o[0].squads.q1 = { ...plan([]), parry: true };
   o[1].squads.q2 = plan([{ kind: 'strike', x: 20, z: 16 }]);
   const { log } = resolveRound(s, o);
-  ok(!events(log).some(e => e.type === 'parry'), 'a tank parry order is dropped');
+  ok(events(log).some(e => e.type === 'parry'), 'the Shieldwall parries');
+  const c = arena([[0, 'ranged', 20, 16]]);
+  ok(!validateOrders(c, 0, { squads: { q1: { ...plan([]), parry: true } }, stances: {} }).squads.q1?.parry, 'a Crossbows parry order is dropped');
 });
 
 test('volleys into a forest deal reduced damage (cover)', () => {
@@ -504,11 +507,11 @@ console.log('M3 skills');
 
 test('heroes have three skills, one of each colour, usable in the same round', () => {
   for (const f of ['kingdom', 'undead']) {
-    const def = createGame(1, [f, f]).squads.find(q => q.role === 'hero');
-    const cats = defOf(def).skills.map(k => k.cat).sort().join();
+    const cats = slotsOf(FACTIONS[f].units.hero).map(k => k.cat || skillOf(unitDef(f, 'hero', 'sweeping'), k.kind).cat).sort().join();
     eq(cats, f === 'kingdom' ? 'attack,defense,move' : 'attack,attack,defense', f);
   }
   const s = arena([[0, 'hero', 10, 16], [1, 'fighter', 16, 16], [0, 'fighter', 9, 18]]);
+  finishTech(s, 0, 'sweeping');   // Mighty Swing is a locked slot until Champion's Swing
   const o = holdAll(s);
   o[0].squads.q1 = plan([{ kind: 'rally', x: 10, z: 16 }, { kind: 'leap', x: 13.2, z: 16 }, { kind: 'mighty', x: 16, z: 16 }]);
   const { state, log } = resolveRound(s, o);
@@ -522,6 +525,7 @@ test('heroes have three skills, one of each colour, usable in the same round', (
 
 test('the same skill cannot be used twice in a round', () => {
   const s = arena([[0, 'hero', 10, 16], [1, 'fighter', 30, 16]]);
+  finishTech(s, 0, 'sweeping');
   const o = holdAll(s);
   o[0].squads.q1 = plan([{ kind: 'mighty', x: 30, z: 16 }, { kind: 'mighty', x: 30, z: 16 }]);
   const { log } = resolveRound(s, o);
@@ -546,6 +550,7 @@ test('Lock Shields blunts hits from the front only', () => {
 
 test('Piercing Bolt hits every squad on the line', () => {
   const s = arena([[0, 'ranged', 6, 3], [1, 'fighter', 11, 3], [1, 'tank', 15, 3]]);
+  finishTech(s, 0, 'firearrows');   // Piercing Bolts research unlocks it
   const o = holdAll(s);
   o[0].squads.q1 = plan([{ kind: 'pierce', x: 20, z: 3 }]);
   const { log } = resolveRound(s, o);
@@ -626,12 +631,13 @@ test('summoned skeletons are Skeleton Warbands with a timed life', () => {
 
 test('Mighty Swing stuns: the target\'s actions wait; leftover stun carries into the next round', () => {
   const s = arena([[0, 'hero', 20, 16], [1, 'fighter', 22.4, 16]]);
+  finishTech(s, 0, 'sweeping');
   const o = holdAll(s);
   o[0].squads.q1 = plan([{ kind: 'mighty', x: 22.4, z: 16 }]);
   o[1].squads.q2 = plan([{ kind: 'wait', ap: 40 }, { kind: 'move', pts: [{ x: 30, z: 16 }], ap: 30 }]);
   const { state, log } = resolveRound(s, o);
   ok(events(log).some(e => e.type === 'stun' && e.id === 'q2'), 'stunned');
-  const sk = FACTIONS.kingdom.units.hero.skills.find(k => k.kind === 'mighty');
+  const sk = unitDef('kingdom', 'hero', 'sweeping').skills.find(k => k.kind === 'mighty');
   ok(sk.stun === 25 && sk.reach > FACTIONS.kingdom.units.hero.attack.reach, 'longer reach than the basic swing');
   ok(events(log).some(e => e.type === 'stunned' && e.id === 'q2'), 'its actions were held up');
 });
@@ -697,7 +703,7 @@ test('a fallen hero comes back after its side holds the spot for 3 rounds (enemi
 });
 
 test('stance squads use their skills on their own unless auto skills is switched off', () => {
-  const mk = auto => { const s = arena([[0, 'hero', 20, 4], [1, 'fighter', 22.6, 4]]); if (!auto) s.squads[0].auto = false; s.squads[0].stance = 'guard'; return s; };
+  const mk = auto => { const s = arena([[0, 'hero', 20, 4], [1, 'fighter', 22.6, 4]]); finishTech(s, 0, 'sweeping'); if (!auto) s.squads[0].auto = false; s.squads[0].stance = 'guard'; return s; };
   const used = s => events(resolveRound(s, [orders(), { squads: {}, stances: { q2: 'hold' } }]).log).some(e => e.type === 'act' && e.id === 'q1' && ['mighty', 'rally', 'leap'].includes(e.kind));
   ok(used(mk(true)), 'auto: the hero swings its Mighty Swing');
   ok(!used(mk(false)), 'off: basic swings only');
@@ -1676,6 +1682,7 @@ test('a shooter locked in melee: its planned volley becomes a melee strike at th
 
 test('ranged skills (tagged) turn into strikes while locked in melee, and cost nothing', () => {
   const s = arena([[0, 'ranged', 20, 16], [1, 'fighter', 22.6, 16]]);
+  finishTech(s, 0, 'firearrows');
   const o = holdAll(s); o[0].squads.q1 = plan([{ kind: 'pierce', x: 30, z: 16 }]);
   const r = resolveRound(s, o);
   ok(events(r.log).some(e => e.type === 'toMelee' && e.from === 'pierce'), 'converted');
@@ -1683,15 +1690,16 @@ test('ranged skills (tagged) turn into strikes while locked in melee, and cost n
   ok(FACTIONS.undead.units.hero.skills.find(k => k.kind === 'thunder').ranged && !FACTIONS.undead.units.hero.skills.find(k => k.kind === 'summon').ranged, 'Dark Thunder is ranged, Summon is not');
 });
 
-test('not engaged: volleys fire as usual; shooters may also order a melee Strike', () => {
+test('not engaged: volleys fire as usual; ranged units cannot order a melee Strike (only automatic when engaged)', () => {
   const s = arena([[0, 'ranged', 20, 16], [1, 'fighter', 24, 16]]);
   let o = holdAll(s); o[0].squads.q1 = plan([{ kind: 'volley', x: 24, z: 16 }]);
   ok(!events(resolveRound(s, o).log).some(e => e.type === 'toMelee'), 'no conversion');
   o = holdAll(s); o[0].squads.q1 = plan([{ kind: 'strike', t: 'q2', x: 24, z: 16 }]);
   const v = validateOrders(s, 0, o[0]);
-  eq(v.squads.q1.actions[0].kind, 'strike', 'a melee order is allowed');
-  eq(actionCost(s.squads[0], v.squads.q1.actions[0]), FACTIONS.kingdom.units.ranged.melee.ap);
-  ok(events(resolveRound(s, o).log).some(e => e.type === 'hit' && e.src === 'q1' && e.kind === 'strike'), 'it strikes (with a lunge)');
+  eq((v.squads.q1?.actions || []).filter(a => a.kind === 'strike').length, 0, 'a hand-ordered strike is dropped');
+  const e = arena([[0, 'ranged', 20, 16], [1, 'fighter', 22.6, 16]]);
+  const oe = holdAll(e); oe[0].squads.q1 = plan([{ kind: 'volley', x: 22.6, z: 16 }]);
+  ok(events(resolveRound(e, oe).log).some(x => x.type === 'hit' && x.src === 'q1' && x.kind === 'strike'), 'engaged: its volley becomes a strike');
 });
 
 test('stance shooters locked in melee strike back; auto skills skip ranged skills', () => {
@@ -1703,6 +1711,7 @@ test('stance shooters locked in melee strike back; auto skills skip ranged skill
 test('auto skills rotate: a skill used last round scores lower than another usable one', () => {
   // the Chosen next to an enemy: Mighty Swing and Rally both apply; after a round with Mighty Swing it rallies first
   const s = arena([[0, 'hero', 20, 16], [0, 'fighter', 20, 18.6], [1, 'fighter', 22.2, 16]]);
+  finishTech(s, 0, 'sweeping');
   const hero = s.squads[0];
   const pick = () => { const pl = emptyPlan(); autoSkills(s, hero, s.squads[2], s.squads.filter(q => q.owner === 1), s.squads.filter(q => q.owner === 0), pl, 100); return pl.actions.map(a => a.kind); };
   const first = pick();
@@ -1712,7 +1721,7 @@ test('auto skills rotate: a skill used last round scores lower than another usab
 });
 
 test('Crossbows a bit weaker, the Lich hits harder', () => {
-  eq(FACTIONS.kingdom.units.ranged.attack.dmg, 2.7); eq(skillOf(FACTIONS.kingdom.units.ranged, 'pierce').dmg, 3.6);
+  eq(FACTIONS.kingdom.units.ranged.attack.dmg, 2.7); eq(skillOf(unitDef('kingdom', 'ranged', 'firearrows'), 'pierce').dmg, 3.6);
   eq(FACTIONS.undead.units.hero.attack.dmg, 13); eq(skillOf(FACTIONS.undead.units.hero, 'thunder').dmg, 17);
 });
 
@@ -1748,7 +1757,7 @@ test('longer tree: unit unlocks need Tier 2; level III needs level II; ability u
   ok(TECH.steel3.cost > TECH.steel2.cost && TECH.steel3.rounds > TECH.steel2.rounds, 'rising costs');
   ok(!skillOf(defOf(s.squads[0]), 'wall'), 'no Lock Shields yet');
   finishTech(s, 0, 'shielddrill'); ok(skillOf(defOf(s.squads[0]), 'wall'), 'Men-at-arms gain Lock Shields');
-  finishTech(s, 0, 'firearrows'); ok(skillOf(defOf(s.squads[1]), 'storm')?.ranged, 'Crossbows gain Fire Volley (ranged)');
+  ok(!skillOf(defOf(s.squads[1]), 'pierce'), 'Piercing Bolt locked'); finishTech(s, 0, 'firearrows'); ok(skillOf(defOf(s.squads[1]), 'pierce')?.ranged, 'Piercing Bolts unlocks the Crossbows\' Piercing Bolt (ranged)');
   const m0 = defOf(s.squads[2]).move; finishTech(s, 1, 'spectral'); eq(defOf(s.squads[2]).move, m0 + 1, 'Spectral Speed');
   const k = arena([]); const hq = k.buildings.find(b => b.owner === 0 && b.type === 'hq');
   const f0 = bdef(hq).fire.dmg; finishTech(k, 0, 'hoardings'); eq(bdef(hq).fire.dmg, f0 + 1, 'Hoardings');
@@ -1802,7 +1811,7 @@ test('durability x1.5 (The Chosen excepted); ranged squads fire 2 volleys a roun
   const K = FACTIONS.kingdom.units, U = FACTIONS.undead.units;
   eq(K.hero.hpPer, 260, 'The Chosen unchanged'); eq(U.hero.hpPer, 270); eq(K.fighter.hpPer, 60); eq(U.swarm.hpPer, 21);
   eq(BUILDINGS.hq.hp, 660); eq(BUILDINGS.tower.hp, 330); eq(BUILDINGS.monolith.heal.hp, 12);
-  eq(K.ranged.attack.ap, 40); eq(U.ranged.attack.ap, 40); eq(U.ranged.attack.dmg, 1.9); eq(skillOf(U.ranged, 'storm').dmg, 3.2);
+  eq(K.ranged.attack.ap, 40); eq(U.ranged.attack.ap, 40); eq(U.ranged.attack.dmg, 1.9); eq(skillOf(unitDef('undead', 'ranged', 'bonespears'), 'storm').dmg, 3.2);
   const s = arena([[0, 'ranged', 10, 10], [1, 'fighter', 18, 10]]);
   const o = holdAll(s);
   o[0].squads.q1 = plan([{ kind: 'volley', x: 18, z: 10 }, { kind: 'volley', x: 18, z: 10 }, { kind: 'volley', x: 18, z: 10 }]);
@@ -1844,6 +1853,90 @@ test('stats: research with its round, finished buildings, training and spending'
   eq(JSON.stringify(r.stats.tech[0]), JSON.stringify([{ id: 'plough', r: s.round }]), 'Heavy Plough (1 round) finished in the first round');
   eq(statSeries(r, 'research', 0).join(), '1,1');
   eq(r.stats.rounds.map(e => e.r).join(), [s.round, s.round + 1].join(), 'entries carry their round number');
+});
+
+console.log('M12 unit kits: actions, skills, passives');
+
+test('kits: normal units 1 passive + 2 skills, elites 1 + 3, heroes 2 + 3 (both factions)', () => {
+  const want = { normal: [1, 2], elite: [1, 3], hero: [2, 3] };
+  for (const f of ['kingdom', 'undead']) for (const [r, u] of Object.entries(FACTIONS[f].units)) {
+    const c = unitClass(u); if (c === 'builder') continue;
+    eq(passivesOf(u).length + '/' + slotsOf(u).length, want[c].join('/'), f + ' ' + r + ' (' + c + ')');
+  }
+  eq(unitClass(FACTIONS.kingdom.units.tank), 'elite'); eq(unitClass(FACTIONS.undead.units.mage), 'elite'); eq(unitClass(FACTIONS.undead.units.swarm), 'normal');
+});
+
+test('kits: locked slots open with their research (Shield Drill, Piercing Bolts, Storm of Bones, Champion\'s Swing, Bone Shields, Shadow Walk)', () => {
+  const cases = [['kingdom', 'fighter', 'wall', 'shielddrill'], ['kingdom', 'ranged', 'pierce', 'firearrows'], ['undead', 'ranged', 'storm', 'bonespears'],
+    ['kingdom', 'hero', 'mighty', 'sweeping'], ['undead', 'fighter', 'wall', 'boneshields'], ['undead', 'fast', 'step', 'shadowwalk']];
+  for (const [f, r, kind, tech] of cases) {
+    const before = slotsOf(unitDef(f, r)).find(sl => sl.kind === kind), after = slotsOf(unitDef(f, r, tech)).find(sl => sl.kind === kind);
+    ok(before.locked && before.lock === tech, f + ' ' + r + ' ' + kind + ' locked by ' + tech);
+    ok(!after.locked && skillOf(unitDef(f, r, tech), kind), 'unlocked');
+  }
+  // research that improves a skill finds it whatever the order (Bodkin Bolts sorts before Piercing Bolts)
+  eq(skillOf(unitDef('kingdom', 'ranged', 'bodkin,firearrows'), 'pierce').dmg, 3.6 + 2);
+});
+
+test('kits: new skills work (Shield Bash stuns, Trample hits around, Wheel Away steps, Pounce charges, Frenzy buffs only itself, Raise pays mana)', () => {
+  let s = arena([[0, 'tank', 20, 16], [1, 'fighter', 22.2, 16]]);
+  let o = holdAll(s); o[0].squads.q1 = plan([{ kind: 'mighty', x: 22.2, z: 16 }]);
+  let ev = events(resolveRound(s, o).log);
+  ok(ev.some(e => e.type === 'stun' && e.id === 'q2'), 'Shield Bash stuns');
+  s = arena([[0, 'fast', 20, 16], [1, 'fighter', 20, 18.5], [1, 'fighter', 20, 13.5]]);
+  o = holdAll(s); o[0].squads.q1 = plan([{ kind: 'sweep', x: 20, z: 16 }]);
+  ev = events(resolveRound(s, o).log);
+  eq(ev.find(e => e.type === 'release' && e.kind === 'sweep').hit.sort().join(), 'q2,q3', 'Trample hits both sides');
+  s = arena([[0, 'fast', 20, 16], [1, 'fighter', 22.4, 16]]);
+  o = holdAll(s); o[0].squads.q1 = plan([{ kind: 'step', x: 15, z: 16 }]);
+  const r = resolveRound(s, o);
+  ok(r.state.squads.find(q => q.id === 'q1').x < 16, 'Wheel Away: stepped back');
+  ok(!events(r.log).some(e => e.type === 'hit' && e.kind === 'parting'), 'no parting blows');
+  s = arena([[1, 'swarm', 20, 16], [0, 'fighter', 25, 16]]);
+  o = holdAll(s); o[1].squads.q1 = plan([{ kind: 'charge', x: 25, z: 16 }]);
+  ok(events(resolveRound(s, o).log).some(e => e.type === 'hit' && e.src === 'q1' && e.dst === 'q2'), 'Pounce lands');
+  s = arena([[1, 'swarm', 20, 16], [1, 'swarm', 22.4, 16]]);
+  o = holdAll(s); o[1].squads.q1 = plan([{ kind: 'rally', x: 20, z: 16 }]);
+  eq(events(resolveRound(s, o).log).find(e => e.type === 'buff').ids.join(), 'q1', 'Frenzy buffs only itself');
+  s = arena([[1, 'mage', 20, 16], [1, 'swarm', 22, 16]]);
+  s.squads[1].hp = 3 * 21; s.squads[1].models = 3;
+  const m0 = s.squads[0].mana;
+  o = holdAll(s); o[1].squads.q1 = plan([{ kind: 'raise', x: 20, z: 16 }]);
+  const rr = resolveRound(s, o).state;
+  eq(rr.squads.find(q => q.id === 'q2').models, 4, 'Raise brings a model back');
+  ok(rr.squads.find(q => q.id === 'q1').mana < m0 + FACTIONS.undead.units.mage.mana.regen, 'paid mana');
+});
+
+test('kits: hero auras (Inspiring Presence x1.1 for own squads near The Chosen, Dread Aura x0.9 for enemies near the Lich)', () => {
+  const dmgOf = (withHero, side, heroAt) => {
+    const list = [[side, 'fighter', 20, 16], [1 - side, 'fighter', 22.4, 16]];
+    if (withHero) list.push([withHero[0], 'hero', heroAt, 21]);
+    const s = createGame(7, ['kingdom', 'undead']); s.supply = BANK.slice(); s.squads = []; s.nextId = 1;
+    for (const b of s.buildings) { b.z = 16; b.x = b.owner === 0 ? 3.5 : 44.5; }
+    for (const [ow, ro, x, z] of list) addSquad(s, ow, ro, x, z);
+    s.explored = s.explored.map(g => '1'.repeat(g.length));
+    const o = holdAll(s); o[side].squads.q1 = plan([{ kind: 'strike', t: 'q2', x: 22.4, z: 16 }]);
+    return events(resolveRound(s, o).log).find(e => e.type === 'hit' && e.src === 'q1').raw;
+  };
+  const base = dmgOf(null, 0), insp = dmgOf([0], 0, 20), far = dmgOf([0], 0, 40);
+  ok(insp > base && far === base, 'Inspiring Presence: ' + base + ' -> ' + insp + ' (far ' + far + ')');
+  const bu = dmgOf(null, 1), dread = dmgOf([0], 1, 20);   // side 0 is the Kingdom: put a Lich near... use undead hero on side 1's enemy
+  ok(dread >= bu, 'the Chosen does not weaken enemies');
+  const s = arena([[0, 'fighter', 20, 16], [1, 'fighter', 22.4, 16], [1, 'hero', 21, 20]]);
+  const o = holdAll(s); o[0].squads.q1 = plan([{ kind: 'strike', t: 'q2', x: 22.4, z: 16 }]);
+  const near = events(resolveRound(s, o).log).find(e => e.type === 'hit' && e.src === 'q1').raw;
+  const s2 = arena([[0, 'fighter', 20, 16], [1, 'fighter', 22.4, 16], [1, 'hero', 40, 30]]);
+  const o2 = holdAll(s2); o2[0].squads.q1 = plan([{ kind: 'strike', t: 'q2', x: 22.4, z: 16 }]);
+  const away = events(resolveRound(s2, o2).log).find(e => e.type === 'hit' && e.src === 'q1').raw;
+  ok(near < away, 'Dread Aura: ' + away + ' -> ' + near);
+});
+
+test('contact fight: a melee squad whose move is stopped by an enemy strikes it with the rest of the move', () => {
+  const s = arena([[0, 'fighter', 20, 16], [1, 'tank', 24, 16]]);
+  const o = holdAll(s); o[0].squads.q1 = plan([{ kind: 'move', pts: [{ x: 30, z: 16 }], ap: 100 }]);
+  const ev = events(resolveRound(s, o).log);
+  ok(ev.some(e => e.type === 'contact' && e.id === 'q1' && e.t === 'q2'), 'contact');
+  ok(ev.some(e => e.type === 'hit' && e.src === 'q1' && e.dst === 'q2'), 'it fights');
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

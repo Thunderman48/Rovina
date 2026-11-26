@@ -1,6 +1,6 @@
 // Rovina game controller.
 import * as THREE from 'three';
-import { RULES, FACTIONS, ROLE_ORDER, isMelee, isShooter, skillOf, skillsOf, cdOf, SELF_SKILLS, isMage, meleeOf, moveOf } from './data/units.js';
+import { RULES, FACTIONS, ROLE_ORDER, isMelee, isShooter, skillOf, skillsOf, cdOf, SELF_SKILLS, isMage, meleeOf, moveOf, slotsOf, passivesOf, unitClass, unitDef } from './data/units.js';
 import { createGame, defOf, radiusOf, apFor } from './sim/state.js';
 import { planCost, actionCost } from './sim/orders.js';
 import { resolveRound, arcHits, losCut, inCover, clampAim, engagedWith } from './sim/resolve.js';
@@ -18,7 +18,7 @@ import { ribbon, chevrons, ring, disc, arcShape, lineShape, Telegraphs, FloatTex
 import { GraveLayer } from './render/graves.js';
 import { Input } from './ui/input.js';
 import { Planner } from './ui/planner.js';
-import { icon } from './ui/iconset.js';
+import { icon, skillIcon, passiveIcon } from './ui/iconset.js';
 import { BaseUI } from './ui/baseui.js';
 import { ProductionUI } from './ui/production.js';
 import { TechTreeUI } from './ui/techtree.js';
@@ -520,7 +520,7 @@ class Game {
     const sks = builder ? [] : skillsOf(def);
     const atkIc = def.attack.kind === 'strike' ? 'attack' : 'shoot';
     const content = { move: icon('move', 20), attack: icon(this.mode === 'overwatch' ? 'overwatch' : atkIc, 20), build: icon('build', 20), gather: icon(this.eco().icon, 20) };
-    sks.forEach((sk, i) => { const cd = cdOf(q, sk.kind); content['skill' + i] = this.planner.skillReady(q, sk.kind) ? icon(SKILL_IC[sk.kind], 20) : isMage(def) ? `<b class="mn">${sk.mana}</b>` : `<b>${cd > 0 ? cd : '✓'}</b>`; });
+    sks.forEach((sk, i) => { const cd = cdOf(q, sk.kind); content['skill' + i] = this.planner.skillReady(q, sk.kind) ? icon(skillIcon(sk), 20) : isMage(def) ? `<b class="mn">${sk.mana}</b>` : `<b>${cd > 0 ? cd : '✓'}</b>`; });
     // place knobs in screen space around the squad's planned end point: always ~64px apart
     const pr = this.planner.predict(q);
     const c = this.view.project(pr.x, 0.4, pr.z), f = this.view.project(pr.x + pr.fx, 0.4, pr.z + pr.fz);
@@ -916,9 +916,11 @@ class Game {
       dock.classList.add('hidden');
       info.classList.remove('hidden');
       const atkTxt = at.kind === 'strike' ? `Strikes one target for ${Math.round(at.dmg * q.models * RULES.strikeMult)} (${+(at.dmg * RULES.strikeMult).toFixed(2)} per model), reach ${at.reach}″, lunges up to ${(moveOf(def) * RULES.strikeLunge).toFixed(1)}″` : at.kind === 'lob' ? `Lobs arrows over walls for ${at.dmg * q.models}, range ${at.range}″` : `Volleys for ${at.dmg * q.models}, range ${at.range}″ (needs a clear line)`;
-      const skTxt = sks.map(k => ` · ${k.name}${cdOf(q, k.kind) > 0 ? ` recharging (${cdOf(q, k.kind)})` : ' ready'}`).join('');
-      info.innerHTML = `<b>Enemy ${esc(def.name)}</b> · tier ${def.tier} · ${q.models}/${def.models} models · ${q.hp} HP<br>
-        <span style="color:var(--muted)">${atkTxt}${skTxt}${def.passive ? ` · passive <b>${esc(def.passive.name)}</b>: ${esc(def.passive.desc)}` : ''}${q.rend ? ` · Rended ×${q.rend.n}` : ''} · moves ${def.move.toFixed(1)}″ per round.${def.ghost ? ' Ignores engagement.' : ''} The red ring shows how far it can strike this round.</span>`;
+      const skTxt = slotsOf(def).map(k => k.locked ? `<span class="kt off">${icon(skillIcon(k), 14)}locked</span>` : `<span class="kt">${icon(skillIcon(k), 14)}${esc(k.name)}${!k.prep && cdOf(q, k.kind) > 0 ? ` (${cdOf(q, k.kind)})` : ''}</span>`).join('');
+      const pvTxt = passivesOf(def).map(k => `<span class="kt" title="${esc(k.desc)}">${icon(passiveIcon(k), 14)}${esc(k.name)}</span>`).join('');
+      info.innerHTML = `<b>Enemy ${esc(def.name)}</b> · ${unitClass(def)} · tier ${def.tier} · ${q.models}/${def.models} models · ${q.hp} HP<br>
+        <span style="color:var(--muted)">${atkTxt}${q.rend ? ` · Rended ×${q.rend.n}` : ''} · moves ${def.move.toFixed(1)}″ per round.${def.ghost ? ' Ignores engagement.' : ''} The red ring shows how far it can strike this round.</span>
+        ${skTxt ? `<div class="krow"><b>Skills</b>${skTxt}</div>` : ''}${pvTxt ? `<div class="krow"><b>Passives</b>${pvTxt}</div>` : ''}`;
       return;
     }
     info.classList.add('hidden');
@@ -931,12 +933,21 @@ class Game {
     // every button is coloured by category: green = move/speed, red = attack, blue = defence/buffs
     const b = (act, ic, label, sub, on = false, dis = false, cat = 'move') => `<button class="act cat-${cat}${on ? ' on' : ''}" data-act="${act}" ${dis ? 'disabled' : ''}>${icon(ic, 20)}${label}<small>${sub}</small></button>`;
     const mage = isMage(def), mana = mage ? this.planner.manaLeft(q) : 0;
-    const skBtn = sks.map(sk => { const cd = cdOf(q, sk.kind); const sub = mage ? `${sk.mana} mana · ${sk.ap} AP` : cd > 0 ? `recharging ${cd}` : this.planner.skillUsed(q.id, sk.kind) ? 'used' : `${sk.ap} AP`; return b('skill:' + sk.kind, SKILL_IC[sk.kind], sk.name, (sk.ranged ? (engaged ? 'ranged · locked: strikes' : 'ranged · ') : '') + sub, this.mode === 'skill' && this.modeSkill === sk.kind, !this.planner.skillReady(q, sk.kind) || left < sk.ap, sk.cat); }).join('');
     const msk = this.mode === 'skill' ? skillOf(def, this.modeSkill) : null;
     const melee = at.kind === 'strike';
-    const prepBtn = melee
-      ? (def.parry ? b('parry', 'parry', 'Parry', plan?.parry ? 'ready' : `${RULES.parryCost} AP`, !!plan?.parry, !plan?.parry && left < RULES.parryCost, 'defense') : '')
-      : b('mode:overwatch', 'overwatch', 'Overwatch', plan?.overwatch ? 'set · aim again' : `${RULES.overwatchCost} AP`, this.mode === 'overwatch' || !!plan?.overwatch, !plan?.overwatch && left < RULES.overwatchCost, 'defense');
+    // SKILLS: the unit's fixed slots (normal 2, elite 3, hero 3); locked slots wait for their research;
+    // Parry and Overwatch are prepaid skills
+    const skBtn = slotsOf(def).map(sk => {
+      if (sk.locked) { const T = TECH[sk.lock]; return `<button class="act cat-none locked" disabled title="${esc(T ? 'Unlocked by the research ' + T.name : 'Locked')}">${icon(skillIcon(unitDef(def.faction || this.faction(q.owner), q.role, sk.lock).skills?.find(k => k.kind === sk.kind) || sk), 20)}🔒 ${esc(T ? T.name : 'Locked')}<small>research to unlock</small></button>`; }
+      if (sk.kind === 'parry') return b('parry', skillIcon(sk), 'Parry', plan?.parry ? 'ready' : `${RULES.parryCost} AP`, !!plan?.parry, !plan?.parry && left < RULES.parryCost, 'defense');
+      if (sk.kind === 'overwatch') return b('mode:overwatch', skillIcon(sk), 'Overwatch', plan?.overwatch ? 'set · aim again' : `${RULES.overwatchCost} AP`, this.mode === 'overwatch' || !!plan?.overwatch, !plan?.overwatch && left < RULES.overwatchCost, 'defense');
+      const cd = cdOf(q, sk.kind);
+      const sub = mage ? `${sk.mana} mana · ${sk.ap} AP` : cd > 0 ? `recharging ${cd}` : this.planner.skillUsed(q.id, sk.kind) ? 'used' : `${sk.ap} AP`;
+      return b('skill:' + sk.kind, skillIcon(sk), sk.name, (sk.ranged ? (engaged ? 'ranged · locked: strikes' : 'ranged · ') : '') + sub, this.mode === 'skill' && this.modeSkill === sk.kind, !this.planner.skillReady(q, sk.kind) || left < sk.ap, sk.cat);
+    }).join('');
+    // PASSIVES: always on; tap for the description
+    const pvs = passivesOf(def);
+    const pvBtn = pvs.map((pv, i) => `<button class="chip pvc${this.pvInfo === pv.kind ? ' on' : ''}" data-act="pv:${pv.kind}" title="${esc(pv.desc)}">${icon(passiveIcon(pv), 16)}${esc(pv.name)}</button>`).join('');
     const hints = {
       move: '<b>Drag the green knob</b> to draw a path (or tap the table). The ring shows how far it can still go.' + (engaged ? ' <b>Engaged:</b> stepping away costs 30 AP and gives the enemy a free hit.' : ''),
       attack: (!melee && engaged ? '<b>Locked in melee:</b> its shots and ranged skills turn into melee strikes at the enemy it is fighting (unless it disengages first). ' : '') + `<b>Drag the red knob</b> to aim the ${atkName.toLowerCase()}. It hits whatever is in the shape when it lands, so aim where enemies <b>will be</b>.` + (at.kind === 'volley' ? ' Walls block volleys; forests give cover.' : at.kind === 'lob' ? ' Lobs arc over walls.' : ''),
@@ -944,29 +955,32 @@ class Game {
       goal: '<b>Tap the table</b> where this squad should advance to. Over the next rounds it marches there, fighting the nearest enemy (squad or building) it meets on the way, then guards that spot.',
       melee: `<b>Drag the red knob onto an enemy:</b> a melee Strike for ${Math.round((meleeOf(def)?.dmg || 0) * q.models * RULES.strikeMult)} (reach ${meleeOf(def)?.reach}″, with a short lunge). Weaker than its shots, but it works while locked in melee.`,
       overwatch: '<b>Drag the red knob</b> to point the overwatch cone. The squad fires once at the first enemy that moves inside it, at any speed tier.',
+      pv: (() => { const pv = pvs.find(k => k.kind === this.pvInfo); return pv ? `<b>${esc(pv.name)}</b> (passive, always on): ${esc(pv.desc)}` : ''; })(),
     };
-    dock.innerHTML = `<div class="dk-head"><div><div class="nm">${esc(def.name)}${engaged ? ' <span class="eng">Engaged</span>' : ''}</div><div class="sub">Tier ${def.tier + (plan?.upgrades || 0)} · ${q.models}/${def.models} models · ${q.hp} HP · ${ctl}</div>${def.passive ? `<div class="sub pv" title="${esc(def.passive.desc)}">✦ <b>${esc(def.passive.name)}</b> (passive): ${esc(def.passive.desc)}</div>` : ''}${q.rend ? `<div class="sub dbf">Rended ×${q.rend.n}: −${Math.round(q.rend.n * q.rend.dmg * 100)} % damage and AP</div>` : ''}</div>
+    dock.innerHTML = `<div class="dk-head"><div><div class="nm">${esc(def.name)}${engaged ? ' <span class="eng">Engaged</span>' : ''}</div><div class="sub">Tier ${def.tier + (plan?.upgrades || 0)} · ${q.models}/${def.models} models · ${q.hp} HP · ${ctl}</div>${q.rend ? `<div class="sub dbf">Rended ×${q.rend.n}: −${Math.round(q.rend.n * q.rend.dmg * 100)} % damage and AP</div>` : ''}</div>
         <button class="ib x" data-act="close">✕</button></div>
       <div class="dk-ap">${apBlocks(q, plan, false)}</div>
+      <div class="dk-sec">Actions</div>
       <div class="dk-btns">
         ${b('mode:move', 'move', 'Move', `${(left * moveOf(def)).toFixed(1)}″ left`, this.mode === 'move', left < 1, 'move')}
         ${b('mode:attack', melee ? 'attack' : 'shoot', atkName, `${at.ap} AP${!melee && engaged ? ' · strikes' : ''}`, this.mode === 'attack', left < at.ap, 'attack')}
-        ${!melee && meleeOf(def) ? b('mode:melee', 'attack', 'Melee', `${meleeOf(def).ap} AP`, this.mode === 'melee', left < meleeOf(def).ap, 'attack') : ''}
-        ${skBtn}
-        ${prepBtn}
         ${b('defend', 'defend', 'Defend', `${RULES.defendCost} AP · ${plan?.defends || 0}`, false, left < RULES.defendCost, 'defense')}
         ${b('tier', 'tierup', 'Act earlier', plan?.upgrades >= RULES.maxUpgrades ? 'max' : `${RULES.tierCost[plan?.upgrades || 0]} AP`, false, (plan?.upgrades || 0) >= RULES.maxUpgrades || left < RULES.tierCost[plan?.upgrades || 0])}
         ${b('undo', 'undo', 'Undo', '', false, !plan, 'none')}
         ${b('clear', 'release', 'Clear', 'back to stance', false, !plan, 'none')}
       </div>
+      ${skBtn ? `<div class="dk-sec">Skills <small>${unitClass(def) === 'hero' ? 'hero' : unitClass(def) === 'elite' ? 'elite' : 'squad'} · ${slotsOf(def).length} slots</small></div><div class="dk-btns sk">${skBtn}</div>` : ''}
+      ${pvBtn ? `<div class="dk-sec">Passives <small>always on · tap for details</small></div><div class="dk-pv">${pvBtn}</div>` : ''}
       <div class="dk-stance">Stance (free): ${['advance', 'guard', 'hold', 'retreat'].map(s => `<button class="chip${st === s ? ' on' : ''}" data-act="stance:${s}" title="${STANCE_TIP[s]}">${s[0].toUpperCase() + s.slice(1)}</button>`).join('')}${st === 'advance' ? `<button class="chip${this.mode === 'goal' ? ' on' : ''}" data-act="mode:goal" title="Tap the table to set where it advances to">⚑ ${this.planner.goalOf(q) ? 'Move target' : 'Set target'}</button>${this.planner.goalOf(q) ? '<button class="chip" data-act="nogoal" title="Advance on the enemy HQ again">✕ Target</button>' : ''}` : ''}</div>
       ${sks.length ? `<div class="dk-stance">Auto skills: <button class="chip${this.planner.autoOf(q) ? ' on' : ''}" data-act="auto" title="Without orders, this squad uses its skills on its own (not on Hold)">${this.planner.autoOf(q) ? 'On' : 'Off'}</button></div>` : ''}
-      <div class="hint">${hints[this.mode] || hints.move}</div>`;
+      <div class="hint">${(this.pvInfo && hints.pv) || hints[this.mode] || hints.move}</div>`;
     dock.querySelectorAll('[data-act]').forEach(el => el.onclick = () => this.dockAction(el.dataset.act, q));
   }
 
   dockAction(act, q) {
     const [k, arg] = act.split(':');
+    if (k !== 'pv') this.pvInfo = null;
+    if (k === 'pv') { this.pvInfo = this.pvInfo === arg ? null : arg; this.changed(); return; }
     if (k === 'close') this.select(null);
     else if (k === 'mode') this.mode = this.mode === arg && arg !== 'move' ? 'move' : arg;
     else if (k === 'skill') {
@@ -1060,7 +1074,7 @@ class Game {
         if (d.rend) st.push(`<span class="st rend" title="Rend ×${d.rend.n}: −${Math.round(d.rend.n * d.rend.dmg * 100)} % damage and AP">✂${d.rend.n}</span>`);
         if (ttl) st.push(`<span class="st sum" title="Summoned: crumbles after ${ttl} more round${ttl > 1 ? 's' : ''}">☠${ttl}</span>`);
         if (autoOff) st.push(`<span class="st" title="Auto skills off">⦸</span>`);
-        for (const [k, n] of cds) st.push(`<span class="st cdc" style="--c:${CAT_HEX[k.cat]}" title="${esc(k.name)} recharging">${icon(SKILL_IC[k.kind], 11)}${n}</span>`);
+        for (const [k, n] of cds) st.push(`<span class="st cdc" style="--c:${CAT_HEX[k.cat]}" title="${esc(k.name)} recharging">${icon(skillIcon(k), 11)}${n}</span>`);
         if (bt && bt.mode && bt.mode !== 'hold') st.push(`<span class="st bt ${bt.mode}">${icon(bt.mode === 'gather' ? this.eco().icon : 'build', 12)}${esc(bt.name || '')}</span>`);
         if (plan) st.push(`<span class="st">${icon('control', 12)}</span>`);
         else if (stance) st.push(`<span class="st">${icon(stance, 12)}</span>`);
@@ -1156,6 +1170,7 @@ class Game {
       else if (e.type === 'release' && e.kind === 'summon') lines.push({ T: e.T, html: `${name(e.id)} calls ${e.count > 1 ? e.count + ' squads' : 'a squad'} of skeletons from the ground` });
       else if (e.type === 'wallOn') lines.push({ T: e.T, html: `${name(e.id)} braces a shield wall` });
       else if (e.type === 'release' && e.kind === 'strike' && !e.hit.length) lines.push({ T: e.T, html: `${name(e.id)}: strike misses (${e.lunge ? `lunged ${e.lunge}″, ` : ''}${e.locked ? 'locked with an enemy out of reach' : `nearest enemy ${e.gap}″ away: it got out of reach`})` });
+      else if (e.type === 'contact') lines.push({ T: e.T, html: `${name(e.id)} runs into ${name(e.t)} and fights it` });
       else if (e.type === 'chase') lines.push({ T: e.T, html: `${name(e.id)} chases ${name(e.t)} (out of reach)` });
       else if (e.type === 'release' && e.kind === 'strike' && e.lunge > 0) lines.push({ T: e.T, html: `${name(e.id)} lunges ${e.lunge}″ at its target` });
       else if (e.type === 'release' && !e.hit.length && e.kind !== 'summon') lines.push({ T: e.T, html: `${name(e.id)}: ${e.kind} ${e.blocked ? 'blocked' : 'misses (nobody in the area)'}` });
@@ -1410,8 +1425,9 @@ const GREEN = ['#34c759', 'green'], RED = ['#ff3b30', 'red'], BLUE = ['#3fa9ff',
 const LEGEND = [
   ['Resources', [['gold', 'Gold (Kingdom)'], ['souls', 'Souls (Undead)'], ['cp', 'Command points'], ['army', 'Army size / cap'], ['ap', 'Action points'], ['goal', 'HQ: Keep / Crypt']]],
   ['Squads', [['hero', 'Hero'], ['tank', 'Tank'], ['fighter', 'Fighter'], ['swarm', 'Swarm (comes in pairs)'], ['ranged', 'Ranged'], ['fast', 'Fast'], ['mage', 'Caster troop (mana)'], ['builder', 'Builder']]],
-  ['Orders', [['move', 'Move'], ['attack', 'Swing'], ['shoot', 'Volley'], ['defend', 'Defend'], ['parry', 'Parry'], ['overwatch', 'Overwatch'], ['tierup', 'Act earlier'], ['undo', 'Undo'], ['release', 'Clear'], ['control', 'Your orders']]],
-  ['Skills', [['dash', 'Charge'], ['shove', 'Leap Strike'], ['attack', 'Mighty Swing'], ['spawn', 'Summon Warband'], ['zone', 'Dark Thunder'], ['frag', 'Corpse Explosion'], ['shoot', 'Arrow Storm'], ['range', 'Piercing Bolt'], ['rally', 'Rally'], ['fortify', 'Lock Shields / Grave Wall']]],
+  ['Actions', [['move', 'Move'], ['attack', 'Strike (melee units)'], ['shoot', 'Volley / Bolt (ranged units)'], ['defend', 'Defend'], ['tierup', 'Act earlier'], ['undo', 'Undo'], ['release', 'Clear']]],
+  ['Skills', [['sk-leap-strike', 'Leap Strike'], ['sk-rally', 'Rally'], ['sk-mighty-swing', 'Mighty Swing'], ['sk-lock-shields', 'Lock Shields'], ['sk-shield-bash', 'Shield Bash'], ['sk-parry', 'Parry'], ['sk-charge', 'Charge'], ['sk-trample', 'Trample'], ['sk-wheel-away', 'Wheel Away'], ['sk-overwatch', 'Overwatch'], ['sk-piercing-bolt', 'Piercing Bolt'], ['sk-summon-warband', 'Summon Warband'], ['sk-dark-thunder', 'Dark Thunder'], ['sk-corpse-explosion', 'Corpse Explosion'], ['sk-grave-wall', 'Grave Wall'], ['sk-bone-bash', 'Bone Bash'], ['sk-shadow-step', 'Shadow Step'], ['sk-dread-wail', 'Dread Wail'], ['sk-raise', 'Raise'], ['sk-pounce', 'Pounce'], ['sk-frenzy', 'Frenzy'], ['sk-arrow-storm', 'Arrow Storm']]],
+  ['Passives', [['pv-berserk', 'Berserk'], ['pv-inspire', 'Inspiring Presence'], ['pv-bulwark', 'Bulwark'], ['pv-disciplined', 'Disciplined'], ['pv-pierce', 'Armour-piercing'], ['pv-ridedown', 'Ride Down'], ['pv-militia', 'Militia'], ['pv-drain', 'Soul Drain'], ['pv-dread', 'Dread Aura'], ['pv-gravebound', 'Grave-bound'], ['pv-reassemble', 'Reassemble'], ['pv-rend', 'Rend'], ['pv-longshot', 'Long Shot'], ['pv-chill', 'Chilling Touch'], ['pv-siphon', 'Soul Siphon']]],
   ['Stances', [['guard', 'Guard'], ['hold', 'Hold'], ['advance', 'Advance']]],
   ['Buildings', [['spawn', 'Barracks / Ossuary'], ['range', 'Watchtower / Bone Spire'], ['farm', 'Farm'], ['node', 'Mine'], ['souls', 'Soul Well'], ['cp', 'Banner (Kingdom)'], ['heal', 'Monolith (Undead)'], ['fortify', 'Palisade / Bone Fence'], ['build', 'Build / work']]],
   ['Status', [['engaged', 'Engaged in melee'], ['cooldown', 'Skill recharging'], ['defend', 'Defends left'], ['army', 'Models in the squad']]],
@@ -1437,7 +1453,8 @@ const HELP = {
   combat: () => `
 <ul>
 <li><b>Two kinds of attack.</b> <b>Area attacks</b> (volleys, lobs and most skills) are <b>skillshots</b>: they hit whatever is inside the shape when they land. The shape charges up during its wind-up, so enemies can walk out of it, and yours can dodge.</li>
-<li><b>Passives</b> (✦): every unit type has one always-on ability, shown in its squad panel: ${['kingdom', 'undead'].flatMap(f => Object.values(FACTIONS[f].units).filter(u => u.passive && !u.summoned).map(u => `<b>${u.name}</b> ${u.passive.name} (${u.passive.desc.replace(/\.$/, '')})`)).join('; ')}. A squad hit by Warbands shows ✂ with its Rend stacks.</li>
+<li><b>What a squad can do</b> comes in three groups (the squad panel shows them as three rows): <b>Actions</b> every squad has (Move, its attack: melee squads Strike, ranged squads shoot; Defend; Act earlier), <b>Skills</b> (normal squads 2, elite squads 3: Shieldwall, Outriders, Grave Guard, Wraiths, Necromancers; heroes 3), and <b>Passives</b> that are always on (heroes 2, everyone else 1). A skill slot marked 🔒 unlocks with a research (e.g. Shield Drill gives Men-at-arms Lock Shields). Ranged squads can't order a melee strike: their shots turn into strikes on their own while an enemy is on them. A melee squad that runs into an enemy while moving fights it with the rest of that move.</li>
+<li><b>Passives</b> (✦): always-on abilities, each with its own icon in the squad panel (tap one for its details): ${['kingdom', 'undead'].flatMap(f => Object.values(FACTIONS[f].units).filter(u => u.passive && !u.summoned).map(u => `<b>${u.name}</b> ${passivesOf(u).map(pv => `${pv.name} (${pv.desc.replace(/\.$/, '')})`).join(' and ')}`)).join('; ')}. A squad hit by Warbands shows ✂ with its Rend stacks.</li>
 <li><b>Strike</b> (the melee attack) is a <b>target attack</b>: drop it on one enemy squad or building. If the target has stepped out of reach when the blow lands, the squad <b>lunges</b> at it (up to ${RULES.strikeLunge} AP of movement at its speed; not while it is locked in melee with another enemy). If it can't reach its target, it hits whichever enemy is in reach (the one it is locked with first). If every enemy is already too far when the strike starts, the squad <b>chases</b> its target instead of swinging at air. It hits one target, for ${Math.round((RULES.strikeMult - 1) * 100)}% more than the listed damage.</li>
 <li><b>Locked in melee</b> (an enemy melee squad touching it): shooters and casters can't shoot. Their volleys and <b>ranged</b> skills (Piercing Bolt, Arrow Storm, Bone Blast, Dark Thunder; marked "ranged" on their buttons) turn into a weaker <b>melee Strike</b> at the enemy they fight. They also have a <b>Melee</b> button to strike on purpose.</li>
 <li><b>Volley</b>: a line that walls stop; forests give <b>cover</b> (half damage).</li>

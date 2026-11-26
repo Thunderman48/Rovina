@@ -2,7 +2,7 @@
 // always exactly the game's). Each table sits between <!-- GEN:name --> and <!-- /GEN:name -->.
 //   node tools/gendoc.mjs        (npm run doc)
 import { readFileSync, writeFileSync } from 'node:fs';
-import { RULES, FACTIONS, BUILDINGS, squadRadius, trainsOf, maxBuildersOf, gatherSlotsOf } from '../js/data/units.js';
+import { RULES, FACTIONS, BUILDINGS, squadRadius, trainsOf, maxBuildersOf, gatherSlotsOf, slotsOf, passivesOf, unitClass, unitDef, skillOf } from '../js/data/units.js';
 import { MAPS, MAP_ORDER, buildMapTerrain, mapSites, boardOf, DEPLOY, HQ_X } from '../js/data/maps.js';
 import { damageAfter } from '../js/sim/resolve.js';
 import { TECH, GATES, BUILDING_GATES, techsOf } from '../js/data/tech.js';
@@ -48,14 +48,25 @@ function genUnits() {
 }
 
 function genSkills() {
-  const rows = [];
-  for (const f of F) for (const r of rolesOf(f)) for (const k of FACTIONS[f].units[r].skills || []) {
+  // the kit of each unit: class, skill slots (in order; locked slots name their research, with the stats of
+  // the skill it unlocks), passives; then every skill's numbers (unlocked skills included)
+  const kit = [], rows = [];
+  for (const f of F) for (const r of rolesOf(f)) {
     const d = FACTIONS[f].units[r];
-    const params = Object.entries(k).filter(([key]) => !['kind', 'name', 'cat', 'ap', 'cd', 'mana'].includes(key)).map(([key, v]) => `${key} ${v}`).join(', ');
-    const full = k.dmg ? `${k.dmg} x ${d.models} = ${k.dmg * d.models}` : '-';
-    rows.push([FACTIONS[f].name, d.name, k.name, '`' + k.kind + '`', k.cat, k.ap, d.mana ? '- (mage)' : k.cd, d.mana ? k.mana : '-', full, params]);
+    if (r === 'summon') continue;
+    const all = unitDef(f, r, (d.slots || []).filter(sl => sl.lock).map(sl => sl.lock).join(','));
+    const slots = slotsOf(d).map(sl => sl.locked ? `${skillOf(all, sl.kind)?.name || sl.kind} 🔒 ${TECH[sl.lock]?.name || sl.lock}` : sl.name).join(', ') || '-';
+    kit.push([FACTIONS[f].name, d.name, unitClass(d), slots, passivesOf(d).map(pv => `${pv.name} (\`${pv.kind}\`)`).join(', ') || '-']);
+    for (const k of all.skills || []) {
+      const params = Object.entries(k).filter(([key]) => !['kind', 'name', 'cat', 'ap', 'cd', 'mana'].includes(key)).map(([key, v]) => `${key} ${v}`).join(', ');
+      const full = k.dmg ? `${k.dmg} x ${d.models} = ${n1(k.dmg * d.models)}` : '-';
+      const lock = (d.slots || []).find(sl => sl.kind === k.kind && sl.lock);
+      rows.push([FACTIONS[f].name, d.name, k.name + (lock ? ` (🔒 ${TECH[lock.lock]?.name})` : ''), '`' + k.kind + '`', k.cat, k.ap, d.mana ? '- (mage)' : k.cd, d.mana ? k.mana ?? '-' : '-', full, params]);
+    }
   }
-  return table(['Faction', 'Unit', 'Skill', 'Kind', 'Category', 'AP', 'Cooldown (rounds)', 'Mana', 'Dmg (per model x models)', 'Parameters'], rows);
+  return '**Kits** (normal units: 1 passive + 2 skills; elites: 1 + 3; heroes: 2 + 3; 🔒 = locked until that research; Parry and Overwatch are prepaid skills, §5.8 / §5.9)\n\n'
+    + table(['Faction', 'Unit', 'Class', 'Skill slots', 'Passives'], kit) + '\n\n**Skill numbers**\n\n'
+    + table(['Faction', 'Unit', 'Skill', 'Kind', 'Category', 'AP', 'Cooldown (rounds)', 'Mana', 'Dmg (per model x models)', 'Parameters'], rows);
 }
 
 // damage per 100 AP of the full squad against an armour value (each hit rounded on its own)

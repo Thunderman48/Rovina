@@ -37,7 +37,10 @@ It is a static site with no build step and no server, so it runs on GitHub Pages
   next round expected, every income building). The Undead get steady souls from the Crypt and Soul
   Wells plus souls from deaths on their graves, and banked souls above 80 decay.
 * **Locked in melee:** shooters and casters can't shoot or use ranged skills while an enemy melee
-  squad is on them; their shots become a weaker melee strike (and they have a Melee button).
+  squad is on them; their shots become a weaker melee strike on their own (no melee by hand).
+* **Clear unit kits:** every squad has the same actions (move, attack, defend, act earlier), a few
+  skills (normal squads 2, elites 3, heroes 3; some unlocked by research) and passives (heroes 2), each
+  with its own icon, shown as three rows in the order panel.
 * **Passives:** every unit type has one (Berserk, Bulwark, Rend, Soul Drain, …).
 * **No building within 8″ of any enemy building** (no proxy rushes).
 * **Two economies.** The Kingdom earns **gold** from its Keep, mines and farms worked by up to 4

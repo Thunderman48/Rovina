@@ -141,11 +141,14 @@ export const FACTIONS = {
   kingdom: {
     name: 'Kingdom', short: 'KGD', colorCss: '#3a78d8',
     units: {
-      hero:    { name: 'The Chosen', role: 'hero', models: 1, hpPer: 260, armor: 9, tier: 5, look: 'lord', vision: 12, defends: 2, attack: STRIKE(25, 18, 1.6), skills: [LEAP(20, 7, 2, 12, 1.6, 'Leap Strike'), RALLY(20, 5, 2, 4, 1), MIGHTY(30, 28, 2.6, 0.2, 25)] },
-      tank:    { name: 'Shieldwall', role: 'tank', models: 3, hpPer: 102, armor: 12, tier: 4, look: 'shield', vision: 9, defends: 2, attack: STRIKE(30, 4.8, 1.3), skills: [WALL('Lock Shields')] },
-      fighter: { name: 'Men-at-arms', role: 'fighter', parry: true, models: 4, hpPer: 60, armor: 7, tier: 5, look: 'sword', vision: 9, defends: 1, attack: STRIKE(25, 6, 1.5) },
-      ranged:  { name: 'Crossbows', role: 'ranged', move: 4.8, models: 4, hpPer: 45, armor: 3, tier: 5, look: 'crossbow', vision: 11, defends: 1, attack: VOLLEY(40, 2.7, 14), melee: STRIKE(25, 2, 1.2), skills: [PIERCE(35, 3.6, 16)] },
-      fast:    { name: 'Outriders', role: 'fast', models: 3, hpPer: 72, armor: 6, tier: 6, look: 'rider', vision: 11, defends: 1, attack: STRIKE(45, 13, 1.7), skills: [CHARGE(35, 9, 9)] },
+      hero:    { name: 'The Chosen', role: 'hero', models: 1, hpPer: 260, armor: 9, tier: 5, look: 'lord', vision: 12, defends: 2, attack: STRIKE(25, 18, 1.6), skills: [LEAP(20, 7, 2, 12, 1.6, 'Leap Strike'), RALLY(20, 5, 2, 4, 1)],
+                 slots: [{ kind: 'leap' }, { kind: 'rally' }, { kind: 'mighty', lock: 'sweeping' }] },
+      tank:    { name: 'Shieldwall', role: 'tank', parry: true, models: 3, hpPer: 102, armor: 12, tier: 4, look: 'shield', vision: 9, defends: 2, attack: STRIKE(30, 4.8, 1.3),
+                 skills: [WALL('Lock Shields'), { ...MIGHTY(25, 3, 1.4, 0.5, 15, 2), name: 'Shield Bash' }], slots: [{ kind: 'wall' }, { kind: 'mighty' }, { kind: 'parry' }] },
+      fighter: { name: 'Men-at-arms', role: 'fighter', parry: true, models: 4, hpPer: 60, armor: 7, tier: 5, look: 'sword', vision: 9, defends: 1, attack: STRIKE(25, 6, 1.5), slots: [{ kind: 'parry' }, { kind: 'wall', lock: 'shielddrill' }] },
+      ranged:  { name: 'Crossbows', role: 'ranged', move: 4.8, models: 4, hpPer: 45, armor: 3, tier: 5, look: 'crossbow', vision: 11, defends: 1, attack: VOLLEY(40, 2.7, 14), melee: STRIKE(25, 2, 1.2), slots: [{ kind: 'overwatch' }, { kind: 'pierce', lock: 'firearrows' }] },
+      fast:    { name: 'Outriders', role: 'fast', models: 3, hpPer: 72, armor: 6, tier: 6, look: 'rider', vision: 11, defends: 1, attack: STRIKE(45, 13, 1.7),
+                 skills: [CHARGE(35, 9, 9), { ...SWEEP(30, 5, 1, 2), name: 'Trample' }, { ...STEP(20, 6, 2), name: 'Wheel Away' }], slots: [{ kind: 'charge' }, { kind: 'sweep' }, { kind: 'step' }] },
       builder: { name: 'Peasants', role: 'builder', models: 2, hpPer: 42, armor: 2, tier: 5, look: 'peasant', vision: 8, defends: 0, attack: STRIKE(25, 2, 1.2) },
     },
     // Gold: a steady builder economy (keep, big farms worked by many peasants, mines on resource sites)
@@ -159,16 +162,21 @@ export const FACTIONS = {
     name: 'Undead Legion', short: 'UND', colorCss: '#9b59d0',
     units: {
       hero:    { name: 'Lich', role: 'hero', models: 1, hpPer: 270, armor: 5, tier: 3, look: 'necro', vision: 12, defends: 1, magic: true, attack: VOLLEY(25, 13, 10, 0.6), melee: STRIKE(25, 8, 1.4),
-                 mana: { max: 100, start: 60, regen: 25 }, skills: [SUMMON(20, 40, 4, 2), THUNDER(15, 25, 17, 11, 3, 3.5, 0.7), EXPLODE(10, 20, 9, 2.5, 8, 3)] },
-      tank:    { name: 'Grave Guard', role: 'tank', models: 3, hpPer: 63, armor: 9, tier: 4, look: 'graveguard', vision: 9, defends: 2, attack: STRIKE(30, 3.2, 1.3), skills: [WALL('Grave Wall')] },
-      fighter: { name: 'Skeleton Warriors', role: 'fighter', parry: true, models: 5, hpPer: 27, armor: 3, tier: 5, look: 'skeleton', vision: 9, defends: 1, attack: STRIKE(25, 2.4, 1.5) },
+                 mana: { max: 100, start: 60, regen: 25 }, skills: [SUMMON(20, 40, 4, 2), THUNDER(15, 25, 17, 11, 3, 3.5, 0.7), EXPLODE(10, 20, 9, 2.5, 8, 3)],
+                 slots: [{ kind: 'summon' }, { kind: 'thunder' }, { kind: 'explode' }] },
+      tank:    { name: 'Grave Guard', role: 'tank', parry: true, models: 3, hpPer: 63, armor: 9, tier: 4, look: 'graveguard', vision: 9, defends: 2, attack: STRIKE(30, 3.2, 1.3),
+                 skills: [WALL('Grave Wall'), { ...MIGHTY(25, 2.5, 1.4, 0.5, 15, 2), name: 'Bone Bash' }], slots: [{ kind: 'wall' }, { kind: 'mighty' }, { kind: 'parry' }] },
+      fighter: { name: 'Skeleton Warriors', role: 'fighter', parry: true, models: 5, hpPer: 27, armor: 3, tier: 5, look: 'skeleton', vision: 9, defends: 1, attack: STRIKE(25, 2.4, 1.5), slots: [{ kind: 'parry' }, { kind: 'wall', lock: 'boneshields' }] },
       // the swarm: fragile, quick, cheap, trained two squads at a time (`pair`; a later upgrade: three)
-      swarm:   { name: 'Skeleton Warband', role: 'swarm', pair: 2, compact: 0.8, models: 5, hpPer: 21, armor: 2, tier: 3, look: 'skeleton', vision: 9, defends: 0, attack: STRIKE(25, 2.8, 1.4) },
-      ranged:  { name: 'Bone Archers', role: 'ranged', models: 4, hpPer: 30, armor: 1, tier: 5, look: 'archer', vision: 11, defends: 1, attack: VOLLEY(40, 1.9, 14, 0.9), melee: STRIKE(25, 1.2, 1.2), skills: [STORM(35, 3.2, 15, 2.2)] },
-      fast:    { name: 'Wraiths', role: 'fast', move: 9, models: 3, hpPer: 42, armor: 3, tier: 6, look: 'wraith', vision: 11, defends: 1, ghost: true, attack: STRIKE(45, 11, 1.7), skills: [CHARGE(35, 6.8, 9)] },
+      swarm:   { name: 'Skeleton Warband', role: 'swarm', pair: 2, compact: 0.8, models: 5, hpPer: 21, armor: 2, tier: 3, look: 'skeleton', vision: 9, defends: 0, attack: STRIKE(25, 2.8, 1.4),
+                 skills: [{ ...CHARGE(30, 3, 4, 2), name: 'Pounce' }, { ...RALLY(15, 0.1, 2, 0, 1.25), name: 'Frenzy' }], slots: [{ kind: 'charge' }, { kind: 'rally' }] },
+      ranged:  { name: 'Bone Archers', role: 'ranged', models: 4, hpPer: 30, armor: 1, tier: 5, look: 'archer', vision: 11, defends: 1, attack: VOLLEY(40, 1.9, 14, 0.9), melee: STRIKE(25, 1.2, 1.2), slots: [{ kind: 'overwatch' }, { kind: 'storm', lock: 'bonespears' }] },
+      fast:    { name: 'Wraiths', role: 'fast', move: 9, models: 3, hpPer: 42, armor: 3, tier: 6, look: 'wraith', vision: 11, defends: 1, ghost: true, attack: STRIKE(45, 11, 1.7),
+                 skills: [CHARGE(35, 6.8, 9), { ...MIGHTY(30, 2, 1.6, -1, 12, 3), name: 'Dread Wail' }], slots: [{ kind: 'charge' }, { kind: 'step', lock: 'shadowwalk' }, { kind: 'mighty' }] },
       // a weaker caster troop: bolts, a weaker Dark Thunder, a one-squad summon
       mage:    { name: 'Necromancers', role: 'mage', models: 2, hpPer: 30, armor: 1, tier: 4, look: 'necro', vision: 10, defends: 1, magic: true, attack: VOLLEY(25, 4, 9, 0.5), melee: STRIKE(25, 1.5, 1.2),
-                 mana: { max: 60, start: 40, regen: 15 }, skills: [THUNDER(15, 20, 6, 10, 2, 3, 0.7), SUMMON(20, 35, 4, 1)] },
+                 mana: { max: 60, start: 40, regen: 15 }, skills: [THUNDER(15, 20, 6, 10, 2, 3, 0.7), SUMMON(20, 35, 4, 1), { ...RAISE(30, 4, 0), mana: 30 }],
+                 slots: [{ kind: 'thunder' }, { kind: 'summon' }, { kind: 'raise' }] },
     },
     // Souls: fed by death on graveyards (grave ground spreads around undead buildings); Soul Wells give a
     // trickle and spread graves far. No builders.
@@ -197,7 +205,8 @@ export const FACTIONS = {
 //  siphon   : +mana when an enemy model dies within `radius`
 const PASSIVES = {
   kingdom: {
-    hero:    { kind: 'berserk', name: 'Berserk', below: 0.4, dmg: 1.5, taken: 0.85, desc: 'Below 40 % HP: deals ×1.5 damage and takes ×0.85.' },
+    hero:    [{ kind: 'berserk', name: 'Berserk', below: 0.4, dmg: 1.5, taken: 0.85, desc: 'Below 40 % HP: deals ×1.5 damage and takes ×0.85.' },
+              { kind: 'inspire', name: 'Inspiring Presence', radius: 5, mult: 1.1, desc: 'Your other squads within 5″ of The Chosen deal +10 % damage.' }],
     tank:    { kind: 'bulwark', name: 'Bulwark', mult: 0.75, desc: 'Ranged hits on it deal ×0.75 (on top of cover).' },
     fighter: { kind: 'disciplined', name: 'Disciplined', mult: 1.25, desc: '+25 % damage against a squad another of your squads is also fighting.' },
     ranged:  { kind: 'pierce', name: 'Armour-piercing', armor: 3, desc: 'Its volleys and Piercing Bolts ignore 3 armour.' },
@@ -205,7 +214,8 @@ const PASSIVES = {
     builder: { kind: 'militia', name: 'Militia', armor: 3, radius: 4, desc: '+3 armour within 4″ of one of your buildings.' },
   },
   undead: {
-    hero:    { kind: 'drain', name: 'Soul Drain', share: 0.25, desc: 'Heals 25 % of the damage its attacks and spells deal.' },
+    hero:    [{ kind: 'drain', name: 'Soul Drain', share: 0.25, desc: 'Heals 25 % of the damage its attacks and spells deal.' },
+              { kind: 'dread', name: 'Dread Aura', radius: 4, mult: 0.9, desc: 'Enemy squads within 4″ of the Lich deal −10 % damage.' }],
     tank:    { kind: 'gravebound', name: 'Grave-bound', armor: 3, desc: '+3 armour while standing on your graves.' },
     fighter: { kind: 'reassemble', name: 'Reassemble', hp: 3, desc: 'On your graves, regains 3 HP per model at the end of every round.' },
     swarm:   { kind: 'rend', name: 'Rend', dmg: 0.05, ap: 0.05, max: 10, desc: 'Each hit: the target deals 5 % less damage and has 5 % less AP (stacks up to 10) until the end of its next round.' },
@@ -214,7 +224,11 @@ const PASSIVES = {
     mage:    { kind: 'siphon', name: 'Soul Siphon', mana: 5, radius: 6, desc: '+5 mana whenever an enemy model dies within 6″.' },
   },
 };
-for (const f of Object.keys(PASSIVES)) for (const [r, pv] of Object.entries(PASSIVES[f])) FACTIONS[f].units[r].passive = pv;
+for (const f of Object.keys(PASSIVES)) for (const [r, pv] of Object.entries(PASSIVES[f])) {
+  const u = FACTIONS[f].units[r];
+  u.passives = Array.isArray(pv) ? pv : [pv];
+  u.passive = u.passives[0];   // the sim's per-squad passive checks; heroes' second passive is an aura (resolve.js)
+}
 // population (army cap) each squad takes, and its movement: inches per 100 AP (tier stays initiative only;
 // the default movement is the old tier x 1.2")
 const POP = { hero: 0, builder: 0, summon: 0, swarm: 1, fighter: 2, ranged: 2, mage: 2, fast: 3, tank: 3 };
@@ -280,6 +294,27 @@ export const meleeOf = def => def.attack.kind === 'strike' ? def.attack : def.me
 export const isRangedSkill = sk => !!(sk && sk.ranged);
 export const skillsOf = def => def.skills || [];
 export const skillOf = (def, kind) => (def.skills || []).find(k => k.kind === kind) || null;
+// ---- kits: what a squad can do, in three groups (the order panel, docs and tests use kitOf) ----
+//  actions : move, its basic attack (melee units: Strike; ranged units: their shot, which turns into a strike
+//            on its own while engaged), act earlier, defend
+//  skills  : fixed slots per unit (`slots`): normal units 2, elites 3, heroes 3; a slot with `lock` stays
+//            locked until that research is finished (the research adds the skill)
+//  passives: always on; normal units and elites 1, heroes 2
+// parry and overwatch are prepaid skills (no aim): listed here, resolved as before
+export const PREP_SKILLS = {
+  parry: { kind: 'parry', name: 'Parry', cat: 'defense', prep: true },
+  overwatch: { kind: 'overwatch', name: 'Overwatch', cat: 'defense', prep: true },
+};
+export const ELITES = ['tank', 'fast', 'mage'];
+export const unitClass = def => def.role === 'hero' ? 'hero' : def.role === 'builder' ? 'builder' : ELITES.includes(def.role) ? 'elite' : 'normal';
+export const passivesOf = def => def.passives || (def.passive ? [def.passive] : []);
+// the squad's skill slots with what fills them: { ...skill, slot, locked, lock } (locked: the research id)
+export function slotsOf(def) {
+  return (def.slots || []).map((sl, i) => {
+    const sk = PREP_SKILLS[sl.kind] ? { ...PREP_SKILLS[sl.kind], ap: sl.kind === 'parry' ? RULES.parryCost : RULES.overwatchCost } : (def.skills || []).find(k => k.kind === sl.kind);
+    return sk ? { ...sk, slot: i, locked: false, lock: sl.lock || null } : { kind: sl.kind, slot: i, locked: true, lock: sl.lock || null };
+  });
+}
 export const SKILL_KINDS = ['charge', 'blast', 'rally', 'storm', 'sweep', 'leap', 'step', 'wall', 'pierce', 'raise', 'mighty', 'summon', 'thunder', 'explode'];
 // skills cast on the squad itself (no aim): tap the knob to use
 export const SELF_SKILLS = ['rally', 'sweep', 'wall', 'raise'];

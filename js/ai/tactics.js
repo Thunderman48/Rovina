@@ -91,9 +91,10 @@ export function tactics(K, P, skill, mem, inf, tasks, o, rnd) {
     left = auto.left;
     if (auto.charged) { /* the charge and its swings are planned */ }
     else if (isShooter(def) && meleeOf(def) && engagedWith(q, seen).length) {
-      // locked in melee: its shots would turn into strikes anyway, so strike the one it is fighting
+      // locked in melee: ranged units can't order a strike, but their shots turn into strikes at the
+      // enemy they are fighting on their own; aim the shots at the weakest of them
       const foe = engagedWith(q, seen).sort((a, b) => a.hp - b.hp)[0];
-      left = meleePlan(s, q, foe, plan, left);
+      while (left >= def.attack.ap) { plan.actions.push({ kind: def.attack.kind, x: foe.x, z: foe.z }); left -= def.attack.ap; }
     }
     else if (isShooter(def)) {
       const melee = opts.filter(e => !isShooter(defOf(e))).sort((a, b) => dist(q.x, q.z, a.x, a.z) - dist(q.x, q.z, b.x, b.z))[0];

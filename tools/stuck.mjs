@@ -28,7 +28,8 @@ export function stuckReport(games = GAMES, maps = MAPS, rounds = ROUNDS) {
         const a = s.squads.find(q => q.id === id), b = res.state.squads.find(q => q.id === id);
         if (!a || !b || b.hp <= 0) continue;
         out.rounds++;
-        const worked = evs.some(e => (e.type === 'gather' || e.type === 'built' || e.type === 'repaired') && (e.id === id || e.by === id));
+        // working, or a melee squad that ran into an enemy and fought it (contact fight), isn't stuck
+        const worked = evs.some(e => (e.type === 'gather' || e.type === 'built' || e.type === 'repaired' || e.type === 'contact') && (e.id === id || e.by === id));
         if (dist(a.x, a.z, b.x, b.z) >= 0.3 || worked) { streak[id] = 0; continue; }
         if (kind === 'work' && evs.some(e => e.type === 'workTick' && e.id === id)) continue;
         // a builder standing at its building is working (gather ticks are paid at the end)

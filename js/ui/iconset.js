@@ -16,6 +16,45 @@ const CHEV2 = 'M12 2l9 8h-5l-4-3.5L8 10H3ZM12 11l9 8h-5l-4-3.5L8 19H3Z';
 const SLASHCIRCLE = 'M12 3a9 9 0 1 0 .01 0ZM5.6 5.6l12.8 12.8';
 
 export const ICONSET = {
+  // ---- skills (one per skill name: 'sk-' + slug) and passives ('pv-' + kind), since 2026-11-26 ----
+  'sk-leap-strike': { c: GREEN, d: 'M3 20c2-11 11-15 15-6M15 11.5l3 3.2 3.4-3.8M9 21h12', s: true, w: 2.2 },
+  'sk-rally': { c: BLUE, d: 'M6 22V3M6 4h12l-3 4 3 4H6M12 6v4M10 8h4', s: true, w: 2 },
+  'sk-mighty-swing': { c: RED, d: 'M3 15a9 9 0 0 1 18 0M8 3h8v6H8ZM12 9v13', s: true, w: 2 },
+  'sk-lock-shields': { c: BLUE, d: 'M8 3l5.5 2v5c0 4-2.3 6.8-5.5 8C4.8 16.8 2.5 14 2.5 10V5ZM15.5 7.5l6 2v4.5c0 4-2.5 6.5-6 8-1.5-.6-2.8-1.5-3.8-2.6', s: true, w: 2 },
+  'sk-shield-bash': { c: RED, d: 'M9 3l6 2.2v5.5c0 4-2.6 7-6 8.3-3.4-1.3-6-4.3-6-8.3V5.2ZM18 5l3.5-2M19 10.5h3.5M18 16l3.5 2', s: true, w: 2 },
+  'sk-parry': { c: STEEL, d: 'M4 20 18 6M15 3l6 6M20 20 6 6M3 9l6-6', s: true, w: 2.2 },
+  'sk-charge': { c: GREEN, d: 'M2 12h13M10 6l6 6-6 6M17 5l5 7-5 7', s: true, w: 2.2 },
+  'sk-trample': { c: RED, d: 'M12 3a9 9 0 1 0 .01 0ZM8 16v-5a4 4 0 0 1 8 0v5M8 16h2M14 16h2', s: true, w: 2 },
+  'sk-wheel-away': { c: GREEN, d: 'M20 7H9a5 5 0 0 0 0 10h9M14 13l4 4-4 4', s: true, w: 2.2 },
+  'sk-overwatch': { c: BLUE, d: 'M2 12c3-5 6.5-7 10-7s7 2 10 7c-3 5-6.5 7-10 7S5 17 2 12ZM12 9a3 3 0 1 1-.01 0Z', s: true, w: 2 },
+  'sk-piercing-bolt': { c: RED, d: 'M2 12h18M16 8l4 4-4 4M7 7v10M11 7v10', s: true, w: 2.2 },
+  'sk-summon-warband': { c: PURPLE, d: 'M8 10a4 4 0 1 1 8 0v3H8ZM10 13v2M14 13v2M3 21h18M6 21l2-4M18 21l-2-4', s: true, w: 2 },
+  'sk-dark-thunder': { c: VIOLET, d: 'M13 2 5 13h6l-2 9 9-12h-6l3-8Z', s: true, w: 2 },
+  'sk-corpse-explosion': { c: FRAG, d: 'M12 2v5M12 17v5M2 12h5M17 12h5M5 5l3.5 3.5M15.5 15.5 19 19M19 5l-3.5 3.5M8.5 15.5 5 19M12 9.5a2.5 2.5 0 1 1-.01 0Z', s: true, w: 2 },
+  'sk-grave-wall': { c: BLUE, d: 'M3 21V11a4 4 0 0 1 8 0v10M13 21V9a4 4 0 0 1 8 0v12M2 21h20', s: true, w: 2 },
+  'sk-bone-bash': { c: RED, d: 'M6.5 4.5a2 2 0 1 0-2 2l11 11a2 2 0 1 0 2-2ZM17 4l3-2M19 8h3', s: true, w: 2 },
+  'sk-shadow-step': { c: VIOLET, d: 'M4 20c0-6 4-9 8-9M12 11c4 0 8-3 8-9M3 9h4M17 15h4M6 4l2 2M16 18l2 2', s: true, w: 2 },
+  'sk-dread-wail': { c: VIOLET, d: 'M12 9.5a2.5 2.5 0 1 1-.01 0ZM7.5 7.5a6.5 6.5 0 0 0 0 9M16.5 7.5a6.5 6.5 0 0 1 0 9M4.5 4.5a11 11 0 0 0 0 15M19.5 4.5a11 11 0 0 1 0 15', s: true, w: 2 },
+  'sk-raise': { c: LIME, d: 'M12 21V8M7 13l5-5 5 5M5 3h14', s: true, w: 2.2 },
+  'sk-pounce': { c: ORANGE, d: 'M3 18c3-8 9-10 14-6M13.5 9l3.5 3-4 1.5M16 17l2 4M19.5 15l2 3M12.5 18l1 4', s: true, w: 2 },
+  'sk-frenzy': { c: RED, d: 'M12 2c1 4 5 5 5 10a5 5 0 0 1-10 0c0-3 2-4 2-6 1 1 2 2 2 4 1-2 1-5 1-8Z', s: true, w: 2 },
+  'sk-arrow-storm': { c: RED, d: 'M6 2l2 7M12 2v7M18 2l-2 7M5 7l3 2 2-3M11 7l1 2 1-2M14 6l2 3 3-2M3 21h18M7 21v-5M12 21v-6M17 21v-5', s: true, w: 1.8 },
+  'pv-berserk': { c: RED, d: 'M12 3a9 9 0 1 0 .01 0ZM7.5 9.5l3 1.5M16.5 9.5l-3 1.5M8 16.5c2.5-2 5.5-2 8 0', s: true, w: 2 },
+  'pv-inspire': { c: GOLD, d: 'M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.4l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9Z', s: true, w: 2 },
+  'pv-bulwark': { c: STEEL, d: 'M12 3l7 2.5v5.5c0 4.5-3 7.8-7 9.5-4-1.7-7-5-7-9.5V5.5ZM1.5 2.5l3.5 3M22.5 2.5 19 5.5', s: true, w: 2 },
+  'pv-disciplined': { c: ORANGE, d: 'M5 21 12 3M11 21l7-18M3 15h8M10 15h8', s: true, w: 2 },
+  'pv-pierce': { c: RED, d: 'M2 12h14M13 8l4 4-4 4M18.5 4v16M21.5 6v12', s: true, w: 2 },
+  'pv-ridedown': { c: CYAN, d: 'M6 21V11a6 6 0 0 1 12 0v10M3.5 21h5M15.5 21h5', s: true, w: 2.4 },
+  'pv-militia': { c: AMBER, d: 'M12 22V9M7 3v4a5 5 0 0 0 10 0V3M12 3v6', s: true, w: 2 },
+  'pv-drain': { c: VIOLET, d: 'M12 3c3 4 5 6.5 5 9a5 5 0 0 1-10 0c0-2.5 2-5 5-9ZM9 19l3 3 3-3', s: true, w: 2 },
+  'pv-dread': { c: PURPLE, d: 'M12 3a8 8 0 0 0-8 8v10l3-2 2.5 2L12 19l2.5 2L17 19l3 2V11a8 8 0 0 0-8-8ZM9 10.5h.01M15 10.5h.01', s: true, w: 2 },
+  'pv-gravebound': { c: STEEL, d: 'M6 21V9a6 6 0 0 1 12 0v12M3 21h18M12 8v7M9 11h6', s: true, w: 2 },
+  'pv-reassemble': { c: LIME, d: 'M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3M18 3v4h-4M6 21v-4h4', s: true, w: 2 },
+  'pv-rend': { c: RED, d: 'M6 3c2 6 2 12-1 18M12 3c2 6 2 12-1 18M18 3c2 6 2 12-1 18', s: true, w: 2.2 },
+  'pv-longshot': { c: RED, d: 'M2 12h17M16 9l3 3-3 3M5 8v8M9 9v6M13 10v4', s: true, w: 2 },
+  'pv-chill': { c: CYAN, d: 'M12 2v20M3.3 7l17.4 10M20.7 7 3.3 17M9 4l3 2 3-2M9 20l3-2 3 2', s: true, w: 1.9 },
+  'pv-siphon': { c: VIOLET, d: 'M12 10.5a1.5 1.5 0 1 1-.01 0ZM12 4a8 8 0 1 1-8 8M12 7.5a4.5 4.5 0 1 1-4.5 4.5', s: true, w: 2 },
+
   // unit types
   hero: { c: GOLD, d: 'M3 18 4.5 7l5 5L12 4l2.5 8 5-5L21 18Z', x: 'M3 21h18' },
   tank: { c: STEEL, d: SHIELD, x: 'M12 5v14M7.5 10h9' },
@@ -149,3 +188,8 @@ export const ICON_LEGEND = [
   ['Stances', [['guard', 'Guard'], ['hold', 'Hold'], ['holdground', 'Hold ground'], ['advance', 'Advance'], ['retreat', 'Retreat']]],
   ['Events', [['kill', 'Killed'], ['blocked', 'Hit blocked'], ['slow', 'Slowed'], ['miss', 'Missed / cancelled'], ['spawn', 'Unit ready'], ['queue', 'Production queue']]],
 ];
+
+// the icon of a skill (by its name) or a passive (by its kind); falls back to a generic icon
+const slug = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+export const skillIcon = sk => (sk && ICONSET['sk-' + slug(sk.name)] ? 'sk-' + slug(sk.name) : 'attack');
+export const passiveIcon = pv => (pv && ICONSET['pv-' + pv.kind] ? 'pv-' + pv.kind : 'hero');

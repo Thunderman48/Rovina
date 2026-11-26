@@ -323,6 +323,42 @@ meets takes `dmg` per model × models; the charger stops in contact (engaged). W
 the board edge stop the rush. Friendly squads are passed through (and stepped aside from at the end).
 The action always costs its full AP.
 
+### 5.6b Unit kits: actions, skills, passives (since 2026-11-26; `slots` / `passives` in `js/data/units.js`)
+What a squad can do comes in three groups, shown as three rows in the order panel, each skill and passive
+with its own icon (`skillIcon` / `passiveIcon` in `js/ui/iconset.js`):
+- **Actions** (every squad): Move; its attack (melee units: the Strike, §5.2; ranged units and casters: the
+  volley / bolt, which turns into a strike on its own while engaged, §5.9b); Defend; Act earlier.
+- **Skills:** fixed slots per unit (`slots`): **normal units 2**, **elites 3** (Shieldwall, Outriders,
+  Grave Guard, Wraiths, Necromancers; `ELITES` = tank, fast, mage), **heroes 3**.
+  - **Locked slots:** a slot with `lock` stays locked (shown "🔒 research name") until that research is
+    finished; the research then adds the skill (`addSkill`). Unlock effects apply before other research
+    effects, so research that improves a skill (Bodkin Bolts) finds it in any order.
+  - **Parry and Overwatch** are prepaid skills (no aim; §5.8 / §5.9), listed in the slots: Men-at-arms,
+    Skeleton Warriors, Shieldwall and Grave Guard can parry; Crossbows and Bone Archers can overwatch (the
+    casters no longer can).
+- **Passives:** always on; **normal units and elites 1, heroes 2** (the second is an aura, §5.11).
+- **Peasants** are builders, outside the scheme (work actions, Militia).
+- **Ranged units can't order a melee strike** (`sanitizePlan` drops hand-ordered strikes for units whose
+  basic attack isn't a strike); their shots turn into strikes automatically while engaged.
+- **Contact fight:** a melee squad (not peasants, not on Retreat, not Wraiths) whose move is stopped by
+  walking into an enemy spends the rest of that move's AP on strikes at it (event `contact`), instead of
+  standing still.
+
+**New skills (2026-11-26), built from existing mechanics:**
+
+| Skill | Unit | Built on | Rule |
+|---|---|---|---|
+| Shield Bash | Shieldwall | `mighty` | 25 AP, 3 a model in a 120° arc, reach 1.4″, stun 15 AP, cd 2 |
+| Bone Bash | Grave Guard | `mighty` | 25 AP, 2.5 a model, the same arc and stun |
+| Dread Wail | Wraiths | `mighty` | 30 AP, a full circle (cosHalf −1), 2 a model, reach 1.6″, stun 12 AP, cd 3 |
+| Trample | Outriders | `sweep` | 30 AP, 5 a model all round, reach 1″, cd 2 |
+| Wheel Away | Outriders | `step` | 20 AP, reappear up to 6″ away, no parting blows, cd 2 |
+| Pounce | Skeleton Warband | `charge` | 30 AP, a 4″ charge lane, 3 a model, cd 2 |
+| Frenzy | Skeleton Warband | `rally` | 15 AP, radius 0.1″ (only itself): ×1.25 damage and +1 defend this round, cd 2 |
+| Raise | Necromancers | `raise` | 30 AP, 30 mana: own squads within 4″ regain one fallen model each |
+
+The full kits (and every skill's numbers, locked skills included) are generated in §8.
+
 ### 5.7 Hero skills and specials
 **The Chosen (Kingdom hero; cooldown skills):**
 - **Leap Strike** (`leap`, 20 AP, cd 2): flies for 6 AP to the aim (clamped to range 7″), over
@@ -436,11 +472,11 @@ such enemy (a normal volley toward it, needing a clear line; a lobbing unit lobs
 - **Ranged skills** are tagged `ranged: true`: Piercing Bolt, Arrow Storm, Bone Blast, Dark Thunder. Summon Warband, Corpse Explosion, Rally, etc. are not.
 - **When a volley / lob or a ranged skill starts** (its first AP) while the squad is **engaged** (§5.8: an enemy melee squad within 0.35″), the action becomes a **melee strike** at the nearest enemy it is engaged with. It costs the melee attack's AP. No mana or cooldown is spent on the skill. Event `toMelee` (logged as "locked in melee: its … becomes a melee strike").
 - If the squad disengaged earlier in its plan, the shot fires normally: the check is at the moment the action starts.
-- **A melee option:** shooters can also order a **Melee** strike on purpose (dock button; order `{ kind: 'strike', t, x, z }`, cost = the melee attack's AP).
+- **No melee option** (since 2026-11-26): ranged units can't order a strike by hand (the Melee button is gone; such orders are dropped); the fallback is used only while engaged.
 - **Stances, auto skills and the AI:**
-  - a locked shooter strikes the enemy it is engaged with instead of planning shots;
+  - a locked stance shooter strikes the enemy it is engaged with instead of planning shots;
   - `autoSkills` never picks a ranged skill while engaged;
-  - the AI's hand-ordered shooters do the same (they still kite away first when not locked in).
+  - the AI's hand-ordered locked shooters aim their shots at the weakest enemy they are engaged with (the shots turn into strikes); they still kite away first when not locked in.
 
 ### 5.10 Cover (Dawn of War style; `js/sim/cover.js`)
 Squads take less damage while they **stand in cover**. Cover is checked **when each hit lands**, where the
@@ -466,8 +502,12 @@ target stands then (`coverAt`).
   - beside each Palisade / Bone Fence, on both long sides (every 1″; the side away from the enemy counts).
 - **The planner** shows the cover at a move's end (a green ring and "heavy / light cover", against the nearest visible enemy). Nameplates get a shield badge (1 light, 2 heavy). The log notes "(heavy cover)" / "(light cover)" on hits.
 
-### 5.11 Passives (`passive` per unit in `js/data/units.js`; applied in `resolve.js`)
-Every unit type has one always-on ability, shown in its squad panel (✦) and in Help.
+### 5.11 Passives (`passives` per unit in `js/data/units.js`; applied in `resolve.js`)
+Every unit type has one always-on ability (heroes two, since 2026-11-26), shown with its icon in the squad
+panel's Passives row and in Help. **The heroes' second passives are auras** on other squads' damage
+(`auraMult` in `outMult`; edge-to-edge distance, alive heroes only):
+- **Inspiring Presence** (The Chosen): its side's other squads within **5″** deal **×1.1**.
+- **Dread Aura** (the Lich): enemy squads within **4″** deal **×0.9**.
 
 | Unit | Passive | Effect (exact rule) |
 |---|---|---|
@@ -531,7 +571,7 @@ Ossuary) and Necromancers (Mausoleum; trained at the Crypt only). Everything els
 | Role | Name | Models | HP/model | HP | Armour | Tier (initiative) | Move "/rnd | Pop | Vision | Defends | Radius | Attack | AP | Dmg/model | Full squad/hit | Reach / range | Hits per 100 AP | Flags | Train cost | Train rnds |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | hero | The Chosen | 1 | 260 | 260 | 9 | 5 | 6 | 0 | 12 | 2 | 0.65 | strike | 25 | 18 | 20.7 | reach 1.6" + lunge 1.8" (one target) | 4 | - | - | - |
-| tank | Shieldwall | 3 | 102 | 306 | 12 | 4 | 4.8 | 3 | 9 | 2 | 1.227 | strike | 30 | 4.8 | 16.56 | reach 1.3" + lunge 1.44" (one target) | 3 | - | 30 | 3 |
+| tank | Shieldwall | 3 | 102 | 306 | 12 | 4 | 4.8 | 3 | 9 | 2 | 1.227 | strike | 30 | 4.8 | 16.56 | reach 1.3" + lunge 1.44" (one target) | 3 | parry | 30 | 3 |
 | fighter | Men-at-arms | 4 | 60 | 240 | 7 | 5 | 6 | 2 | 9 | 1 | 1.34 | strike | 25 | 6 | 27.6 | reach 1.5" + lunge 1.8" (one target) | 4 | parry | 24 | 2 |
 | ranged | Crossbows | 4 | 45 | 180 | 3 | 5 | 4.8 | 2 | 11 | 1 | 1.34 | volley | 40 | 2.7 | 10.8 | range 14", width 0.7" | 2 | melee when locked: strike 2/model, 25 AP, reach 1.2" | 26 | 2 |
 | fast | Outriders | 3 | 72 | 216 | 6 | 6 | 7.2 | 3 | 11 | 1 | 1.347 | strike | 45 | 13 | 44.85 | reach 1.7" + lunge 2.16" (one target) | 2 | - | 30 | 2 |
@@ -542,7 +582,7 @@ Ossuary) and Necromancers (Mausoleum; trained at the Crypt only). Everything els
 | Role | Name | Models | HP/model | HP | Armour | Tier (initiative) | Move "/rnd | Pop | Vision | Defends | Radius | Attack | AP | Dmg/model | Full squad/hit | Reach / range | Hits per 100 AP | Flags | Train cost | Train rnds |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | hero | Lich | 1 | 270 | 270 | 5 | 3 | 3.6 | 0 | 12 | 1 | 0.65 | volley | 25 | 13 | 13 | range 10", width 0.6" | 4 | melee when locked: strike 8/model, 25 AP, reach 1.4", mage: mana 60/100, +25/rnd | - | - |
-| tank | Grave Guard | 3 | 63 | 189 | 9 | 4 | 4.8 | 3 | 9 | 2 | 1.227 | strike | 30 | 3.2 | 11.04 | reach 1.3" + lunge 1.44" (one target) | 3 | - | 16 | 3 |
+| tank | Grave Guard | 3 | 63 | 189 | 9 | 4 | 4.8 | 3 | 9 | 2 | 1.227 | strike | 30 | 3.2 | 11.04 | reach 1.3" + lunge 1.44" (one target) | 3 | parry | 16 | 3 |
 | fighter | Skeleton Warriors | 5 | 27 | 135 | 3 | 5 | 6 | 1 | 9 | 1 | 1.439 | strike | 25 | 2.4 | 13.8 | reach 1.5" + lunge 1.8" (one target) | 4 | parry | 9 | 2 |
 | swarm | Skeleton Warband | 5 | 21 | 105 | 2 | 3 | 3.6 | 1 | 9 | 0 | 1.151 | strike | 25 | 2.8 | 16.1 | reach 1.4" + lunge 1.08" (one target) | 4 | - | 20 | 2 |
 | ranged | Bone Archers | 4 | 30 | 120 | 1 | 5 | 6 | 1 | 11 | 1 | 1.34 | volley | 40 | 1.9 | 7.6 | range 14", width 0.9" | 2 | melee when locked: strike 1.2/model, 25 AP, reach 1.2" | 13 | 2 |
@@ -561,22 +601,53 @@ measured from the squad's edge; "Full squad/hit" includes `strikeMult` for strik
 ## 8. Skills *(generated)*
 
 <!-- GEN:skills -->
+**Kits** (normal units: 1 passive + 2 skills; elites: 1 + 3; heroes: 2 + 3; 🔒 = locked until that research; Parry and Overwatch are prepaid skills, §5.8 / §5.9)
+
+| Faction | Unit | Class | Skill slots | Passives |
+| --- | --- | --- | --- | --- |
+| Kingdom | The Chosen | hero | Leap Strike, Rally, Mighty Swing 🔒 Champion's Swing | Berserk (`berserk`), Inspiring Presence (`inspire`) |
+| Kingdom | Shieldwall | elite | Lock Shields, Shield Bash, Parry | Bulwark (`bulwark`) |
+| Kingdom | Men-at-arms | normal | Parry, Lock Shields 🔒 Shield Drill | Disciplined (`disciplined`) |
+| Kingdom | Crossbows | normal | Overwatch, Piercing Bolt 🔒 Piercing Bolts | Armour-piercing (`pierce`) |
+| Kingdom | Outriders | elite | Charge, Trample, Wheel Away | Ride Down (`ridedown`) |
+| Kingdom | Peasants | builder | - | Militia (`militia`) |
+| Undead Legion | Lich | hero | Summon Warband, Dark Thunder, Corpse Explosion | Soul Drain (`drain`), Dread Aura (`dread`) |
+| Undead Legion | Grave Guard | elite | Grave Wall, Bone Bash, Parry | Grave-bound (`gravebound`) |
+| Undead Legion | Skeleton Warriors | normal | Parry, Grave Wall 🔒 Bone Shields | Reassemble (`reassemble`) |
+| Undead Legion | Skeleton Warband | normal | Pounce, Frenzy | Rend (`rend`) |
+| Undead Legion | Bone Archers | normal | Overwatch, Arrow Storm 🔒 Storm of Bones | Long Shot (`longshot`) |
+| Undead Legion | Wraiths | elite | Charge, Shadow Step 🔒 Shadow Walk, Dread Wail | Chilling Touch (`chill`) |
+| Undead Legion | Necromancers | elite | Dark Thunder, Summon Warband, Raise | Soul Siphon (`siphon`) |
+
+**Skill numbers**
+
 | Faction | Unit | Skill | Kind | Category | AP | Cooldown (rounds) | Mana | Dmg (per model x models) | Parameters |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Kingdom | The Chosen | Leap Strike | `leap` | move | 20 | 2 | - | 12 x 1 = 12 | range 7, flight 6, shove 1, dmg 12, radius 1.6 |
 | Kingdom | The Chosen | Rally | `rally` | defense | 20 | 2 | - | - | radius 5, defends 1, dmgMult 1, armor 4 |
-| Kingdom | The Chosen | Mighty Swing | `mighty` | attack | 30 | 2 | - | 28 x 1 = 28 | dmg 28, reach 2.6, cosHalf 0.2, stun 25 |
+| Kingdom | The Chosen | Mighty Swing (🔒 Champion's Swing) | `mighty` | attack | 30 | 2 | - | 28 x 1 = 28 | dmg 28, reach 2.6, cosHalf 0.2, stun 25 |
 | Kingdom | Shieldwall | Lock Shields | `wall` | defense | 15 | 1 | - | - | mult 0.3, cosHalf 0.5 |
-| Kingdom | Crossbows | Piercing Bolt | `pierce` | attack | 35 | 2 | - | 3.6 x 4 = 14.4 | ranged true, dmg 3.6, range 16, width 0.7 |
+| Kingdom | Shieldwall | Shield Bash | `mighty` | attack | 25 | 2 | - | 3 x 3 = 9 | dmg 3, reach 1.4, cosHalf 0.5, stun 15 |
+| Kingdom | Men-at-arms | Lock Shields (🔒 Shield Drill) | `wall` | defense | 15 | 1 | - | - | mult 0.3, cosHalf 0.5 |
+| Kingdom | Crossbows | Piercing Bolt (🔒 Piercing Bolts) | `pierce` | attack | 35 | 2 | - | 3.6 x 4 = 14.4 | ranged true, dmg 3.6, range 16, width 0.7 |
 | Kingdom | Outriders | Charge | `charge` | move | 35 | 1 | - | 9 x 3 = 27 | wind 8, dmg 9, len 9 |
+| Kingdom | Outriders | Trample | `sweep` | attack | 30 | 2 | - | 5 x 3 = 15 | dmg 5, reach 1 |
+| Kingdom | Outriders | Wheel Away | `step` | move | 20 | 2 | - | - | range 6 |
 | Undead Legion | Lich | Summon Warband | `summon` | defense | 20 | - (mage) | 40 | - | range 4, count 2, radius 1.6 |
 | Undead Legion | Lich | Dark Thunder | `thunder` | attack | 15 | - (mage) | 25 | 17 x 1 = 17 | ranged true, dmg 17, range 11, jumps 3, jump 3.5, decay 0.7, radius 1 |
 | Undead Legion | Lich | Corpse Explosion | `explode` | attack | 10 | - (mage) | 20 | - | range 9, radius 2.5, base 8, perModel 3 |
 | Undead Legion | Grave Guard | Grave Wall | `wall` | defense | 15 | 1 | - | - | mult 0.3, cosHalf 0.5 |
-| Undead Legion | Bone Archers | Arrow Storm | `storm` | attack | 35 | 2 | - | 3.2 x 4 = 12.8 | ranged true, dmg 3.2, range 15, radius 2.2 |
+| Undead Legion | Grave Guard | Bone Bash | `mighty` | attack | 25 | 2 | - | 2.5 x 3 = 7.5 | dmg 2.5, reach 1.4, cosHalf 0.5, stun 15 |
+| Undead Legion | Skeleton Warriors | Grave Wall (🔒 Bone Shields) | `wall` | defense | 15 | 1 | - | - | mult 0.3, cosHalf 0.5 |
+| Undead Legion | Skeleton Warband | Pounce | `charge` | move | 30 | 2 | - | 3 x 5 = 15 | wind 8, dmg 3, len 4 |
+| Undead Legion | Skeleton Warband | Frenzy | `rally` | defense | 15 | 2 | - | - | radius 0.1, defends 1, dmgMult 1.25, armor 0 |
+| Undead Legion | Bone Archers | Arrow Storm (🔒 Storm of Bones) | `storm` | attack | 35 | 2 | - | 3.2 x 4 = 12.8 | ranged true, dmg 3.2, range 15, radius 2.2 |
 | Undead Legion | Wraiths | Charge | `charge` | move | 35 | 1 | - | 6.8 x 3 = 20.4 | wind 8, dmg 6.8, len 9 |
+| Undead Legion | Wraiths | Dread Wail | `mighty` | attack | 30 | 3 | - | 2 x 3 = 6 | dmg 2, reach 1.6, cosHalf -1, stun 12 |
+| Undead Legion | Wraiths | Shadow Step (🔒 Shadow Walk) | `step` | move | 20 | 2 | - | - | range 6 |
 | Undead Legion | Necromancers | Dark Thunder | `thunder` | attack | 15 | - (mage) | 20 | 6 x 2 = 12 | ranged true, dmg 6, range 10, jumps 2, jump 3, decay 0.7, radius 1 |
 | Undead Legion | Necromancers | Summon Warband | `summon` | defense | 20 | - (mage) | 35 | - | range 4, count 1, radius 1.6 |
+| Undead Legion | Necromancers | Raise | `raise` | defense | 30 | - (mage) | 30 | - | radius 4 |
 <!-- /GEN:skills -->
 
 Lock Shields / Grave Wall: `mult` 0.3 = damage taken from the front arc, `cosHalf` 0.5 = ±60°.
@@ -979,12 +1050,13 @@ War commanders and C&C Generals powers for the exclusive picks.
     Sharpened Picks (mines 9 AP a gold, `mineGather`), Masonry / Bone Masonry (+15 % building HP),
     Hoardings / Dread Spires (+1 tower and HQ fire damage, `fireAdd`), Horse Breeding / Hollow Bones /
     Spectral Speed (`move`), Grave Dust, Ossified Skin, Soul Conduits (Soul Wells +1, `wellIncome`).
-  - **Ability upgrades** (middle of the tree; effect `addSkill` gives a unit a new skill, reusing existing
-    skill kinds): Shield Drill (Men-at-arms: Lock Shields), Fire Arrows (Crossbows: Fire Volley, an
-    Arrow Storm–type circle, 3 a model), Sweeping Blow (The Chosen: Sweep), Bone Shields (Skeleton
-    Warriors: Grave Wall), Bone Spears (Bone Archers: Bone Spear, a Piercing Bolt–type line, 3.5 a
-    model), Shadow Walk (Wraiths: Shadow Step). Squads use them like their own skills (orders, stances,
-    auto skills).
+  - **Ability upgrades = skill-slot unlocks** (since 2026-11-26; effect `addSkill` fills a locked slot of
+    the unit's kit, §5.6b): Shield Drill (Men-at-arms: Lock Shields), **Piercing Bolts** (was Fire Arrows;
+    Crossbows: Piercing Bolt), **Champion's Swing** (was Sweeping Blow; The Chosen: Mighty Swing), Bone
+    Shields (Skeleton Warriors: Grave Wall), **Storm of Bones** (was Bone Spears; Bone Archers: Arrow Storm),
+    Shadow Walk (Wraiths: Shadow Step). Before 2026-11-26 Piercing Bolt, Arrow Storm and Mighty Swing were
+    base skills and these researches added Fire Volley, Bone Spear and Sweep instead. Squads use the
+    unlocked skills like their own (orders, stances, auto skills).
   - The tree screen has a **Barracks / Ossuary lane** ("unit unlocks and drills"); every item has a chip.
   The HQ gets more HP (current HP grows by the same amount), stronger fire or graves, and a bigger model.
 - **Doctrines:** one exclusive pick per tier: researching one locks the other for the rest of the game.
@@ -1033,9 +1105,9 @@ War commanders and C&C Generals powers for the exclusive picks.
 | `masonry` | Masonry | 2 | Keep | 35 | 2 | Castle | - | All your buildings +15 % HP. |
 | `hoardings` | Hoardings | 2 | Blacksmith | 30 | 2 | - | - | Watchtowers and the Keep fire for +1 damage per shot. |
 | `horses` | Horse Breeding | 2 | Barracks | 30 | 2 | Outrider Stables | - | Outriders move 1″ further a round. |
-| `shielddrill` | Shield Drill | 2 | Barracks | 40 | 2 | Castle | - | Men-at-arms gain Lock Shields (hits from the front deal 30 % this round). |
-| `firearrows` | Fire Arrows | 2 | Blacksmith | 45 | 3 | - | - | Crossbows gain Fire Volley: a circle of burning bolts (2.4 per model) within 14″, arcing over walls. |
-| `sweeping` | Sweeping Blow | 2 | Chapel | 50 | 3 | - | - | The Chosen gains Sweep: a full circle swing (14) around him. |
+| `shielddrill` | Shield Drill | 2 | Barracks | 40 | 2 | Castle | - | Unlocks the Men-at-arms' Lock Shields (hits from the front deal 30 % this round). |
+| `firearrows` | Piercing Bolts | 2 | Blacksmith | 45 | 3 | - | - | Unlocks the Crossbows' Piercing Bolt: a bolt line that hits every enemy on it (3.6 per model), 16″. |
+| `sweeping` | Champion's Swing | 2 | Chapel | 50 | 3 | - | - | Unlocks The Chosen's Mighty Swing: a heavy swing in front of him (28) that stuns everyone it hits. |
 
 **Undead Legion** (`TECH` in `js/data/tech.js`). Gates: Grave Guard need Grave Vigil; Wraiths need Wraith Pact; Necromancers need Necromancer Circle; Charnel Pit needs Mausoleum; Dark Sanctum needs Mausoleum.
 
@@ -1073,9 +1145,9 @@ War commanders and C&C Generals powers for the exclusive picks.
 | `bonemason` | Bone Masonry | 2 | Crypt | 30 | 2 | Mausoleum | - | All your buildings +15 % HP. |
 | `dread` | Dread Spires | 2 | Charnel Pit | 25 | 2 | - | - | Bone Spires and the Crypt fire for +1 damage per shot. |
 | `spectral` | Spectral Speed | 2 | Ossuary | 25 | 2 | Wraith Pact | - | Wraiths move 1″ further a round. |
-| `boneshields` | Bone Shields | 2 | Ossuary | 30 | 2 | Mausoleum | - | Skeleton Warriors gain Grave Wall (hits from the front deal 30 % this round). |
-| `bonespears` | Bone Spears | 2 | Charnel Pit | 35 | 3 | - | - | Bone Archers gain Bone Spear: a line that hits every enemy on it (2.8 per model), 15″. |
-| `shadowwalk` | Shadow Walk | 2 | Dark Sanctum | 45 | 3 | Wraith Pact | - | Wraiths gain Shadow Step: vanish and reappear up to 6″ away, no parting blows. |
+| `boneshields` | Bone Shields | 2 | Ossuary | 30 | 2 | Mausoleum | - | Unlocks the Skeleton Warriors' Grave Wall (hits from the front deal 30 % this round). |
+| `bonespears` | Storm of Bones | 2 | Charnel Pit | 35 | 3 | - | - | Unlocks the Bone Archers' Arrow Storm: a big lobbed volley onto a circle (3.2 per model) within 15″, arcing over walls. |
+| `shadowwalk` | Shadow Walk | 2 | Dark Sanctum | 45 | 3 | Wraith Pact | - | Unlocks the Wraiths' Shadow Step: vanish and reappear up to 6″ away, no parting blows. |
 
 <!-- /GEN:tech -->
 
@@ -1671,6 +1743,8 @@ Balance report 2026-11-26 · 8 seeds x 2 orders per map x 2 (new AI on each side
 
 | What | Where | Effect / notes |
 |---|---|---|
+| Unit kits | `slots` (ordered skill slots, `lock` = research id), `passives`, `ELITES`, `PREP_SKILLS` in `js/data/units.js`; icons `sk-*` / `pv-*` in `js/ui/iconset.js` | what each unit can do; slot counts by class |
+| Hero auras | `PASSIVES.<f>.hero[1]` (`inspire` radius 5 ×1.1, `dread` radius 4 ×0.9) | the heroes' second passive |
 | Unit stats (models, HP, armour, tier, vision, defends, attack, skills, parry, ghost) | `js/data/units.js` → `FACTIONS.<faction>.units.<role>` | attack helpers `SWING(ap, dmg, reach)`, `VOLLEY(ap, dmg, range, width)`; skills `CHARGE(ap, dmg, len, cd)`, `BLAST(ap, dmg, range, radius, cd)`, `STORM(...)`, `RALLY(ap, radius, cd)`, `SWEEP(ap, dmg, reach, cd)`, `LEAP(ap, range, cd)`, `STEP(ap, range, cd)`, `WALL(name, ap, cd)`, `PIERCE(ap, dmg, range, width, cd)`, `RAISE(ap, radius, cd)` |
 | Global combat rules | `RULES` in `js/data/units.js` (table in §7 of the generated rules below) | armour constant, defend / cover / siege multipliers, engagement, parry, overwatch |
 | Economy per faction | `FACTIONS.<f>.eco` (`start`, `hq`, `gather`), `FACTIONS.<f>.train` (costs), `FACTIONS.<f>.buildings` (build list) | |
@@ -1885,6 +1959,8 @@ Whenever rules, numbers, the AI or maps change:
 | Movement separate from initiative | tabletop wargames (Move characteristic vs initiative) | how far a unit walks is its own stat | tier still decides who acts first |
 | Squad durability and time-to-kill (fights that last long enough to react) | Dawn of War (high squad HP, long melee brawls, ranged squads that suppress rather than delete) | sturdy squads and weaker ranged fire, so a fight takes several rounds | HP ×1.5 for units and buildings (2026-11-26; The Chosen excepted); ranged squads fire 2 volleys a round for 20 % less |
 | Melee units chase their target | most RTS games (attack orders follow the target; Dawn of War melee squads lock on) | a melee attack keeps after its target instead of swinging at air | a strike with nothing in reach + lunge becomes a move toward the target; at release it hits whatever enemy is in reach |
+| Unit kits: a few skills per unit (more for elites and heroes) plus passives, some unlocked by research | Warcraft III (units with 1–3 abilities, hero auras, abilities researched at buildings), Dawn of War (squad abilities and wargear upgrades) | a small, readable kit per unit; research unlocks abilities | fixed slot counts per class (normal 2, elite 3, hero 3); locked slots shown in the panel |
+| Melee units fight what they bump into | most RTS games (units auto-attack enemies they meet) | no idle squads in contact | the rest of the move becomes strikes at that enemy |
 | Production queues paid when the item starts | the queues of most RTS games (StarCraft II: 5 per building) | queue several items per building | payment at start, the queue waits when you can't pay |
 | Fog of war with explored / visible ground | most RTS games (Warcraft, StarCraft, Age of Empires) | black mist for never-seen ground, a haze for explored ground | line of sight blocked by walls and deep forests |
 | Command points (3 direct orders a round) | tabletop command / order systems | you can't micro everything | squads without orders follow stances |

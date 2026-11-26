@@ -154,24 +154,26 @@ export const TECH = {
                desc: 'Bone Spires and the Crypt fire for +1 damage per shot.', buildings: [{ types: ['tower', 'hq'], fireAdd: 1 }] },
   spectral:  { faction: 'undead', name: 'Spectral Speed', icon: 'fast', at: 'barracks', cost: 25, rounds: 2, tier: 2, needs: ['pact'],
                desc: 'Wraiths move 1″ further a round.', units: [{ roles: ['fast'], move: 1 }] },
-  // ability upgrades: a squad type gains a skill
+  // ability upgrades: each unlocks a locked skill slot of its unit (slots in js/data/units.js)
   shielddrill:{ faction: 'kingdom', name: 'Shield Drill', icon: 'fortify', at: 'barracks', cost: 40, rounds: 2, tier: 2, needs: ['castle'],
-               desc: 'Men-at-arms gain Lock Shields (hits from the front deal 30 % this round).',
+               desc: 'Unlocks the Men-at-arms\' Lock Shields (hits from the front deal 30 % this round).',
                units: [{ roles: ['fighter'], addSkill: { kind: 'wall', name: 'Lock Shields', cat: 'defense', ap: 15, mult: 0.3, cosHalf: 0.5, cd: 1 } }] },
-  firearrows:{ faction: 'kingdom', name: 'Fire Arrows', icon: 'shoot', at: 'forge', cost: 45, rounds: 3, tier: 2,
-               desc: 'Crossbows gain Fire Volley: a circle of burning bolts (2.4 per model) within 14″, arcing over walls.',
-               units: [{ roles: ['ranged'], addSkill: { kind: 'storm', name: 'Fire Volley', cat: 'attack', ranged: true, ap: 35, dmg: 2.4, range: 14, radius: 2, cd: 2 } }] },
-  sweeping:  { faction: 'kingdom', name: 'Sweeping Blow', icon: 'sweep', at: 'chapel', cost: 50, rounds: 3, tier: 2,
-               desc: 'The Chosen gains Sweep: a full circle swing (14) around him.',
-               units: [{ roles: ['hero'], addSkill: { kind: 'sweep', name: 'Sweep', cat: 'attack', ap: 30, dmg: 14, reach: 1.6, cd: 2 } }] },
+  // (renamed 2026-11-26: each unlocks a skill slot of its unit; was Fire Arrows / Fire Volley and Sweeping Blow / Sweep)
+  firearrows:{ faction: 'kingdom', name: 'Piercing Bolts', icon: 'shoot', at: 'forge', cost: 45, rounds: 3, tier: 2,
+               desc: 'Unlocks the Crossbows\' Piercing Bolt: a bolt line that hits every enemy on it (3.6 per model), 16″.',
+               units: [{ roles: ['ranged'], addSkill: { kind: 'pierce', name: 'Piercing Bolt', cat: 'attack', ranged: true, ap: 35, dmg: 3.6, range: 16, width: 0.7, cd: 2 } }] },
+  sweeping:  { faction: 'kingdom', name: 'Champion\'s Swing', icon: 'sweep', at: 'chapel', cost: 50, rounds: 3, tier: 2,
+               desc: 'Unlocks The Chosen\'s Mighty Swing: a heavy swing in front of him (28) that stuns everyone it hits.',
+               units: [{ roles: ['hero'], addSkill: { kind: 'mighty', name: 'Mighty Swing', cat: 'attack', ap: 30, dmg: 28, reach: 2.6, cosHalf: 0.2, stun: 25, cd: 2 } }] },
   boneshields:{ faction: 'undead', name: 'Bone Shields', icon: 'fortify', at: 'barracks', cost: 30, rounds: 2, tier: 2, needs: ['mausoleum'],
-               desc: 'Skeleton Warriors gain Grave Wall (hits from the front deal 30 % this round).',
+               desc: 'Unlocks the Skeleton Warriors\' Grave Wall (hits from the front deal 30 % this round).',
                units: [{ roles: ['fighter'], addSkill: { kind: 'wall', name: 'Grave Wall', cat: 'defense', ap: 15, mult: 0.3, cosHalf: 0.5, cd: 1 } }] },
-  bonespears:{ faction: 'undead', name: 'Bone Spears', icon: 'range', at: 'pit', cost: 35, rounds: 3, tier: 2,
-               desc: 'Bone Archers gain Bone Spear: a line that hits every enemy on it (2.8 per model), 15″.',
-               units: [{ roles: ['ranged'], addSkill: { kind: 'pierce', name: 'Bone Spear', cat: 'attack', ranged: true, ap: 35, dmg: 2.8, range: 15, width: 0.7, cd: 2 } }] },
+  // (renamed 2026-11-26: unlocks Arrow Storm; was Bone Spears / Bone Spear)
+  bonespears:{ faction: 'undead', name: 'Storm of Bones', icon: 'range', at: 'pit', cost: 35, rounds: 3, tier: 2,
+               desc: 'Unlocks the Bone Archers\' Arrow Storm: a big lobbed volley onto a circle (3.2 per model) within 15″, arcing over walls.',
+               units: [{ roles: ['ranged'], addSkill: { kind: 'storm', name: 'Arrow Storm', cat: 'attack', ranged: true, ap: 35, dmg: 3.2, range: 15, radius: 2.2, cd: 2 } }] },
   shadowwalk:{ faction: 'undead', name: 'Shadow Walk', icon: 'disrupt', at: 'sanctum', cost: 45, rounds: 3, tier: 2, needs: ['pact'],
-               desc: 'Wraiths gain Shadow Step: vanish and reappear up to 6″ away, no parting blows.',
+               desc: 'Unlocks the Wraiths\' Shadow Step: vanish and reappear up to 6″ away, no parting blows.',
                units: [{ roles: ['fast'], addSkill: { kind: 'step', name: 'Shadow Step', cat: 'move', ap: 20, range: 6, cd: 2 } }] },
 };
 
@@ -190,7 +192,7 @@ const CHIPS = {
   steel3: '+15 % dmg', plate3: '+2 armour', bones3: '+15 % dmg', plating3: '+1 armour',
   whetstones: 'M-a-a +10 % dmg', padded: 'Crossbows +1 arm', hardy: 'Peasants +6 HP', picks: 'Mining 9 AP', masonry: 'Bldg +15 % HP', hoardings: 'Tower fire +1', horses: 'Outriders +1″',
   dust: 'Warband +10 % dmg', ossified: 'Warriors +1 arm', hollow: 'Archers +0.6″', conduits: 'Wells +1', bonemason: 'Bldg +15 % HP', dread: 'Spire fire +1', spectral: 'Wraiths +1″',
-  shielddrill: '+Lock Shields', firearrows: '+Fire Volley', sweeping: 'Hero +Sweep', boneshields: '+Grave Wall', bonespears: '+Bone Spear', shadowwalk: 'Wraiths +Step',
+  shielddrill: '+Lock Shields', firearrows: '+Piercing Bolt', sweeping: 'Hero +Mighty Sw.', boneshields: '+Grave Wall', bonespears: '+Arrow Storm', shadowwalk: 'Wraiths +Step',
 };
 for (const [id, c] of Object.entries(CHIPS)) if (TECH[id]) TECH[id].chip = c;
 for (const [id, t] of Object.entries(TECH)) t.id = id;
@@ -218,11 +220,14 @@ export function techUnit(base, faction, role, tk) {
   let d = unitCache.get(k);
   if (d) return d;
   d = deep(base);
+  // unlocked skills first, so research that improves a skill (Bodkin Bolts) finds it whatever the order
+  for (const id of keyList(tk)) for (const e of TECH[id]?.units || []) {
+    if (e.roles.includes(role) && e.addSkill && !(d.skills || []).some(k => k.kind === e.addSkill.kind)) d.skills = (d.skills || []).concat([{ ...e.addSkill }]);
+  }
   for (const id of keyList(tk)) for (const e of TECH[id]?.units || []) {
     if (!e.roles.includes(role)) continue;
     if (e.hpPer) d.hpPer += e.hpPer;
     if (e.move) d.move = Math.round((d.move + e.move) * 100) / 100;
-    if (e.addSkill && !(d.skills || []).some(k => k.kind === e.addSkill.kind)) d.skills = (d.skills || []).concat([{ ...e.addSkill }]);
     if (e.armor) d.armor += e.armor;
     if (e.defends) d.defends = (d.defends || 0) + e.defends;
     if (e.dmgMult && d.attack) d.attack.dmg = Math.round(d.attack.dmg * e.dmgMult * 1000) / 1000;
