@@ -29,7 +29,8 @@ export function tactics(K, P, skill, mem, inf, tasks, o, rnd) {
     if (stance === 'advance' && t.goal && (!q.goal || dist(q.goal.x, q.goal.z, t.goal.x, t.goal.z) > 1.5)) o.goals[q.id] = { x: +t.goal.x.toFixed(2), z: +t.goal.z.toFixed(2) };
   }
   // 2. who gets hand control: squads that can reach a visible enemy this round
-  const seen = K.enemies.filter(e => e.visible && e.role !== 'builder' || e.visible);
+  // only enemies visible now: a strike at a remembered (hidden) squad is rejected by the sim
+  const seen = K.enemies.filter(e => e.visible);
   const reachOf = q => speedIn(q) + (isShooter(defOf(q)) ? defOf(q).attack.range : 2) + 1;
   const near = q => seen.filter(e => dist(q.x, q.z, e.x, e.z) - radiusOf(e) - radiusOf(q) < reachOf(q));
   let cp = RULES.cp + bonusCp(s, p);
@@ -85,20 +86,20 @@ export function tactics(K, P, skill, mem, inf, tasks, o, rnd) {
       plan.defends = Math.min(RULES.maxDefends, Math.floor(left / RULES.defendCost));
       o.squads[q.id] = plan; continue;
     }
-    if (def.parry && engagedWith(q, K.enemies).length) { plan.parry = true; left -= RULES.parryCost; }
-    const auto = autoSkills(s, q, t, K.enemies, mine, plan, left, L);
+    if (def.parry && engagedWith(q, seen).length) { plan.parry = true; left -= RULES.parryCost; }
+    const auto = autoSkills(s, q, t, seen, mine, plan, left, L);
     left = auto.left;
     if (auto.charged) { /* the charge and its swings are planned */ }
-    else if (isShooter(def) && meleeOf(def) && engagedWith(q, K.enemies).length) {
+    else if (isShooter(def) && meleeOf(def) && engagedWith(q, seen).length) {
       // locked in melee: its shots would turn into strikes anyway, so strike the one it is fighting
-      const foe = engagedWith(q, K.enemies).sort((a, b) => a.hp - b.hp)[0];
+      const foe = engagedWith(q, seen).sort((a, b) => a.hp - b.hp)[0];
       left = meleePlan(s, q, foe, plan, left);
     }
     else if (isShooter(def)) {
       const melee = opts.filter(e => !isShooter(defOf(e))).sort((a, b) => dist(q.x, q.z, a.x, a.z) - dist(q.x, q.z, b.x, b.z))[0];
       const mgap = melee ? dist(q.x, q.z, melee.x, melee.z) - radiusOf(melee) - radiusOf(q) : 99;
       // kite: a melee squad is close and we aren't locked in -> step back first, then shoot
-      if (skill.kite && !sloppy && mgap < 2.6 && !engagedWith(q, K.enemies).length) {
+      if (skill.kite && !sloppy && mgap < 2.6 && !engagedWith(q, seen).length) {
         const ux = q.x - melee.x, uz = q.z - melee.z, l = Math.max(0.1, Math.hypot(ux, uz));
         const pts = nav().path(q.x, q.z, q.x + ux / l * 3, q.z + uz / l * 3);
         if (pts.length) { const ap = Math.min(left, 35); plan.actions.push({ kind: 'move', pts, ap }); left -= ap; }

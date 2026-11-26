@@ -1156,7 +1156,8 @@ class Game {
       else if (e.type === 'fizzle') lines.push({ T: e.T, html: `${name(e.id)}: the spell fizzles${e.kind === 'explode' ? ' (no summoned skeletons there)' : ' (out of mana)'}` });
       else if (e.type === 'release' && e.kind === 'summon') lines.push({ T: e.T, html: `${name(e.id)} calls ${e.count > 1 ? e.count + ' squads' : 'a squad'} of skeletons from the ground` });
       else if (e.type === 'wallOn') lines.push({ T: e.T, html: `${name(e.id)} braces a shield wall` });
-      else if (e.type === 'release' && e.kind === 'strike' && !e.hit.length) lines.push({ T: e.T, html: `${name(e.id)}: strike misses (${e.lunge ? `lunged ${e.lunge}″, ` : ''}the target got out of reach)` });
+      else if (e.type === 'release' && e.kind === 'strike' && !e.hit.length) lines.push({ T: e.T, html: `${name(e.id)}: strike misses (${e.lunge ? `lunged ${e.lunge}″, ` : ''}${e.locked ? 'locked with an enemy out of reach' : `nearest enemy ${e.gap}″ away: it got out of reach`})` });
+      else if (e.type === 'chase') lines.push({ T: e.T, html: `${name(e.id)} chases ${name(e.t)} (out of reach)` });
       else if (e.type === 'release' && e.kind === 'strike' && e.lunge > 0) lines.push({ T: e.T, html: `${name(e.id)} lunges ${e.lunge}″ at its target` });
       else if (e.type === 'release' && !e.hit.length && e.kind !== 'summon') lines.push({ T: e.T, html: `${name(e.id)}: ${e.kind} ${e.blocked ? 'blocked' : 'misses (nobody in the area)'}` });
     }
@@ -1208,6 +1209,7 @@ class Game {
         else if (e.type === 'watchEnd') { const q = at(e.id); if (q) this.texts.add(q.x, q.z, 'Overwatch!', 'tag', 2.6); }
         else if (e.type === 'buff') { for (const id of e.ids) { const q = at(id); if (q) { this.texts.add(q.x, q.z, e.armor ? `Rallied +${e.armor} armour` : 'Rallied', 'ok', 2.4); this.pulse(q.x, q.z, radiusOf(q) + 0.4, COL.rally); } } }
         else if (e.type === 'release' && (e.kind === 'blast' || e.kind === 'storm')) this.pulse(e.ex, e.ez, skillOf(defOf(this.tl.squads.find(x => x.id === e.id)), e.kind).radius, COL[e.kind], true);
+        else if (e.type === 'release' && e.kind === 'strike' && e.miss) { const q = at(e.id); if (q) this.texts.add(q.x, q.z, 'Whiff', 'def', 2.2); }
         else if (e.type === 'release' && e.kind === 'thunder') this.lightning(e.chain);
         else if (e.type === 'release' && e.kind === 'explode') { this.pulse(e.ex, e.ez, 2.5, COL.explode, true); this.pulse(e.ex, e.ez, 2.8, COL.explode); this.texts.add(e.ex, e.ez, 'Corpse Explosion!', 'tag', 2.9); }
         else if (e.type === 'release' && e.kind === 'summon') { this.pulse(e.ex, e.ez, 1.6, COL.summon, true); this.texts.add(e.ex, e.ez, 'The dead rise…', 'ok', 2.6); }
@@ -1437,7 +1439,7 @@ const HELP = {
 <ul>
 <li><b>Two kinds of attack.</b> <b>Area attacks</b> (volleys, lobs and most skills) are <b>skillshots</b>: they hit whatever is inside the shape when they land. The shape charges up during its wind-up, so enemies can walk out of it, and yours can dodge.</li>
 <li><b>Passives</b> (✦): every unit type has one always-on ability, shown in its squad panel: ${['kingdom', 'undead'].flatMap(f => Object.values(FACTIONS[f].units).filter(u => u.passive && !u.summoned).map(u => `<b>${u.name}</b> ${u.passive.name} (${u.passive.desc.replace(/\.$/, '')})`)).join('; ')}. A squad hit by Warbands shows ✂ with its Rend stacks.</li>
-<li><b>Strike</b> (the melee attack) is a <b>target attack</b>: drop it on one enemy squad or building. If the target has stepped out of reach when the blow lands, the squad <b>lunges</b> at it (up to ${RULES.strikeLunge} AP of movement at its speed; not while it is locked in melee with another enemy). It hits only that target, for ${Math.round((RULES.strikeMult - 1) * 100)}% more than the listed damage.</li>
+<li><b>Strike</b> (the melee attack) is a <b>target attack</b>: drop it on one enemy squad or building. If the target has stepped out of reach when the blow lands, the squad <b>lunges</b> at it (up to ${RULES.strikeLunge} AP of movement at its speed; not while it is locked in melee with another enemy). If it can't reach its target, it hits whichever enemy is in reach (the one it is locked with first). If every enemy is already too far when the strike starts, the squad <b>chases</b> its target instead of swinging at air. It hits one target, for ${Math.round((RULES.strikeMult - 1) * 100)}% more than the listed damage.</li>
 <li><b>Locked in melee</b> (an enemy melee squad touching it): shooters and casters can't shoot. Their volleys and <b>ranged</b> skills (Piercing Bolt, Arrow Storm, Bone Blast, Dark Thunder; marked "ranged" on their buttons) turn into a weaker <b>melee Strike</b> at the enemy they fight. They also have a <b>Melee</b> button to strike on purpose.</li>
 <li><b>Volley</b>: a line that walls stop; forests give <b>cover</b> (half damage).</li>
 <li><b>Skills</b> are coloured by type (${G(GREEN)} movement, ${G(RED)} attack, ${G(BLUE)} defence and buffs) and recharge for a round or two. Heroes have three, one of each colour.</li>

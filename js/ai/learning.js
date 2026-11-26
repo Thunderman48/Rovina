@@ -9,7 +9,7 @@ import { defOf } from '../sim/state.js';
 import { isShooter } from '../data/units.js';
 import { dist } from '../sim/geom.js';
 
-const PRIOR = 300;   // HP of neutral evidence each role starts with (unit HP was doubled)
+const PRIOR = 450;   // HP of neutral evidence each role starts with (unit HP x2, then x1.5)
 
 export function learn(K, mem) {
   const L = mem.learn || (mem.learn = { stat: {}, own: {}, foe: {} });

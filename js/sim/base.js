@@ -153,12 +153,8 @@ export function placeError(s, p, type, x, z, rot = 0, extra = [], squads = true)
   // only on ground the side has seen; undead buildings only on their own graves (like blight / creep)
   if (type !== 'hq' && !seenBy(s, p, x, z)) return 'You haven\'t seen that spot yet';
   if (type !== 'hq' && FACTIONS[s.players[p].faction].graves && !graveAt(s, p, x, z)) return 'Undead buildings must stand on your graves';
-  // no building near an enemy building the side has seen (anti-rush; fog-fair: only what it knows),
-  // except on the side's home ground (within the map's zone of its own HQ), so enemy creep can't shut
-  // a side out of its own base
-  const ownHq = (s.buildings || []).find(b => b.owner === p && b.type === 'hq' && b.hp > 0);
-  const home = ownHq && edgeDist(ownHq, x, z) <= (s.board.zone || RULES.buildZone);
-  if (type !== 'hq' && !home) for (const k of Object.values((s.intel && s.intel[p] && s.intel[p].known) || {})) {
+  // no building near any enemy building (anti-rush; since 2026-11-26 every enemy building counts, seen or not)
+  if (type !== 'hq') for (const k of s.buildings || []) {
     if (k.owner !== p && k.hp > 0 && edgeDist(k, x, z) < RULES.enemyBuildGap) return `Too close to an enemy building (${RULES.enemyBuildGap}″)`;
   }
   const live = (s.buildings || []).filter(b => b.hp > 0).concat(extra);

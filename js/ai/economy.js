@@ -124,7 +124,8 @@ export function economy(K, P, skill, posture, mem, orders) {
   const site = gold ? 'mine' : 'well';
   const wantSites = gold ? 1 + Math.floor(P.greed * 2 + s.round / 14) : (P.wells || 2) + Math.floor(s.round / 16);
   // economy
-  if (!count('barracks')) req(threatened ? 100 : 135, BUILDINGS.barracks.cost, () => place('barracks', (x, z) => -Math.abs(z - hq.z - 3) - Math.abs(fwd * (x - hq.x) - 2)), gold || count(site) > 0, 'barracks', true);
+  // Kingdom opening (starting at 0 gold): a second peasant, then the first Mine, then the Barracks
+  if (!count('barracks')) req(threatened ? 100 : gold && !count(site) ? 118 : 135, BUILDINGS.barracks.cost, () => place('barracks', (x, z) => -Math.abs(z - hq.z - 3) - Math.abs(fwd * (x - hq.x) - 2)), gold || count(site) > 0, 'barracks', true);
   if (count(site) < wantSites) {
     // undead: the nearest seen free site must be on graves first: spread graves toward it
     const sites = (s.shrines || []).filter(sh => !siteTaken(s, sh, queued) && seenBy(s, p, sh.x, sh.z)).sort((a, b) => dist(a.x, a.z, hq.x, hq.z) - dist(b.x, b.z, hq.x, hq.z));
@@ -143,7 +144,7 @@ export function economy(K, P, skill, posture, mem, orders) {
     if (count('farm') < farms) req(count('farm') ? 45 + 40 * P.greed : threatened ? 90 : 120, BUILDINGS.farm.cost, () => place('farm', side), s.round >= 2 || !count('farm'));
     const jobs = 1 + 3 * done('farm') + 2 * done('mine');
     const want = Math.min(maxBuildersOf(fac), Math.max(2, Math.min(jobs, P.peasants + Math.floor(s.round / 6))));
-    if (builderCount(s, p) < want && !hq.train && !(hq.queue || []).length) req(60 + 30 * P.greed - (threatened ? 25 : 0), trainCost(fac, 'builder'), () => { if (usedB.has(hq.id)) return false; usedB.add(hq.id); out.trains.push({ bid: hq.id, role: 'builder' }); return true; }, true, 'peasant');
+    if (builderCount(s, p) < want && !hq.train && !(hq.queue || []).length) req(builderCount(s, p) < 2 && !threatened ? 140 : 60 + 30 * P.greed - (threatened ? 25 : 0), trainCost(fac, 'builder'), () => { if (usedB.has(hq.id)) return false; usedB.add(hq.id); out.trains.push({ bid: hq.id, role: 'builder' }); return true; }, true, 'peasant');
   }
   // defenses (towers / walls), more for defensive personalities or when threatened
   if (threatened && count('wall') < 2 + Math.round(P.defense * 2)) req(70, BUILDINGS.wall.cost, () => place('wall', (x, z) => forward(x, z) - Math.min(...K.threats.map(e => dist(e.x, e.z, x, z))) * 0.5));

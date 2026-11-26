@@ -363,35 +363,63 @@ export function resolveRound(state0, ordersIn) {
   // from it, cut short by terrain, buildings and friends), then hit if it is in reach. A dead target:
   // the nearest enemy already in reach takes the hit instead.
   function strike(r, st) {
+    // target order at release (since 2026-11-26, so a strike lands whenever an enemy can be reached):
+    //  1. the named target, if in reach, or reachable by a lunge (not while locked with another enemy)
+    //  2. else any enemy already in reach: one it is locked with first, then the one nearest the
+    //     original target / aim point
+    //  3. else (not locked) a lunge at the nearest enemy within reach + lunge
+    //  4. else a miss
     const q = r.q, at = meleeOf(r.def), rq = radiusOf(q);
     const gapTo = e => edgeFrom(e, q.x, q.z) - rq;
+    const locked = engagedWith(q, living());
+    const lungeMax = speedOf(q) * RULES.strikeLunge * terrainFactor(s.terrain, q.x, q.z);
     let tg = st.tg ? unitAt(st.tg) : null;
-    if (tg && tg.hp <= 0) {
-      tg = null;
-      let bd = at.reach;
-      for (const e of targets(q)) { const g = gapTo(e); if (g <= bd) { bd = g; tg = e; } }
-    }
+    if (tg && tg.hp <= 0) tg = null;
+    const ref = tg ? { x: tg.x, z: tg.z } : { x: st.ax ?? q.x, z: st.az ?? q.z };
     let lunge = 0;
-    if (tg && gapTo(tg) > at.reach && !engagedWith(q, living()).length) {
-      const aimAt = isB(tg) ? closestOn(tg, q.x, q.z) : tg;   // a building: its nearest edge
+    const doLunge = e => {
+      const aimAt = isB(e) ? closestOn(e, q.x, q.z) : e;   // a building: its nearest edge
       const d = norm(aimAt.x - q.x, aimAt.z - q.z);
-      const want = Math.min(speedOf(q) * RULES.strikeLunge * terrainFactor(s.terrain, q.x, q.z), gapTo(tg) - at.reach * 0.9);
+      const want = Math.min(lungeMax, gapTo(e) - at.reach * 0.9);
       const x0 = q.x, z0 = q.z;
       rec(q, T - 3);   // stands until just before the blow, then lunges (playback)
-      // walk the line in small steps; stop before terrain, buildings or a friend
+      // walk the line in small steps; stop before terrain or buildings. Friends don't stop it (like
+      // ordinary moves, a lunge passes through its own lines; overlaps drift apart afterwards)
       const wedged = pointBlocked(obs(), x0, z0, rq * 0.85);   // already touching an obstacle: only stop at new ones
       for (let k = 1, n = Math.ceil(want / 0.1); k <= n; k++) {
         const l = Math.min(want, k * 0.1), x = x0 + d.x * l, z = z0 + d.z * l;
         if (!wedged && pointBlocked(obs(), x, z, rq * 0.85)) break;
-        if (living().some(o => o !== q && o.owner === q.owner && dist(x, z, o.x, o.z) < rq + radiusOf(o) - 0.05)) break;
         q.x = x; q.z = z; lunge = l;
       }
       if (lunge > 0) { q.fx = d.x; q.fz = d.z; rec(q, T); }
+    };
+    const reach = e => gapTo(e) <= at.reach + 1e-6;
+    // 1. the named target
+    if (tg && !reach(tg) && !locked.length && gapTo(tg) - at.reach <= lungeMax) doLunge(tg);
+    if (!tg || !reach(tg)) {
+      // 2. anything in reach (locked-with enemies first, then nearest the original target / aim)
+      let alt = null, bs = 1e9;
+      for (const e of targets(q)) {
+        if (!reach(e)) continue;
+        const sc = (locked.includes(e) ? 0 : 1000) + dist(ref.x, ref.z, e.x, e.z);
+        if (sc < bs) { bs = sc; alt = e; }
+      }
+      if (alt) tg = alt;
+      else if (!locked.length && !lunge) {
+        // 3. lunge at the nearest enemy a lunge can reach
+        let bd = at.reach + lungeMax; alt = null;
+        for (const e of targets(q)) { const g = gapTo(e); if (g <= bd) { bd = g; alt = e; } }
+        if (alt) { tg = alt; doLunge(alt); }
+      }
     }
-    if (tg && gapTo(tg) <= at.reach + 1e-6) {
+    if (tg && reach(tg)) {
+      if (tg.x !== undefined) { const d = norm(tg.x - q.x, tg.z - q.z); if (d.l > 0.01) { q.fx = d.x; q.fz = d.z; } }
       hits.push({ src: q.id, dst: tg, dmg: atkDmg(r, at.dmg) * RULES.strikeMult, kind: 'strike' });
       ev({ type: 'release', id: q.id, kind: 'strike', hit: [tg.id], lunge: r3(lunge), ex: r3(q.x), ez: r3(q.z) });
-    } else ev({ type: 'release', id: q.id, kind: 'strike', hit: [], miss: true, lunge: r3(lunge), ex: r3(q.x), ez: r3(q.z) });
+    } else {
+      let near = 99; for (const e of targets(q)) near = Math.min(near, gapTo(e));
+      ev({ type: 'release', id: q.id, kind: 'strike', hit: [], miss: true, lunge: r3(lunge), ex: r3(q.x), ez: r3(q.z), gap: r3(near), locked: locked.length > 0 });
+    }
   }
 
   // ---- one AP of an action ---------------------------------------------------------
@@ -417,6 +445,26 @@ export function resolveRound(state0, ordersIn) {
         ev({ type: 'toMelee', id: q.id, from, t: e.id });
       }
     }
+    // chase: a strike that starts with its target (and every other enemy) beyond reach + lunge, and not
+    // locked in melee, spends its AP walking after the target instead of swinging at nothing (melee units
+    // follow their target, as in most RTS games). Without a valid target: the enemy nearest the aim (4").
+    if (r.el === 0 && a.kind === 'strike') {
+      const mr = meleeOf(def), rq = radiusOf(q), gap = e => edgeFrom(e, q.x, q.z) - rq;
+      const far = mr.reach + speedOf(q) * RULES.strikeLunge;
+      if (!targets(q).some(e => gap(e) <= far) && !engagedWith(q, living()).length) {
+        let goal = a.t ? unitAt(a.t) : null;
+        if (goal && (goal.hp <= 0 || goal.owner === q.owner || (!goal.type && !seenBy[q.owner].has(goal.id)))) goal = null;
+        if (!goal) { let bd = 4; for (const e of targets(q)) { if (!e.type && !seenBy[q.owner].has(e.id)) continue; const d = edgeFrom(e, a.x, a.z); if (d <= bd) { bd = d; goal = e; } } }
+        if (goal) {
+          const to = isB(goal) ? closestOn(goal, q.x, q.z) : goal;
+          const pts = Nav.for(obs(), rq, navKey(s)).path(q.x, q.z, to.x, to.z);
+          if (pts.length) {
+            a = r.actions[r.idx] = { kind: 'move', pts, cost: a.cost, chase: goal.id };
+            ev({ type: 'chase', id: q.id, t: goal.id });
+          }
+        }
+      }
+    }
     if (r.el === 0) {
       r.st = { phase: 'go' };
       if (a.kind === 'move') r.st.pts = a.pts.map(p => ({ ...p }));
@@ -439,7 +487,12 @@ export function resolveRound(state0, ordersIn) {
           let bd = 2;
           for (const e of targets(q)) { const d = edgeFrom(e, a.x, a.z); if (d <= bd) { bd = d; tg = e; } }
         }
-        r.st.tg = tg ? tg.id : null;
+        if (!tg) {
+          const mr = meleeOf(def), rq = radiusOf(q);
+          let bd = mr.reach + speedOf(q) * RULES.strikeLunge;
+          for (const e of targets(q)) { const d = edgeFrom(e, q.x, q.z) - rq; if (d <= bd) { bd = d; tg = e; } }
+        }
+        r.st.tg = tg ? tg.id : null; r.st.ax = a.x; r.st.az = a.z;
         face(tg ? tg.x : a.x, tg ? tg.z : a.z);
         rec(q, T);
         tele('strike', tg ? { shape: 'target', tx: r3(tg.x), tz: r3(tg.z), R: r3(rad(tg)), tid: tg.id } : { shape: 'target', tx: r3(a.x), tz: r3(a.z), R: 0.5 });
@@ -588,7 +641,7 @@ export function resolveRound(state0, ordersIn) {
           if (!st.pts || !st.pts.length || (st.best !== undefined && gap >= st.best - 0.02 && r.el - st.bestAt > 8)) {
             const spot = approachSpot(s, b, q.x, q.z, radiusOf(q), q.id);
             const pts = spot ? Nav.for(obs(), radiusOf(q), navKey(s)).path(q.x, q.z, spot.x, spot.z) : [];
-            if (!pts.length) { if (!st.failed) { st.failed = true; ev({ type: 'workFail', id: q.id, bid: b.id }); } st.mode = null; if (q.task?.bid === b.id) q.task = null; }   // unreachable: drop the task
+            if (!pts.length) { if (!st.failed) { st.failed = true; ev({ type: 'workFail', id: q.id, bid: b.id }); } st.mode = null; if (q.task?.bid === b.id) q.task = null; q.noReach = { ...(q.noReach || {}), [b.id]: s.round }; }   // unreachable: drop the task (and skip it for a few rounds)
             st.pts = pts; st.bestAt = r.el; st.best = gap;
           }
           if (gap < (st.best ?? 1e9) - 0.02) { st.best = gap; st.bestAt = r.el; }

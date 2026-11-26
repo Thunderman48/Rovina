@@ -37,8 +37,7 @@ It is a static site with no build step and no server, so it runs on GitHub Pages
 * **Locked in melee:** shooters and casters can't shoot or use ranged skills while an enemy melee
   squad is on them; their shots become a weaker melee strike (and they have a Melee button).
 * **Passives:** every unit type has one (Berserk, Bulwark, Rend, Soul Drain, …).
-* **No building within 16″ of an enemy building you have seen** (no proxy rushes), except on your
-  home ground near your own HQ.
+* **No building within 8″ of any enemy building** (no proxy rushes).
 * **Two economies.** The Kingdom earns **gold** from its Keep, mines and farms worked by up to 4
   peasants each. The Undead earn **souls** mainly from every model that dies on their graveyards;
   the Crypt (1) and Soul Wells (2) only trickle.

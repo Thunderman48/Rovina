@@ -70,9 +70,11 @@ export function builderIdleTarget(s, q) {
   // building and repairing carry on; a gatherer is free to take a new site
   const busy = o => { const t = taskTarget(s, o); return t && o.task.kind !== 'gather' ? t : null; };
   const own = busy(q);
-  if (own && (edgeDist(own, q.x, q.z) - radiusOf(q) <= RULES.workReach || approachSpot(s, own, q.x, q.z, radiusOf(q), q.id))) return own;
+  if (own && (edgeDist(own, q.x, q.z) - radiusOf(q) <= RULES.workReach || (!(q.noReach && s.round - (q.noReach[own.id] ?? -99) < 4) && approachSpot(s, own, q.x, q.z, radiusOf(q), q.id)))) return own;
   // only sites a builder can get to (one squeezed between buildings with no free side is skipped)
-  const reach = b => edgeDist(b, q.x, q.z) - radiusOf(q) <= RULES.workReach || approachSpot(s, b, q.x, q.z, radiusOf(q), q.id);
+  // (and not one it found no path to in the last few rounds: an approach spot in a closed pocket)
+  const tried = b => q.noReach && s.round - (q.noReach[b.id] ?? -99) < 4;
+  const reach = b => edgeDist(b, q.x, q.z) - radiusOf(q) <= RULES.workReach || (!tried(b) && approachSpot(s, b, q.x, q.z, radiusOf(q), q.id));
   const sites = (s.buildings || []).filter(b => b.owner === q.owner && b.hp > 0 && b.build > 0 && reach(b));
   if (!sites.length) { const t = taskTarget(s, q); return (t && reach(t) ? t : null) || gatherTarget(s, q); }
   const crew = new Map(sites.map(b => [b.id, 0]));
