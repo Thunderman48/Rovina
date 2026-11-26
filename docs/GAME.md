@@ -219,6 +219,7 @@ reach steps into the best free cover within 3″; shooters prefer firing spots i
 
   - **Rotation:** a skill the squad used **last round** (`q.lastSk`, set when its plan is built) scores **−1.5**, so squads rotate through their skills instead of repeating one.
   - **Order:** the best candidate is cast, then the list is rebuilt (AP, mana and "once a round" change), up to 4 casts. A charge is checked last and fills the rest of the AP with strikes.
+  - **Charges** (Charge, Pounce): not engaged, at the nearest enemy squad 0.5″ to (lane length − 1″) away with a clear line that **will still be there**: a lower speed tier than the charger, or (since 2026-11-26, so the tier-3 Warband's Pounce gets used) one **pinned in melee** by another of the charger's squads.
   - **Locked in melee:** ranged skills are never candidates (§5.9b).
 - **Retreat:** fall back to the **nearest own Mine / Soul Well** (any state), else the own HQ: walk
   there with all AP (stopping beside it); once its edge is within **`RULES.retreatReach` = 3″** of

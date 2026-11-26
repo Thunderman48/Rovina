@@ -73,13 +73,15 @@ export function autoSkills(s, q, t, enemies, mine, plan, left, lead = null) {
     if (!best) break;
     cast(best.kind, best.x, best.z);
   }
-  // charge: a slower enemy (it still stands there when we act) down a clear lane, then swing
+  // charge: an enemy that still stands there when we act (a slower one, or one pinned in melee by one of
+  // our squads) down a clear lane, then swing
   let charged = null;
   let sk = ready('charge');
   if (sk && !engaged.length) {
     charged = real.filter(e => {
       const g = dist(q.x, q.z, e.x, e.z) - radiusOf(e) - radiusOf(q);
-      return defOf(e).tier < def.tier && g > 0.5 && g < sk.len - 1 && losCut(s.terrain, q.x, q.z, e.x, e.z) >= 1;
+      const stays = defOf(e).tier < def.tier || engagedWith(e, (mine || []).filter(o => o !== q)).length > 0;
+      return stays && g > 0.5 && g < sk.len - 1 && losCut(s.terrain, q.x, q.z, e.x, e.z) >= 1;
     }).sort((a, b) => dist(q.x, q.z, a.x, a.z) - dist(q.x, q.z, b.x, b.z))[0] || null;
     if (charged) {
       cast('charge', charged.x, charged.z);
